@@ -1,0 +1,47 @@
+Operon fork of Kaneo
+====================
+
+This repository is a fork of Kaneo, maintained by Smarter Risk as the
+"Initiative" surface of Operon.
+
+Upstream
+--------
+  Project     Kaneo — https://github.com/usekaneo/kaneo
+  Fork point  tag v2.23.1, commit e13f512 ("chore(release): v2.23.1 [skip ci]")
+  Forked on   2026-09-06
+  Fork branch `operon` (this branch), cut from v2.23.1
+  Fork remote https://github.com/johnsmarterrisk/kaneo
+
+Licence
+-------
+Kaneo is distributed under the MIT Licence, Copyright (c) 2024 Andrej Acevski.
+The upstream LICENSE file is retained VERBATIM and unmodified in this fork, and
+it continues to govern all upstream code. Modifications made in this fork are
+Copyright (c) 2026 Smarter Risk and are released under the same MIT Licence.
+
+Modifications
+-------------
+Operon's fork discipline is that upstream is changed as little as possible: the
+whole point of building on Kaneo is to keep Kaneo's feature set — boards,
+backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
+upstream built it. Only four kinds of change are permitted, and every file this
+fork touches is declared in Operon's `docs/fork-discipline.md`:
+
+  1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
+     sign-in is disabled by environment, and the post-login hook reports the new
+     Kaneo user back to Operon.
+  2. Branding and chrome — the product is called Initiative inside Operon, and
+     the sidebar carries Operon's surface switcher.
+  3. A `telegraph` integration type with an authorised external-link write
+     route, so a Kaneo task can carry the Nostr event id of the chat message it
+     came from.
+  4. Workspace bootstrap — a single shared workspace, created by the first
+     admin's login and joined by everyone after.
+
+Changes landed on this branch so far:
+
+  - NOTICE (this file), added at the fork point.
+
+A fork commit that touches any path not declared in `docs/fork-discipline.md`
+is a defect, not a feature: the touch list is what keeps this fork mergeable
+with upstream.
