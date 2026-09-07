@@ -34,7 +34,7 @@ import {
 import type { AccessControl } from "better-auth/plugins/access";
 import type { UserWithAnonymous } from "better-auth/plugins/anonymous";
 import { config } from "dotenv-mono";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import {
   findBillableWorkspaces,
   formatBillableWorkspacesMessage,
@@ -58,6 +58,7 @@ import { getGithubSsoOAuthCredentials } from "./utils/github-sso-env";
 import { isCloud } from "./utils/is-cloud";
 import { isDisposableEmail } from "./utils/is-disposable-email";
 import { isLocalSignInPath } from "./utils/is-local-sign-in-path";
+import { verifyApiKey } from "./utils/verify-api-key";
 import { verifyTurnstile } from "./utils/verify-turnstile";
 
 config();
@@ -95,6 +96,14 @@ const isLoginFormDisabled = process.env.DISABLE_LOGIN_FORM === "true";
  */
 const isOperonOidcOnly =
   process.env.OPERON_OIDC_ONLY === "true" || isLoginFormDisabled;
+
+/**
+ * {@link isOperonOidcOnly}, exported for `index.ts`'s `/api/auth/*` guard.
+ *
+ * The guard has to live in the Hono app rather than in Better Auth's own `hooks.before`
+ * (see the comment on it), and this fork does not duplicate the switch to get it there.
+ */
+export const isOperonOidcOnlyInstance = isOperonOidcOnly;
 const isEmailOtpSignInDisabled =
   process.env.DISABLE_EMAIL_OTP_SIGN_IN === "true";
 const isWorkspaceCreationDisabled =
@@ -386,6 +395,36 @@ export const OPERON_SERVICE_KEY_PERMISSIONS: Record<string, string[]> = {
 };
 
 /**
+ * The literal prefix every Operon service key carries, and why a prefix at all.
+ *
+ * The api-key plugin's session hook decides whether a request becomes a Better Auth
+ * session by asking `customAPIKeyGetter(ctx)` for a key, and that getter is called from
+ * the hook's MATCHER, which is synchronous (`!!findApiKeyAndConfig(ctx)` —
+ * `@better-auth/api-key/dist/index.mjs:2366,2395`). A getter that had to consult the
+ * `apikey` table to recognise the service key would return a Promise, and `!!promise` is
+ * `true` for every request — the hook would match everything and skip nothing.
+ *
+ * So the marker the getter reads has to be IN THE KEY STRING. `prefix` is the plugin's
+ * own supported way to put it there (`createApiKey` accepts it, `${prefix}${key}` is the
+ * value handed out), it is stored in plain text beside the hash, and it changes nothing
+ * about verification: `utils/verify-api-key.ts` hashes the WHOLE presented string.
+ *
+ * It is a marker, never a secret and never an authorization: the 403 guard and the
+ * re-key route both authorise on the unforgeable `metadata` marker read back from the
+ * row. A caller who guesses the prefix and prepends it to their own key gets a key that
+ * does not verify.
+ */
+export const OPERON_SERVICE_KEY_PREFIX = "operon_svc_";
+
+/** Does this presented credential claim, by its prefix, to be the service key? */
+export function looksLikeOperonServiceKey(value: string | null | undefined) {
+  return (
+    typeof value === "string" &&
+    value.trim().startsWith(OPERON_SERVICE_KEY_PREFIX)
+  );
+}
+
+/**
  * Mint the least-privilege key platform-service calls Kaneo with (decision 48).
  *
  * No `request` is passed, which is what lets a server-side caller name a `userId`
@@ -397,11 +436,118 @@ async function mintOperonApiKey(userId: string): Promise<string | null> {
     body: {
       userId,
       name: "operon-platform-service",
+      prefix: OPERON_SERVICE_KEY_PREFIX,
       permissions: { ...OPERON_SERVICE_KEY_PERMISSIONS },
       metadata: { ...OPERON_SERVICE_KEY_METADATA },
     },
   });
   return created?.key ?? null;
+}
+
+/**
+ * Turn off every `operonService`-marked key on this instance.
+ *
+ * Called immediately before a re-mint, so the instance never carries two credentials that
+ * both satisfy the re-key route's marker check. A key is DISABLED rather than deleted:
+ * `verifyApiKey` and the plugin both refuse `enabled = false`, so it is dead either way,
+ * and the row is still there to answer "which credential was in use on the day of the
+ * incident?" — which a delete would have thrown away.
+ *
+ * The marker is read by parsing each row's `metadata` in JS rather than by a `LIKE` over
+ * the column, because the api-key plugin has shipped double-stringified metadata in the
+ * past and `operon-account/index.ts` already carries the two-pass parse for that reason.
+ * The set is at most a handful of rows on this instance.
+ */
+async function revokeOperonServiceKeys(): Promise<number> {
+  const rows = await db
+    .select({
+      id: schema.apikeyTable.id,
+      metadata: schema.apikeyTable.metadata,
+      enabled: schema.apikeyTable.enabled,
+    })
+    .from(schema.apikeyTable);
+
+  const doomed = rows
+    .filter(
+      (row) => row.enabled !== false && hasOperonServiceMarker(row.metadata),
+    )
+    .map((row) => row.id);
+
+  if (doomed.length === 0) return 0;
+
+  await db
+    .update(schema.apikeyTable)
+    .set({ enabled: false })
+    .where(inArray(schema.apikeyTable.id, doomed));
+
+  return doomed.length;
+}
+
+/**
+ * Does this `apikey.metadata` blob carry the bootstrap's marker?
+ *
+ * Tolerates the plugin's historical double-stringified shape, exactly as
+ * `operon-account/index.ts` does, so a legacy row is recognised rather than silently
+ * treated as somebody's personal key.
+ */
+export function hasOperonServiceMarker(
+  raw: string | null | undefined,
+): boolean {
+  if (!raw) return false;
+  try {
+    return metadataHasOperonServiceMarker(JSON.parse(raw));
+  } catch {
+    return false;
+  }
+}
+
+/** The same question asked of an already-parsed `metadata` value. */
+function metadataHasOperonServiceMarker(value: unknown): boolean {
+  // The plugin's historical double-stringified shape: a JSON string INSIDE the column.
+  if (typeof value === "string") return hasOperonServiceMarker(value);
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).operonService === true
+  );
+}
+
+/**
+ * Is the credential presented on this request the Operon service key?
+ *
+ * The question the `/api/auth/*` guard in `index.ts` asks, and it has to be asked of the
+ * ROW rather than of the string: the prefix is a routing marker anyone can type, while
+ * `{ operonService: true }` in `metadata` can only have been written by a server-side
+ * mint. A prefixed string that does not verify is simply not a key and is left to Better
+ * Auth to refuse as one.
+ *
+ * Both spellings are checked because `index.ts`'s existing `/auth/*` handler REWRITES a
+ * `Authorization: Bearer <key>` into `x-api-key` before calling `auth.handler` — a guard
+ * that only read `x-api-key` would be walked around by sending the same key as a bearer.
+ */
+export async function requestCarriesOperonServiceKey(
+  headers: Headers,
+): Promise<boolean> {
+  const candidates = [
+    headers.get("x-api-key")?.trim(),
+    headers
+      .get("authorization")
+      ?.match(/^Bearer\s+(\S+)$/i)?.[1]
+      ?.trim(),
+  ].filter((value): value is string => !!value);
+
+  for (const candidate of candidates) {
+    const verified = await verifyApiKey(candidate).catch(() => null);
+    if (
+      verified?.valid &&
+      metadataHasOperonServiceMarker(verified.key?.metadata)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -430,7 +576,19 @@ async function mintOperonApiKey(userId: string): Promise<string | null> {
  * Failure is logged, never thrown. The user row is already committed by the time
  * this runs; since this hook now runs on EVERY subsequent Operon login, a transient
  * failure is retried by the next sign-in rather than being permanent.
+ *
+ * ── WHAT IT RETURNS, AND WHY IT RETURNS ANYTHING ─────────────────────────────────
+ *
+ * `null` for "this delivery did not land" — unconfigured, refused, timed out, threw —
+ * and Operon's parsed acknowledgement otherwise. The one field that matters is
+ * `serviceKeyOnFile`: Operon holds the API key in its PROCESS, not in a table, so it is
+ * the only party that can say whether a credential is actually in use, and
+ * {@link provisionOperonUser} re-mints on a `false`. Distinguishing "no answer" from
+ * "answered false" is the whole point of the `null` — a mint we cannot deliver is churn,
+ * not recovery.
  */
+type OperonCallbackAck = { serviceKeyOnFile?: boolean } | null;
+
 async function postOperonKaneoUser(payload: {
   sub: string;
   kaneoUserId: string;
@@ -438,14 +596,14 @@ async function postOperonKaneoUser(payload: {
   name: string;
   workspaceId: string | null;
   apiKey?: string;
-}) {
+}): Promise<OperonCallbackAck> {
   const base = (process.env.OPERON_INTERNAL_API_URL || "").replace(/\/+$/, "");
   const secret = process.env.OPERON_KANEO_S2S_SECRET || "";
   if (!base || !secret) {
     console.warn(
       "[operon] OPERON_INTERNAL_API_URL or OPERON_KANEO_S2S_SECRET is unset; kaneo_user_id was not reported",
     );
-    return;
+    return null;
   }
 
   const body = JSON.stringify({
@@ -474,14 +632,21 @@ async function postOperonKaneoUser(payload: {
       console.error(
         `[operon] internal/kaneo/user rejected the callback (${response.status})`,
       );
-      return;
+      return null;
     }
     // The key itself is never logged (Operon AGENTS.md rule 23).
     console.log(
       `[operon] reported kaneo user for workspace ${payload.workspaceId ?? "none"}`,
     );
+    // A body that will not parse is not a reason to fail a sign-in: it costs the caller
+    // the re-mint signal for this login and nothing else, and the next login asks again.
+    const ack = (await Promise.resolve()
+      .then(() => response.json())
+      .catch(() => null)) as OperonCallbackAck;
+    return ack && typeof ack === "object" ? ack : null;
   } catch (error) {
     console.error("[operon] internal/kaneo/user callback failed", error);
+    return null;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -544,18 +709,59 @@ async function syncOperonInstanceRole(
  * `takeOperonOidcClaims` only has an entry for one that did — and
  * `mapCustomOAuthProfileToUser` refills that entry on EVERY OIDC callback, which is
  * what makes the retry possible at all.
+ *
+ * ── AND A NO-OP ON EVERY INSTANCE THAT IS NOT AN OPERON INSTANCE ─────────────────
+ *
+ * `providerId: "custom"` is upstream's GENERIC OIDC slot. Any self-hosted Kaneo can
+ * point it at Okta or Keycloak, and this function has no business rewriting `user.role`
+ * from their `role` claim or auto-joining their people to the earliest workspace — both
+ * of which it did, unconditionally, before the `isOperonOidcOnly` guard below.
+ * `custom-oauth-profile.ts` gates the capture as well, so the map is empty on such an
+ * instance and this guard is the second of two; it is here because a hole this shape
+ * should be closed at the consumer as well as at the source.
+ *
+ * ── THE RE-MINT PATH ─────────────────────────────────────────────────────────────
+ *
+ * The key is minted exactly once, by the login that CREATES the workspace. If that mint
+ * returned nothing, or the callback carrying it never reached Operon, every later login
+ * found the workspace already there and delivered a callback with no key — so Operon was
+ * left without a credential permanently, and `kaneoApiFetch` threw on every call.
+ *
+ * Operon's acknowledgement now reports `serviceKeyOnFile`. On an ADMIN's login, when the
+ * workspace already exists and Operon answers that it holds no key, this mints a fresh
+ * one — revoking every earlier `operonService`-marked key first, so the instance never
+ * carries two credentials that satisfy the re-key route's marker — and delivers it in a
+ * SECOND signed callback with its own delivery id and timestamp. The receiver installs it
+ * under the same never-backwards ordering rule as any other delivery.
+ *
+ * Three things keep that from being a key mill:
+ *
+ *   * it needs an explicit `serviceKeyOnFile === false`, so an unreachable Operon (ack
+ *     `null`) mints nothing — a credential we cannot deliver is churn, not recovery;
+ *   * it needs `claims.role === "admin"`, because a member's key would hang off a user
+ *     without the permissions the ceiling is a ceiling over; and
+ *   * a login that just delivered a freshly minted key does not ask again — Operon
+ *     computes the flag AFTER installing, so that same response already says `true`.
  */
 async function provisionOperonUser(user: {
   id: string;
   email: string;
   name?: string | null;
 }) {
+  if (!isOperonOidcOnly) return;
+
   const claims = takeOperonOidcClaims(user.email);
   if (!claims) return;
 
   await syncOperonInstanceRole(user.id, claims.role);
 
   let workspaceId = await findOperonWorkspaceId();
+  // Whether the workspace was ALREADY there when this login started, which is the
+  // question the re-mint below asks — not "is there one now". A login that is itself
+  // part of the bootstrap must never re-mint: the concurrent-bootstrap loser would read
+  // `serviceKeyOnFile: false` simply because the WINNER's delivery had not landed yet,
+  // and would revoke the winning credential to replace it with its own.
+  const workspaceExisted = workspaceId !== null;
   let apiKey: string | undefined;
 
   if (workspaceId) {
@@ -582,13 +788,107 @@ async function provisionOperonUser(user: {
     );
   }
 
-  await postOperonKaneoUser({
+  const ack = await postOperonKaneoUser({
     sub: claims.sub,
     kaneoUserId: user.id,
     email: user.email,
     name: user.name || claims.name,
     workspaceId,
     ...(apiKey ? { apiKey } : {}),
+  });
+
+  if (
+    claims.role === "admin" &&
+    workspaceExisted &&
+    workspaceId &&
+    ack?.serviceKeyOnFile === false
+  ) {
+    await remintAndDeliverOperonServiceKey({
+      sub: claims.sub,
+      user,
+      name: user.name || claims.name,
+      workspaceId,
+    });
+  }
+}
+
+/**
+ * The advisory-lock key the re-mint is serialised on.
+ *
+ * A different number from the `2026` upstream's first-user promotion uses, because they
+ * are different mutual exclusions and sharing one would make an admin login wait on a
+ * signup for no reason.
+ */
+const OPERON_REMINT_LOCK = 2027;
+
+/**
+ * Replace the Operon service key and deliver the replacement, at most one at a time.
+ *
+ * ── WHY THE LOCK SPANS THE DELIVERY AND NOT ONLY THE MINT ────────────────────────
+ *
+ * Two admins signing in at the same moment into a key-less Operon would both be told
+ * `serviceKeyOnFile: false`. Serialising only the mint does not help: A mints Ka, B
+ * revokes Ka and mints Kb, and then the two POSTs race — each callback's `timestamp` is
+ * stamped when it is SENT, so A's delivery of the already-revoked Ka can carry the later
+ * timestamp and win Operon's never-backwards comparison. Operon would end up holding a
+ * disabled key, which is the exact failure this whole path exists to repair.
+ *
+ * Holding the lock across the delivery makes the sequence revoke → mint → deliver
+ * indivisible, so the last delivery to be SENT is always the one carrying the only
+ * enabled credential.
+ *
+ * `pg_try_advisory_xact_lock`, not the blocking form: a login that finds another one
+ * already repairing has nothing useful to add and should not sit on a pool connection
+ * waiting. It skips, and if the repair somehow did not take, the next admin login asks
+ * Operon again. The lock is transaction-scoped, so a throw anywhere inside releases it.
+ */
+async function remintAndDeliverOperonServiceKey(args: {
+  sub: string;
+  user: { id: string; email: string };
+  name: string;
+  workspaceId: string;
+}) {
+  await db.transaction(async (tx) => {
+    // `sql.raw` with a numeric constant, and not a bound parameter, for the same reason
+    // `databaseHooks.user.create.after` writes `pg_advisory_xact_lock(2026)` literally:
+    // a lock key is a constant, and a bound `unknown` would leave Postgres resolving the
+    // function's argument type at run time rather than at parse time.
+    const claim = await tx.execute(
+      sql.raw(
+        `SELECT pg_try_advisory_xact_lock(${OPERON_REMINT_LOCK}) AS locked`,
+      ),
+    );
+    const locked = claim.rows[0]?.locked;
+    if (locked !== true && locked !== "t") {
+      console.warn(
+        "[operon] another login is already re-minting the service key; skipping",
+      );
+      return;
+    }
+
+    const revoked = await revokeOperonServiceKeys();
+    const replacement = await mintOperonApiKey(args.user.id);
+    if (!replacement) {
+      // Nothing to deliver, and the old keys are already off. Say so loudly rather than
+      // leaving a silent gap; the next admin login tries again.
+      console.error(
+        `[operon] operon reported no service key on file and the re-mint returned nothing (${revoked} earlier key(s) revoked)`,
+      );
+      return;
+    }
+
+    // The key itself is never logged (Operon AGENTS.md rule 23).
+    console.warn(
+      `[operon] operon reported no service key on file; re-minted (${revoked} earlier key(s) revoked)`,
+    );
+    await postOperonKaneoUser({
+      sub: args.sub,
+      kaneoUserId: args.user.id,
+      email: args.user.email,
+      name: args.name,
+      workspaceId: args.workspaceId,
+      apiKey: replacement,
+    });
   });
 }
 
@@ -954,6 +1254,46 @@ export const auth = betterAuth({
     bearer(),
     apiKey({
       enableSessionForAPIKeys: true,
+      /**
+       * THE PER-REQUEST SKIP. The Operon service key never becomes a Better Auth session.
+       *
+       * `enableSessionForAPIKeys` is a per-CONFIGURATION switch, so the service key
+       * inherited it and could authenticate Better Auth's own endpoints: Codex got 200
+       * from `/api/auth/list-sessions` with it, read the workspace owner's real session
+       * token out of the response, and promoted another user with that token through
+       * `/api/auth/admin/set-role`. The key's `permissions` ceiling never entered into
+       * it — the escape was that the key MINTED A SESSION, and a session is read by
+       * `hasWorkspacePermission` with no ceiling at all.
+       *
+       * The plugin's only per-request seam is this getter: it is called from the session
+       * hook's matcher (`!!findApiKeyAndConfig(ctx)`), and returning `null` means the
+       * hook does not match, so no session is constructed for this request — including
+       * on `/get-session`, which the hook otherwise answers directly.
+       *
+       * It MUST be synchronous. The matcher coerces the return value with `!!`, so an
+       * async getter returns a Promise, `!!promise` is `true`, and every request would
+       * match. That is why the discriminator is {@link OPERON_SERVICE_KEY_PREFIX} in the
+       * key string rather than the `metadata` marker in the row.
+       *
+       * A prefix is a marker, not an authorization, and this is not the security boundary
+       * on its own — the `/api/auth/*` guard in `index.ts` refuses the same request with
+       * 403 after reading the unforgeable marker back from the `apikey` row. This is the
+       * belt: even if a route were added that the guard did not cover, no session exists
+       * to be handed out. For every ordinary key the getter returns the header exactly as
+       * the plugin's own default does, so upstream behaviour is untouched.
+       *
+       * It is deliberately NOT gated on Operon mode, because a skip that only applied in
+       * one mode would be a skip that could be missed. The only key this fork ever mints
+       * with that prefix is the service key, and it only mints one in Operon mode — so on
+       * an ordinary instance nothing carries it unless a user CHOOSES the prefix on their
+       * own `/api-key/create` call, in which case they have opted their own key out of
+       * api-key sessions and lost nothing else. That is a strictly smaller surface than
+       * the alternative.
+       */
+      customAPIKeyGetter: (ctx) => {
+        const presented = ctx.headers?.get("x-api-key") ?? null;
+        return looksLikeOperonServiceKey(presented) ? null : presented;
+      },
       // The bootstrap marks its own key `{ operonService: true }`, which is what
       // `PATCH /api/internal/operon/account-id` recognises it by. Turning the field
       // on does NOT make it writable by a caller: `hooks.before` below refuses
@@ -1039,7 +1379,13 @@ export const auth = betterAuth({
           // does not control. A live capture from `mapCustomOAuthProfileToUser` is
           // both stabler and stricter — it proves Operon's own userinfo document
           // produced this address moments ago.
-          if (hasOperonOidcClaims(user.email)) {
+          //
+          // AND ONLY IN OPERON MODE. `providerId: "custom"` is upstream's generic OIDC
+          // slot; on an instance that is not an Operon instance, a captured profile must
+          // not be a licence to skip `DISABLE_REGISTRATION`'s invitation gate. The map is
+          // already empty there (`custom-oauth-profile.ts` gates the capture), so this is
+          // the second of two locks on the same door.
+          if (isOperonOidcOnly && hasOperonOidcClaims(user.email)) {
             return;
           }
 
@@ -1207,6 +1553,38 @@ export const auth = betterAuth({
         throw new APIError("FORBIDDEN", {
           message:
             "API key management is disabled on this instance. Operon issues the only key.",
+        });
+      }
+
+      // ── ...AND THE SERVICE KEY IS NOT A WAY INTO BETTER AUTH AT ALL ───────
+      //
+      // Refusing `/api-key/*` closed one door and left the corridor open. Codex
+      // presented the service key to `/api/auth/list-sessions`, got 200 and the
+      // workspace OWNER's live session token, then used that token on
+      // `/api/auth/admin/set-role` to promote another account. `permissions` was
+      // never consulted: a Better Auth session is read by
+      // `utils/is-instance-admin.ts` and `hasWorkspacePermission` with no key
+      // ceiling anywhere in the path.
+      //
+      // The real refusal is the `/api/auth/*` guard in `index.ts`, which runs
+      // BEFORE `auth.handler` for every one of the four places this fork mounts it
+      // and reads the unforgeable `{ operonService: true }` marker back from the
+      // `apikey` row. This is the same rule restated one layer in, on the prefix
+      // alone, so that a call reaching Better Auth by some path the Hono guard does
+      // not cover is still refused. It is deliberately cheap — no database read —
+      // because it is the redundant one.
+      //
+      // Operon needs NOTHING under `/api/auth`: `kaneoApiFetch` calls Kaneo's own
+      // `/api/*` routes, which authenticate through `authenticateApiRequest` and
+      // `utils/verify-api-key.ts`, not through Better Auth's session.
+      if (
+        isOperonOidcOnly &&
+        ctx.request &&
+        looksLikeOperonServiceKey(ctx.headers?.get("x-api-key"))
+      ) {
+        throw new APIError("FORBIDDEN", {
+          message:
+            "The Operon service key may not be used against Better Auth endpoints.",
         });
       }
 

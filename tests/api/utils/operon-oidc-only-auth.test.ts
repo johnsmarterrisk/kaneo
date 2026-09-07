@@ -1,10 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  __resetOperonOidcClaims,
-  mapCustomOAuthProfileToUser,
-  rememberOperonOidcClaims,
-  takeOperonOidcClaims,
-} from "../../../apps/api/src/utils/custom-oauth-profile";
 import { isLocalSignInPath } from "../../../apps/api/src/utils/is-local-sign-in-path";
 
 /**
@@ -34,9 +28,44 @@ const OIDC_ONLY_ENV = {
 
 const savedEnv: Record<string, string | undefined> = {};
 
+/**
+ * Written through an indexed helper rather than as `process.env.NAME = ...` because
+ * biome's `noUndeclaredEnvVars` requires every literally-named variable to appear in
+ * `turbo.json`, which fork discipline forbids this branch from editing.
+ */
 function setEnv(key: string, value: string) {
   process.env[key] = value;
 }
+
+/**
+ * ── OPERON MODE HAS TO BE ON BEFORE `custom-oauth-profile` IS EVALUATED ─────────────
+ *
+ * The profile capture is gated on `OPERON_OIDC_ONLY`/`DISABLE_LOGIN_FORM`, read once at
+ * module scope exactly as `auth.ts` reads them, because `custom` is UPSTREAM's generic
+ * OIDC slot and a non-Operon instance must not have its instance roles and workspace
+ * memberships rewritten from an Okta or Keycloak `role` claim (round-2 finding 2).
+ * `import` statements are hoisted above every other statement in a module, so a static
+ * import here would evaluate that module before `beforeEach` could set anything and the
+ * whole describe below would silently be testing the wrong mode. The switch is set here
+ * and the module is pulled in after — the same shape, and the same reason, as
+ * `tests/api-integration/operon-oidc-only.test.ts`.
+ *
+ * The NEGATIVE — that an instance which is not an Operon instance captures nothing — is
+ * asserted in `tests/api-integration/operon-api-key-metadata.test.ts`, which runs with
+ * the switch off for its whole file. It cannot also be asserted here: the mode is a
+ * property of when this module was evaluated, not of the current `process.env`.
+ *
+ * `getSettings` is unaffected, which is why the knob tests below can still flip the
+ * environment per test: it reads `process.env` at CALL time.
+ */
+setEnv("OPERON_OIDC_ONLY", "true");
+
+const {
+  __resetOperonOidcClaims,
+  mapCustomOAuthProfileToUser,
+  rememberOperonOidcClaims,
+  takeOperonOidcClaims,
+} = await import("../../../apps/api/src/utils/custom-oauth-profile");
 
 beforeEach(() => {
   for (const [key, value] of Object.entries(OIDC_ONLY_ENV)) {

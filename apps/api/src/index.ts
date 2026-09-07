@@ -14,7 +14,11 @@ import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import activity from "./activity";
-import { auth } from "./auth";
+import {
+  auth,
+  isOperonOidcOnlyInstance,
+  requestCarriesOperonServiceKey,
+} from "./auth";
 import { organizationRoutes } from "./auth-openapi";
 import billing from "./billing";
 import column from "./column";
@@ -202,6 +206,43 @@ export function createApp() {
 
   api.get("/health", (c) => {
     return c.json({ status: "ok" });
+  });
+
+  // ── Operon fork: the service key is refused by the WHOLE of Better Auth ─────────────
+  //
+  // Registered here, before every `/auth/*` route below, because Hono runs handlers in
+  // registration order and this fork calls `auth.handler` from four places: the
+  // `/auth/get-session` OpenAPI route, the two device-authorization branches, and the
+  // catch-all at the bottom. A refusal inside Better Auth's own `hooks.before` cannot be
+  // the primary one — the api-key plugin's session hook RETURNS the session directly for
+  // `/get-session` (`@better-auth/api-key/dist/index.mjs`), so an endpoint hook is not
+  // guaranteed to see the request at all. This middleware always does.
+  //
+  // The finding: Codex presented Operon's service key to `/api/auth/list-sessions`, got
+  // 200 and the workspace OWNER's live session token, and used that token on
+  // `/api/auth/admin/set-role` to promote another user. The key's `permissions` ceiling
+  // was never consulted, because the escape was a SESSION and sessions have no ceiling.
+  //
+  // Scope: Operon mode only, and only a credential whose `apikey` row actually carries
+  // the bootstrap's unforgeable `{ operonService: true }` marker. An ordinary user's key
+  // and an ordinary browser session both fall straight through to upstream's behaviour,
+  // which is what `tests/api-integration/operon-api-key-metadata.test.ts` asserts. Operon
+  // itself loses nothing: `kaneoApiFetch` only ever calls Kaneo's own `/api/*` routes,
+  // which authenticate through `authenticateApiRequest`, never through Better Auth.
+  api.use("/auth/*", async (c, next) => {
+    if (
+      isOperonOidcOnlyInstance &&
+      (await requestCarriesOperonServiceKey(c.req.raw.headers))
+    ) {
+      return c.json(
+        {
+          error:
+            "The Operon service key may not be used against Better Auth endpoints.",
+        },
+        403,
+      );
+    }
+    return next();
   });
 
   api.openapi(

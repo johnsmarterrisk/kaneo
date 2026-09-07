@@ -41,6 +41,36 @@
 /** How long a captured profile stays collectable. One sign-in round trip is ms. */
 const CLAIMS_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Is this instance an Operon instance at all?
+ *
+ * Read here, from the environment, rather than imported from `../auth`: `auth.ts` imports
+ * THIS module (`mapProfileToUser` is wired into the `genericOAuth` config), so importing
+ * the constant back would be a cycle. It is the same two variables in the same order,
+ * read once at module scope exactly as `auth.ts` reads them, so the two can never
+ * disagree about what mode this process is in.
+ *
+ * ── WHY THE CAPTURE IS GATED ON IT ───────────────────────────────────────────────────
+ *
+ * `providerId: "custom"` is UPSTREAM's generic-OIDC slot, not Operon's. Any self-hosted
+ * Kaneo can point it at Okta, Authentik or Keycloak, and before this gate every one of
+ * those profiles was captured here — which meant an ordinary custom-OIDC login was then
+ * treated downstream as an Operon login: `syncOperonInstanceRole` rewrote `user.role`
+ * from a `role` claim the provider never meant that way (demoting a real instance
+ * administrator to `user` on their next sign-in), the workspace bootstrap auto-joined the
+ * person to the earliest workspace, and `hasOperonOidcClaims` waved them straight past
+ * `DISABLE_REGISTRATION`'s invitation gate. None of that is upstream behaviour, and R35
+ * says upstream behaviour is exactly what a non-Operon instance gets.
+ *
+ * With the gate, a non-Operon instance captures nothing, so every one of those paths is
+ * unreachable rather than merely unlikely: `takeOperonOidcClaims` and
+ * `hasOperonOidcClaims` both answer from an empty map. `auth.ts` gates the same three
+ * consumers a second time, because a boundary worth having is worth having on both sides.
+ */
+const isOperonOidcOnly =
+  process.env.OPERON_OIDC_ONLY === "true" ||
+  process.env.DISABLE_LOGIN_FORM === "true";
+
 export type OperonOidcClaims = {
   /** The OIDC subject: the identity's 64-hex Nostr pubkey (Operon decision 43). */
   sub: string;
@@ -144,8 +174,11 @@ export function mapCustomOAuthProfileToUser(profile: Record<string, unknown>) {
   // `sub` AND an email are both required: the map is keyed by email, and a profile
   // with no subject is not an Operon identity, so provisioning it would invent a
   // link to a custody row that does not exist.
+  // The gate. On a non-Operon instance this whole block does not run, and the map stays
+  // empty for the life of the process — see `isOperonOidcOnly` above. Everything below
+  // the `if` is unchanged; upstream's own return value is unchanged in BOTH modes.
   const sub = stringOrEmpty(profile.sub);
-  if (sub && email) {
+  if (isOperonOidcOnly && sub && email) {
     rememberOperonOidcClaims({
       sub,
       email,

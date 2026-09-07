@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import {
   afterAll,
@@ -57,6 +58,9 @@ const { auth, reconcileOperonSession } = await import(
 const { rememberOperonOidcClaims, __resetOperonOidcClaims } = await import(
   "../../apps/api/src/utils/custom-oauth-profile"
 );
+const { verifyApiKey } = await import(
+  "../../apps/api/src/utils/verify-api-key"
+);
 
 afterAll(() => {
   if (previousOidcOnly === undefined) {
@@ -75,24 +79,50 @@ type Delivery = {
   timestamp: string;
 };
 
+/** The one password the wiring test's seeded credential account carries. */
+const SEEDED_PASSWORD = "a-perfectly-good-password";
+
 let deliveries: Delivery[];
 let failNextCallback: boolean;
+/**
+ * Operon's side of the credential, modelled as the one bit its acknowledgement carries.
+ *
+ * The real receiver holds the API key in its PROCESS and answers `serviceKeyOnFile` after
+ * running its install rules, which is what makes the fork's re-mint path possible at all
+ * (round-1 finding 8). A stub that always said `true` — or that omitted the field — could
+ * not fail any of the recovery tests below, so this flips exactly when a delivery
+ * carrying a key is accepted.
+ */
+let operonHoldsServiceKey: boolean;
 
 beforeEach(async () => {
   await resetTestDatabase();
   __resetOperonOidcClaims();
   deliveries = [];
   failNextCallback = false;
+  operonHoldsServiceKey = false;
 
   // The S2S callback, intercepted. Its CONTENTS are the assertion in several tests
-  // below — one key, once — so it is captured rather than merely silenced.
+  // below — one key, once — so it is captured rather than merely silenced, and its
+  // RESPONSE is asserted on too: `serviceKeyOnFile` is the signal the fork re-mints on.
   vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
     if (failNextCallback) {
       failNextCallback = false;
       throw new Error("platform-service is down");
     }
-    deliveries.push(JSON.parse(init.body) as Delivery);
-    return { ok: true, status: 200, text: async () => "" } as Response;
+    const delivery = JSON.parse(init.body) as Delivery;
+    deliveries.push(delivery);
+    if (delivery.apiKey) operonHoldsServiceKey = true;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "",
+      // Computed AFTER the install, exactly as the receiver computes it.
+      json: async () => ({
+        ok: true,
+        serviceKeyOnFile: operonHoldsServiceKey,
+      }),
+    } as unknown as Response;
   });
 });
 
@@ -328,8 +358,14 @@ describe("Operon mode: provisioning reconciles on every login", () => {
 
     await signIn(admin, "admin");
 
-    expect(deliveries).toHaveLength(1);
     expect(deliveries[0]?.kaneoUserId).toBe(admin.id);
+    // Two: the ordinary reconciliation report, which Operon answers with
+    // `serviceKeyOnFile: false` because the bootstrap's key never reached it, and the
+    // re-mint that answer triggers. Before round-1 finding 8 was fixed there was only
+    // the first, forever.
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries.filter((delivery) => delivery.apiKey)).toHaveLength(1);
+    expect(operonHoldsServiceKey).toBe(true);
   });
 
   it("recovers a membership that was never created", async () => {
@@ -437,5 +473,288 @@ describe("Operon mode: the bootstrap key's ceiling", () => {
     // `auth.api.createApiKey` is the only writer of that marker, and it is reached
     // server-side; nothing that arrives over HTTP can set it.
     expect(auth.api.createApiKey).toBeTypeOf("function");
+  });
+});
+
+describe("Operon mode: the service key is never a Better Auth session", () => {
+  /**
+   * The round-2 BLOCKER, and the reason the round-1 `/api-key/*` refusal was not enough.
+   *
+   * Refusing key MANAGEMENT closed one door and left the corridor open. Codex presented
+   * the bootstrap key to `GET /api/auth/list-sessions`, got 200 and the workspace
+   * OWNER's live session token out of the response body, then used that token against
+   * `POST /api/auth/admin/set-role` and promoted another account. The key's `permissions`
+   * ceiling never entered into it: `hasWorkspacePermission` and
+   * `utils/is-instance-admin.ts` read a SESSION, and a session has no ceiling.
+   *
+   * `enableSessionForAPIKeys` is a per-CONFIGURATION switch in the api-key plugin, never
+   * per key, so the fix is two layers that do not depend on each other: a `/api/auth/*`
+   * guard in `index.ts` that refuses any request carrying the unforgeable
+   * `{ operonService: true }` marker before `auth.handler` ever sees it, and a
+   * `customAPIKeyGetter` that makes the plugin's session hook skip the key entirely, so
+   * there is no session to hand out even on a route the guard did not anticipate.
+   */
+  async function bootstrapServiceKey() {
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    await signIn(admin, "admin");
+    const key = deliveries.find((delivery) => delivery.apiKey)?.apiKey;
+    expect(key).toBeTypeOf("string");
+    return { admin, key: key as string };
+  }
+
+  it("refuses /list-sessions — the route the escape actually used", async () => {
+    const { key } = await bootstrapServiceKey();
+    const { app } = createApp();
+
+    const response = await app.request("/api/auth/list-sessions", {
+      headers: { "x-api-key": key },
+    });
+
+    expect(response.status).toBe(403);
+    // And nothing that looks like a session token came back with the refusal.
+    expect(await response.text()).not.toMatch(/token/i);
+  });
+
+  it("refuses the same key spelled as a Bearer token", async () => {
+    // `index.ts`'s `/auth/*` handler rewrites `Authorization: Bearer <key>` into
+    // `x-api-key` before calling `auth.handler`, so a guard that read only one header
+    // would be walked around by sending the key as the other.
+    const { key } = await bootstrapServiceKey();
+    const { app } = createApp();
+
+    const response = await app.request("/api/auth/list-sessions", {
+      headers: { authorization: `Bearer ${key}` },
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses every /api/auth route reached with it, including get-session", async () => {
+    // `/get-session` matters on its own: the api-key plugin's session hook RETURNS the
+    // constructed session directly for that path, so a refusal placed inside Better
+    // Auth's own hooks is not guaranteed to run. The guard is in front of the handler.
+    const { key } = await bootstrapServiceKey();
+    const { app } = createApp();
+
+    const calls: [string, "GET" | "POST"][] = [
+      ["get-session", "GET"],
+      ["list-sessions", "GET"],
+      ["token", "GET"],
+      ["sign-out", "POST"],
+      ["admin/set-role", "POST"],
+      ["admin/list-users", "GET"],
+      ["organization/list", "GET"],
+    ];
+
+    for (const [path, method] of calls) {
+      const response = await app.request(`/api/auth/${path}`, {
+        method,
+        headers: { "Content-Type": "application/json", "x-api-key": key },
+        ...(method === "POST" ? { body: JSON.stringify({}) } : {}),
+      });
+      expect([path, response.status]).toEqual([path, 403]);
+    }
+  });
+
+  it("cannot be escalated: no session token is derivable from it", async () => {
+    // The full reproduction, run forwards. Every route that could hand out a session
+    // token refuses, so the second half of the escape — replaying that token against
+    // `admin/set-role` — has nothing to replay.
+    const { key } = await bootstrapServiceKey();
+    const victim = await seedUser(`victim-${randomUUID()}@example.com`);
+    const { app } = createApp();
+
+    for (const path of ["list-sessions", "get-session", "token"]) {
+      const response = await app.request(`/api/auth/${path}`, {
+        headers: { "x-api-key": key },
+      });
+      expect(response.status).toBe(403);
+    }
+
+    const promotion = await app.request("/api/auth/admin/set-role", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": key },
+      body: JSON.stringify({ userId: victim.id, role: "admin" }),
+    });
+    expect(promotion.status).toBe(403);
+
+    const [row] = await db
+      .select({ role: schema.userTable.role })
+      .from(schema.userTable)
+      .where(eq(schema.userTable.id, victim.id));
+    expect(row?.role).not.toBe("admin");
+  });
+
+  it("leaves an ORDINARY key behaving exactly as upstream", async () => {
+    // The guard and the getter both key on the bootstrap's marker, not on "is an API
+    // key". A key without it is upstream's key, with upstream's session behaviour — this
+    // is what proves the refusals above are the fork's boundary and not a broken route.
+    // It has to be minted server-side because Operon mode refuses `/api-key/*` over HTTP.
+    const person = await seedUser(`person-${randomUUID()}@example.com`);
+    const created = await auth.api.createApiKey({
+      body: { userId: person.id, name: "an-ordinary-key" },
+    });
+    expect(created?.key).toBeTypeOf("string");
+
+    const { app } = createApp();
+    const response = await app.request("/api/auth/list-sessions", {
+      headers: { "x-api-key": created?.key ?? "" },
+    });
+
+    expect(response.status).not.toBe(403);
+  });
+});
+
+describe("Operon mode: a service key that never arrived is re-minted", () => {
+  /**
+   * Round-1 finding 8, and the shared stack's missing re-mint path.
+   *
+   * The key is minted by the login that CREATES the workspace and by no other. If that
+   * mint returned nothing, or the callback carrying it never reached Operon, every later
+   * login found the workspace already there and delivered a callback with no key — so
+   * Operon stayed without a credential permanently and `kaneoApiFetch` threw on every
+   * call. The recovery is Operon's own `serviceKeyOnFile` bit: on an admin's login into
+   * an EXISTING workspace, a `false` makes the fork revoke the earlier marked keys, mint
+   * a fresh one and deliver it in a second signed callback.
+   */
+  async function markedKeys() {
+    const rows = await db.select().from(schema.apikeyTable);
+    return rows.filter(
+      (row) =>
+        (
+          JSON.parse(row.metadata ?? "null") as {
+            operonService?: boolean;
+          } | null
+        )?.operonService === true,
+    );
+  }
+
+  it("recovers on the NEXT login after the bootstrap mint returned nothing", async () => {
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+
+    // The failure boundary: the mint itself. One call only — the bootstrap's.
+    const mint = vi
+      .spyOn(auth.api, "createApiKey")
+      .mockResolvedValueOnce(undefined as never);
+    await signIn(admin, "admin");
+    mint.mockRestore();
+
+    expect(await db.select().from(schema.workspaceTable)).toHaveLength(1);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.apiKey).toBeUndefined();
+    expect(operonHoldsServiceKey).toBe(false);
+    // NOT on this login: the workspace was created by it, and a bootstrapping login must
+    // never re-mint — the concurrent loser would otherwise revoke the winner's key.
+    expect(await markedKeys()).toHaveLength(0);
+
+    await signIn(admin, "admin");
+
+    expect(deliveries).toHaveLength(3);
+    expect(deliveries.filter((delivery) => delivery.apiKey)).toHaveLength(1);
+    expect(operonHoldsServiceKey).toBe(true);
+  });
+
+  it("ends with a key Operon can actually use, and revokes the earlier ones", async () => {
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    await signIn(admin, "admin");
+
+    const bootstrapKey =
+      deliveries.find((delivery) => delivery.apiKey)?.apiKey ?? "";
+    expect(bootstrapKey).toBeTruthy();
+
+    // Operon lost it — a restart with nothing in `.env` is exactly this state.
+    operonHoldsServiceKey = false;
+    await signIn(admin, "admin");
+
+    const replacement = deliveries.at(-1)?.apiKey ?? "";
+    expect(replacement).toBeTruthy();
+    expect(replacement).not.toBe(bootstrapKey);
+    expect(operonHoldsServiceKey).toBe(true);
+
+    // Usable: it verifies, it is enabled, it carries the marker and the same ceiling.
+    const verified = await verifyApiKey(replacement);
+    expect(verified?.valid).toBe(true);
+    expect(verified?.key.enabled).toBe(true);
+    expect(verified?.key.permissions).toEqual({
+      workspace: ["manage_settings"],
+      task: ["update"],
+      operon: ["rekey"],
+    });
+    expect(verified?.key.metadata).toEqual({ operonService: true });
+
+    // And the one it replaced is dead, so the instance never carries two credentials
+    // that satisfy the re-key route's marker check.
+    expect(await verifyApiKey(bootstrapKey)).toBeNull();
+    const enabled = (await markedKeys()).filter((row) => row.enabled !== false);
+    expect(enabled).toHaveLength(1);
+  });
+
+  it("does not re-mint for a MEMBER, and not when Operon is unreachable", async () => {
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    await signIn(admin, "admin");
+    const member = await seedUser(`member-${randomUUID()}@example.com`);
+
+    // A member's key would hang off a user without the permissions the ceiling ceilings.
+    operonHoldsServiceKey = false;
+    await signIn(member, "member");
+    expect(deliveries.at(-1)?.apiKey).toBeUndefined();
+
+    // And an ack that never arrived is not an ack that said "false": a credential we
+    // cannot deliver is churn, not recovery.
+    const before = (await markedKeys()).length;
+    failNextCallback = true;
+    await signIn(admin, "admin");
+    expect(await markedKeys()).toHaveLength(before);
+  });
+});
+
+describe("Operon mode: provisioning is wired to session creation", () => {
+  it("bootstraps the workspace on the sign-in that creates the session", async () => {
+    /**
+     * The wiring proof. Every other test in this file drives `reconcileOperonSession`
+     * directly, which would pass just as happily if `databaseHooks.session.create.after`
+     * had never been connected to it — so one test has to go through a real request.
+     *
+     * A password account is seeded straight into the two tables rather than signed up
+     * through the API, because `/sign-up/email` is refused in Operon mode by design.
+     * `/sign-in/email` is NOT refused here: `isLocalSignInPath` is gated on
+     * `DISABLE_LOGIN_FORM`, which this suite leaves unset, and the point is only to make
+     * Better Auth create a session row through its own code path.
+     */
+    const email = `wired-${randomUUID()}@example.com`;
+    const user = await seedUser(email);
+    await db.insert(schema.accountTable).values({
+      id: `account-${randomUUID()}`,
+      accountId: user.id,
+      providerId: "credential",
+      userId: user.id,
+      password: await bcrypt.hash(SEEDED_PASSWORD, 10),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    rememberOperonOidcClaims({
+      sub: "f".repeat(64),
+      email,
+      name: "An Operon Admin",
+      role: "admin",
+    });
+
+    const { app } = createApp();
+    const response = await app.request("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: SEEDED_PASSWORD }),
+    });
+    expect(response.status).toBe(200);
+
+    const [workspace] = await db
+      .select()
+      .from(schema.workspaceTable)
+      .where(eq(schema.workspaceTable.slug, "operon"));
+    expect(workspace).toBeTruthy();
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.apiKey).toBeTypeOf("string");
+    expect(await roleOf(user.id)).toBe("admin");
   });
 });

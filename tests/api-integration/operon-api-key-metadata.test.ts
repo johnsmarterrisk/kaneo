@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { auth } from "../../apps/api/src/auth";
+import { auth, reconcileOperonSession } from "../../apps/api/src/auth";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
 import {
   __resetOperonOidcClaims,
+  hasOperonOidcClaims,
+  mapCustomOAuthProfileToUser,
   rememberOperonOidcClaims,
+  takeOperonOidcClaims,
 } from "../../apps/api/src/utils/custom-oauth-profile";
 import { resetTestDatabase } from "./helpers/database";
 
 /**
- * Operon fork checks — the two claims that need an instance which is NOT in Operon mode.
+ * Operon fork checks — the claims that need an instance which is NOT in Operon mode.
  *
  * `setup.ts` leaves `DISABLE_LOGIN_FORM` empty and never sets `OPERON_OIDC_ONLY`, and
  * `auth.ts` reads both once at module scope, so every suite in this directory except
@@ -27,9 +30,13 @@ import { resetTestDatabase } from "./helpers/database";
  *      marker `PATCH /api/internal/operon/account-id` recognises — and adds a
  *      `hooks.before` refusal so no HTTP caller can write it. An ordinary Kaneo caller
  *      therefore sees the same refusal it always saw, in EITHER mode.
- *
- * It also proves the provisioning hook is wired where the fork says it is: on
- * `databaseHooks.session.create`, not on `user.create`.
+ *   3. **Operon provisioning does not run here at all** (round-2 finding 2). `custom` is
+ *      upstream's generic-OIDC provider slot, and until this round every profile that came
+ *      through it was captured and reconciled as an Operon profile on EVERY instance —
+ *      demoting instance administrators, auto-joining people to the earliest workspace and
+ *      skipping the invitation gate. The last describe in this file is where the gate is
+ *      proved; the wiring it used to prove instead now lives in `operon-oidc-only.test.ts`,
+ *      where a real sign-in can be made without password signup being refused.
  *
  * See `docs/fork-discipline.md` in the Operon repository.
  */
@@ -141,40 +148,103 @@ describe("API key metadata is server-side only", () => {
   });
 });
 
-describe("provisioning is wired to session creation", () => {
-  it("bootstraps the workspace on the sign-in that creates the session", async () => {
-    // Nothing but `provisionOperonUser` creates a workspace with the slug `operon`, and
-    // it only runs when a live OIDC profile capture exists for the address — so this
-    // asserts the hook fires, on a real request, through the real Better Auth path.
-    const deliveries: { workspaceId: string | null; apiKey?: string }[] = [];
-    // Indexed, for the `noUndeclaredEnvVars` reason given in `operon-oidc-only.test.ts`.
-    const setEnv = (key: string, value: string) => {
-      process.env[key] = value;
-    };
-    setEnv("OPERON_INTERNAL_API_URL", "http://platform-service.test:3001");
-    setEnv("OPERON_KANEO_S2S_SECRET", "an-s2s-secret-for-the-suite");
+describe("outside Operon mode, a custom-OIDC login is just an OIDC login", () => {
+  /**
+   * Round-2 finding 2. `providerId: "custom"` is UPSTREAM's generic-OIDC slot — any
+   * self-hosted Kaneo can point it at Okta, Authentik or Keycloak — and the fork was
+   * treating every profile that came through it as an Operon profile, on every instance.
+   *
+   * Three upstream behaviours were being overwritten as a result: `syncOperonInstanceRole`
+   * rewrote `user.role` from a `role` claim the provider never meant that way (demoting a
+   * real instance administrator on their next sign-in), the workspace bootstrap
+   * auto-joined the person to the earliest workspace, and `hasOperonOidcClaims` waved
+   * them past `DISABLE_REGISTRATION`'s invitation gate. R35 says a non-Operon instance
+   * gets upstream's behaviour, so the capture and all three consumers are now gated on
+   * Operon mode — and this file, which runs with the switch off, is where that is proved.
+   */
+  it("captures no claims at all, so the registration exemption cannot fire", async () => {
+    // `hasOperonOidcClaims` IS the invitation-gate exemption in
+    // `databaseHooks.user.create.before`. With nothing captured there is nothing to
+    // exempt, on this instance, ever — which is the boundary rather than a coincidence.
+    mapCustomOAuthProfileToUser({
+      sub: "d".repeat(64),
+      email: "someone@an-ordinary-oidc-provider.test",
+      name: "Someone",
+      role: "admin",
+    });
+
+    expect(hasOperonOidcClaims("someone@an-ordinary-oidc-provider.test")).toBe(
+      false,
+    );
+    expect(
+      takeOperonOidcClaims("someone@an-ordinary-oidc-provider.test"),
+    ).toBeNull();
+  });
+
+  it("still maps the profile to a display name, exactly as upstream does", async () => {
+    // The gate is on the capture, not on the function: upstream's own return value is
+    // untouched in both modes, or every custom-OIDC user on every instance would lose
+    // their name.
+    expect(
+      mapCustomOAuthProfileToUser({
+        sub: "d".repeat(64),
+        email: "someone@an-ordinary-oidc-provider.test",
+        given_name: "Some",
+        family_name: "One",
+      }),
+    ).toEqual({ name: "Some One" });
+  });
+
+  it("does not demote an instance administrator or auto-join any workspace", async () => {
+    // The reconciliation is gated a SECOND time, at the consumer, so even a claim that
+    // reached the map by some other route changes nothing here. Seeded through the test
+    // seam precisely so the assertion is about `provisionOperonUser` and not about the
+    // capture the previous test already covered.
+    const { app } = createApp();
+    const { userId, email } = await signUp(app);
+
+    await db
+      .update(schema.userTable)
+      .set({ role: "admin" })
+      .where(eq(schema.userTable.id, userId));
+
+    const deliveries: unknown[] = [];
     vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
       deliveries.push(JSON.parse(init.body));
       return { ok: true, status: 200, text: async () => "" } as Response;
     });
 
-    const email = `oidc-${randomUUID()}@example.com`;
     rememberOperonOidcClaims({
-      sub: "c".repeat(64),
+      sub: "e".repeat(64),
       email,
-      name: "An Operon Admin",
-      role: "admin",
+      name: "An Administrator",
+      // The demotion this used to cause: an ordinary provider's `role` claim, read as
+      // Operon's, rewriting `user.role` to `user` on the next sign-in.
+      role: "member",
     });
+    await reconcileOperonSession(userId);
 
-    const { app } = createApp();
-    await signUp(app, email);
+    const [row] = await db
+      .select({ role: schema.userTable.role })
+      .from(schema.userTable)
+      .where(eq(schema.userTable.id, userId));
+    expect(row?.role).toBe("admin");
 
-    const [workspace] = await db
-      .select()
-      .from(schema.workspaceTable)
-      .where(eq(schema.workspaceTable.slug, "operon"));
-    expect(workspace).toBeTruthy();
-    expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.apiKey).toBeTypeOf("string");
+    // No workspace was bootstrapped, nobody was joined to one, and no credential was
+    // minted or shipped to a platform-service this instance does not have.
+    expect(
+      await db
+        .select()
+        .from(schema.workspaceTable)
+        .where(eq(schema.workspaceTable.slug, "operon")),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(schema.workspaceUserTable)
+        .where(eq(schema.workspaceUserTable.userId, userId)),
+    ).toHaveLength(0);
+    expect(await db.select().from(schema.apikeyTable)).toHaveLength(0);
+    expect(deliveries).toHaveLength(0);
   });
 });
