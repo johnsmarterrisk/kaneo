@@ -926,6 +926,16 @@ export const externalLinkTable = pgTable(
     index("external_link_integrationId_idx").on(table.integrationId),
     index("external_link_externalId_idx").on(table.externalId),
     index("external_link_resourceType_idx").on(table.resourceType),
+    // Operon fork addition (spec R15, decision 31, task B12). Idempotency for
+    // POST /api/external-link is DATABASE-enforced, not read-before-insert: two
+    // concurrent writes of the same (taskId, externalId) both reach the insert,
+    // and only a unique index makes them converge on one row instead of two.
+    // The write route pairs it with ON CONFLICT (task_id, external_id) DO UPDATE.
+    // See docs/fork-discipline.md for the upstream-collision note this carries.
+    unique("external_link_task_external_unique").on(
+      table.taskId,
+      table.externalId,
+    ),
   ],
 );
 

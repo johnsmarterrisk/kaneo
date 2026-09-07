@@ -16,6 +16,9 @@ async function getTask(taskId: string) {
       dueDate: taskTable.dueDate,
       position: taskTable.position,
       createdAt: taskTable.createdAt,
+      // Operon fork addition (spec R26, decision 35, task B12) — see
+      // `taskWithAssigneeSchema` in ../response.ts.
+      updatedAt: taskTable.updatedAt,
       userId: taskTable.userId,
       assigneeName: userTable.name,
       assigneeId: userTable.id,

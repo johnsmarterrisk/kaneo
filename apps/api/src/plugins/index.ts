@@ -6,6 +6,7 @@ import { mattermostPlugin } from "./mattermost";
 import { initializeEventSubscriptions, registerPlugin } from "./registry";
 import { slackPlugin } from "./slack";
 import { telegramPlugin } from "./telegram";
+import { telegraphPlugin } from "./telegraph";
 
 export function initializePlugins() {
   console.log("Initializing plugins...");
@@ -17,6 +18,10 @@ export function initializePlugins() {
   registerPlugin(discordPlugin);
   registerPlugin(genericWebhookPlugin);
   registerPlugin(telegramPlugin);
+  // Operon fork addition (spec R15, decision 31, task B12): names the `telegraph`
+  // integration type and validates its config. It registers no event handlers on
+  // purpose — see apps/api/src/plugins/telegraph/config.ts.
+  registerPlugin(telegraphPlugin);
   initializeGitHubPlugin();
   initializeEventSubscriptions();
 

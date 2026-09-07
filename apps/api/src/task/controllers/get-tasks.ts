@@ -131,6 +131,10 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     dueDate: taskTable.dueDate,
     position: taskTable.position,
     createdAt: taskTable.createdAt,
+    // Operon fork addition (spec R26, decision 35, task B12): the reconciliation
+    // sweep compares `updatedAt` and `status` per task between polls, and upstream
+    // selected `createdAt` only.
+    updatedAt: taskTable.updatedAt,
     userId: taskTable.userId,
     assigneeName: userTable.name,
     assigneeId: userTable.id,

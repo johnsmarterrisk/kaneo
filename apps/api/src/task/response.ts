@@ -32,6 +32,14 @@ export const taskWithAssigneeSchema = taskSchema
   .extend({
     assigneeName: z.string().nullable(),
     assigneeId: z.string().nullable(),
+    // Operon fork addition (spec R26, decision 35, task B12). Upstream serialises
+    // `createdAt` only, on this route and on the board route below, so Operon's
+    // reconciliation sweep had nothing to compare a task against between polls —
+    // the pin offers no updated-since filter and no `updatedAt` sort either.
+    // Added here rather than on `taskSchema` on purpose: `taskSchema` is also the
+    // response of create/update/move, whose handlers would each have to start
+    // returning the column. The two routes the sweep reads are these two.
+    updatedAt: responseTimestamp,
   })
   .openapi("TaskWithAssignee");
 
@@ -69,6 +77,9 @@ export const boardTaskSchema = z
     dueDate: nullableResponseTimestamp,
     position: z.number().nullable(),
     createdAt: responseTimestamp,
+    // Operon fork addition (spec R26, decision 35, task B12) — see the note on
+    // `taskWithAssigneeSchema` above.
+    updatedAt: responseTimestamp,
     userId: z.string().nullable(),
     assigneeName: z.string().nullable(),
     assigneeId: z.string().nullable(),
