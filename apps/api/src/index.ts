@@ -41,6 +41,7 @@ import notification from "./notification";
 import notificationPreferences from "./notification-preferences";
 import oauth from "./oauth";
 import { createRoute, jsonResponse, z } from "./openapi";
+import operonAccount from "./operon-account";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -614,6 +615,14 @@ export function createApp() {
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
   const userApi = api.route("/user", user);
+
+  // Operon fork addition (Operon spec R33, decision 43): a server-to-server hook that
+  // re-keys a custom-provider account when Operon rotates the pubkey that IS the OIDC
+  // subject. Mounted after the api.use("*") authentication middleware, so it is
+  // authenticated like every other /api route, and guarded inside the handler on the
+  // caller having presented an API key rather than a browser session. Deliberately not an
+  // OpenAPI route — see the module comment and docs/fork-discipline.md.
+  api.route("/internal/operon", operonAccount);
 
   app.route(
     "/",
