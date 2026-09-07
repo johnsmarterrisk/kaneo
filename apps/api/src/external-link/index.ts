@@ -79,10 +79,13 @@ const externalLink = apiRouter<
 // handler runs.
 //
 // IDEMPOTENCY IS THE DATABASE'S JOB, NOT A READ-BEFORE-INSERT
-// Migration 0045 adds `UNIQUE (task_id, external_id)`. Two concurrent retries of the
-// same attach both reach the INSERT; the second blocks on the index and is turned
-// into an UPDATE by `ON CONFLICT ... DO UPDATE`, so they converge on ONE row and
-// neither errors. A `SELECT` then `INSERT` would interleave and write two rows.
+// Migration 0045 adds `UNIQUE (task_id, integration_id, external_id)`. Two
+// concurrent retries of the same attach both reach the INSERT; the second blocks on
+// the index and is turned into an UPDATE by `ON CONFLICT ... DO UPDATE`, so they
+// converge on ONE row and neither errors. A `SELECT` then `INSERT` would interleave
+// and write two rows. The integration id is IN the key rather than merely written
+// by it — see the note on the constraint in `../database/schema.ts` for the
+// upstream behaviour the narrower `(task_id, external_id)` pair would have broken.
 // ---------------------------------------------------------------------------
 externalLink.post("/", workspaceAccess.fromTaskId("taskId"), async (c) => {
   const parsed = createExternalLinkBody.safeParse(
@@ -147,9 +150,12 @@ externalLink.post("/", workspaceAccess.fromTaskId("taskId"), async (c) => {
         metadata: metadata ? JSON.stringify(metadata) : null,
       })
       .onConflictDoUpdate({
-        target: [externalLinkTable.taskId, externalLinkTable.externalId],
+        target: [
+          externalLinkTable.taskId,
+          externalLinkTable.integrationId,
+          externalLinkTable.externalId,
+        ],
         set: {
-          integrationId,
           resourceType,
           url,
           title: title ?? null,

@@ -1,1 +1,1 @@
-ALTER TABLE "external_link" ADD CONSTRAINT "external_link_task_external_unique" UNIQUE("task_id","external_id");
+ALTER TABLE "external_link" ADD CONSTRAINT "external_link_task_integration_external_unique" UNIQUE("task_id","integration_id","external_id");

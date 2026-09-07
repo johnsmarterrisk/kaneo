@@ -1,5 +1,5 @@
 {
-	"id": "1f0178b4-137f-4f60-9c1f-9a511a0d2d51",
+	"id": "aa8f2c48-8eb7-4174-aa67-baa3c94f0881",
 	"prevId": "9248c325-fef7-4c63-a54a-6800d29169ec",
 	"version": "7",
 	"dialect": "postgresql",
@@ -1367,10 +1367,10 @@
 			},
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {
-				"external_link_task_external_unique": {
-					"name": "external_link_task_external_unique",
+				"external_link_task_integration_external_unique": {
+					"name": "external_link_task_integration_external_unique",
 					"nullsNotDistinct": false,
-					"columns": ["task_id", "external_id"]
+					"columns": ["task_id", "integration_id", "external_id"]
 				}
 			},
 			"policies": {},

@@ -928,12 +928,21 @@ export const externalLinkTable = pgTable(
     index("external_link_resourceType_idx").on(table.resourceType),
     // Operon fork addition (spec R15, decision 31, task B12). Idempotency for
     // POST /api/external-link is DATABASE-enforced, not read-before-insert: two
-    // concurrent writes of the same (taskId, externalId) both reach the insert,
-    // and only a unique index makes them converge on one row instead of two.
-    // The write route pairs it with ON CONFLICT (task_id, external_id) DO UPDATE.
-    // See docs/fork-discipline.md for the upstream-collision note this carries.
-    unique("external_link_task_external_unique").on(
+    // concurrent writes of the same link both reach the insert, and only a unique
+    // index makes them converge on one row instead of two. The write route pairs
+    // it with ON CONFLICT (task_id, integration_id, external_id) DO UPDATE.
+    //
+    // WHY THE INTEGRATION ID IS IN THE KEY.
+    // Spec R15 names the pair (task_id, external_id), but that pair is narrower
+    // than upstream's own writers need: `UNIQUE (projectId, type)` lets ONE project
+    // carry both a `github` and a `gitea` integration, and
+    // `plugins/*/services/link-manager.ts` would then legitimately write two rows
+    // for issue #5 — or for the same branch name — on one task. Keying on the
+    // triple keeps that working while still giving Operon exactly the convergence
+    // it needs, because there is exactly one `telegraph` integration per project.
+    unique("external_link_task_integration_external_unique").on(
       table.taskId,
+      table.integrationId,
       table.externalId,
     ),
   ],

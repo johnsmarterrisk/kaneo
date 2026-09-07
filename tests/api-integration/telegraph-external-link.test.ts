@@ -12,7 +12,7 @@ import {
 /**
  * Operon fork checks (spec R15, R16, R26, decisions 31 and 35, task B12).
  *
- * Seven claims, one test each. The eighth test B12 owes lives in
+ * Nine claims, one test each. The tenth lives in
  * `apps/web/src/__tests__/telegraph-external-link.test.tsx`, because the rendered
  * href is a web concern.
  *
@@ -199,14 +199,15 @@ describe("API integration: the telegraph external-link write route", () => {
     expect(rows[0]?.id).toBe((await first.json()).id);
   });
 
-  it("converges on one row when two writes of the same (taskId, externalId) race", async () => {
+  it("converges on one row when two writes of the same link race", async () => {
     const { member, task, integration } = await seedTelegraphProject();
     mockAuthenticatedSession(member.user);
     const { app } = createApp();
 
     // Genuinely concurrent: both requests are in flight before either resolves, so
-    // both reach the INSERT and the unique index — not a read-before-insert check —
-    // is what makes them converge. Two separate Hono app instances, so they cannot
+    // both reach the INSERT and the unique index on
+    // (task_id, integration_id, external_id) — not a read-before-insert check — is
+    // what makes them converge. Two separate Hono app instances, so they cannot
     // share any per-request state.
     const { app: appB } = createApp();
     const [a, b] = await Promise.all([
@@ -222,6 +223,47 @@ describe("API integration: the telegraph external-link write route", () => {
       .where(eq(schema.externalLinkTable.taskId, task.id));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.externalId).toBe(EVENT_ID);
+  });
+
+  it("keeps two providers' links to the same externalId on one task apart", async () => {
+    // The reason the key is the TRIPLE and not the (taskId, externalId) pair the
+    // spec first named. `UNIQUE (projectId, type)` lets one project carry a second
+    // integration, and upstream's own github/gitea link managers legitimately write
+    // a row each for the same issue number on the same task. A two-column key would
+    // have made the second write overwrite the first.
+    const { member, project, task, integration } = await seedTelegraphProject();
+    const [otherIntegration] = await db
+      .insert(schema.integrationTable)
+      .values({
+        projectId: project.id,
+        type: "gitea",
+        config: JSON.stringify({ baseUrl: "https://gitea.example" }),
+        isActive: true,
+      })
+      .returning();
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    expect((await post(app, attachBody(task.id, integration.id))).status).toBe(
+      200,
+    );
+    const second = await post(app, {
+      ...attachBody(task.id, otherIntegration.id),
+      resourceType: "issue",
+      url: "https://gitea.example/owner/repo/issues/1",
+      title: "A gitea issue that happens to share the id",
+    });
+    expect(second.status).toBe(200);
+
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.integrationId))).toEqual(
+      new Set([integration.id, otherIntegration.id]),
+    );
   });
 
   it("GET /task/tasks/{projectId} carries updatedAt, and it advances after an update", async () => {
