@@ -53,6 +53,7 @@ import { getPrivateObject } from "./storage/s3";
 import task from "./task";
 import taskRelation from "./task-relation";
 import telegramIntegration from "./telegram-integration";
+import telegraphIntegration from "./telegraph-integration";
 import timeEntry from "./time-entry";
 import user from "./user";
 import getAvatar from "./user/controllers/get-avatar";
@@ -609,6 +610,12 @@ export function createApp() {
     "/telegram-integration",
     telegramIntegration,
   );
+  // Operon fork addition (Operon spec R15, R16, decision 31, task C19): the only route
+  // that can create the `telegraph` integration row B12's type names. Mounted with a bare
+  // `api.route` rather than a `const`, exactly like `/internal/operon` above, because it is
+  // a plain Hono router and so contributes nothing to the RPC `AppType` union below — see
+  // apps/api/src/telegraph-integration/index.ts and docs/fork-discipline.md §3 row 3.
+  api.route("/telegraph-integration", telegraphIntegration);
   const taskRelationApi = api.route("/task-relation", taskRelation);
   const externalLinkApi = api.route("/external-link", externalLink);
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
