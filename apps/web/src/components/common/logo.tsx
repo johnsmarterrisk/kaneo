@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import useProjectStore from "@/store/project";
 
 type LogoProps = {
@@ -7,6 +8,9 @@ type LogoProps = {
 
 export function Logo({ className = "" }: LogoProps) {
   const { setProject } = useProjectStore();
+  const { t } = useTranslation();
+  // Alt text is the product name, so it follows the same branding key as the title.
+  const appName = t("common:appName");
 
   return (
     <Link
@@ -18,12 +22,12 @@ export function Logo({ className = "" }: LogoProps) {
     >
       <img
         src="/logo-dark.svg"
-        alt="Kaneo"
+        alt={appName}
         className="h-6 w-auto dark:hidden"
       />
       <img
         src="/logo-light.svg"
-        alt="Kaneo"
+        alt={appName}
         className="hidden h-6 w-auto dark:block"
       />
     </Link>

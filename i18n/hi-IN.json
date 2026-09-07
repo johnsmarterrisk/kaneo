@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "रद्द करें",
 			"close": "बंद करें",
@@ -100,7 +100,7 @@
 				"errorToast": "प्रोजेक्ट बनाने में विफल"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "नया वर्कस्पेस बनाएँ",
 				"description": "अपने वर्कस्पेस के लिए नाम देकर एक नया वर्कस्पेस बनाएँ।",
 				"namePlaceholder": "वर्कस्पेस का नाम",
@@ -222,7 +222,7 @@
 			"toggleMessage": "पहले से खाता है?",
 			"toggleLink": "साइन इन करें",
 			"instanceStatusError": "सर्वर से संपर्क नहीं हो सका। कृपया कुछ देर बाद पुनः प्रयास करें।",
-			"instanceAdminTitle": "अपना Kaneo इंस्टेंस सेट अप करें",
+			"instanceAdminTitle": "अपना Initiative इंस्टेंस सेट अप करें",
 			"instanceAdminSubtitle": "यह खाता पूर्ण पहुँच के साथ इंस्टेंस व्यवस्थापक बन जाता है।"
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "वर्कस्पेस: {{workspaceName}}",
 			"joinWorkspace": "{{workspaceName}} में शामिल हों",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> ने आपको अपने वर्कस्पेस में शामिल होने का निमंत्रण दिया है।",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> ने आपको Kaneo पर अपने वर्कस्पेस में शामिल होने का निमंत्रण दिया है।",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> ने आपको Initiative पर अपने वर्कस्पेस में शामिल होने का निमंत्रण दिया है।",
 			"createAccountOrSignIn": "इस निमंत्रण को स्वीकार करने के लिए खाता बनाएँ, या यदि आपके पास पहले से खाता है तो साइन इन करें।",
 			"createAccount": "खाता बनाएँ",
 			"accepting": "स्वीकार हो रहा है...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Kaneo में आपका स्वागत है",
+			"pageTitle": "Initiative में आपका स्वागत है",
 			"workspacePageTitle": "वर्कस्पेस बनाएँ",
 			"createWorkspaceTitle": "वर्कस्पेस बनाएँ",
 			"createWorkspaceSubtitle": "प्रोजेक्ट प्रबंधित करना शुरू करने के लिए अपना वर्कस्पेस सेटअप करें",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "सूचनाएँ",
 			"title": "सूचनाएँ",
-			"subtitle": "चुनें कि Kaneo आपकी खाता सूचनाएँ कैसे वितरित करे और कौन से चैनल उपयोग करे।",
+			"subtitle": "चुनें कि Initiative आपकी खाता सूचनाएँ कैसे वितरित करे और कौन से चैनल उपयोग करे।",
 			"statusConnected": "जुड़ा हुआ",
 			"statusPaused": "रुका हुआ",
 			"emailTitle": "ईमेल",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "वैकल्पिक शेयर्ड सीक्रेट",
 			"webhookSecretHintConfigured": "साइनिंग सीक्रेट पहले से कॉन्फ़िगर है ({{masked}})। बदलने के लिए नया दर्ज करें।",
-			"webhookSecretHintOptional": "वैकल्पिक। सीक्रेट सेट होने पर Kaneo अनुरोध बॉडी पर हस्ताक्षर करता है।",
+			"webhookSecretHintOptional": "वैकल्पिक। सीक्रेट सेट होने पर Initiative अनुरोध बॉडी पर हस्ताक्षर करता है।",
 			"connectWebhook": "वेबहुक कनेक्ट करें",
 			"workspaceRulesTitle": "वर्कस्पेस डिलीवरी नियम",
 			"workspaceRulesDescription": "अपने वैश्विक चैनल पुनः उपयोग करें, फिर तय करें कि कौन से वर्कस्पेस और प्रोजेक्ट खाता सूचनाएँ भेज सकते हैं।",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "प्राथमिकताएँ",
-			"subtitle": "अपने Kaneo अनुभव को अनुकूलित करें।",
+			"subtitle": "अपने Initiative अनुभव को अनुकूलित करें।",
 			"appearanceTitle": "दिखावट",
 			"appearanceSubtitle": "दृश्य सेटिंग और लेआउट प्राथमिकताएँ।",
 			"theme": "थीम",
@@ -533,7 +533,7 @@
 			"title": "डेवलपर सेटिंग",
 			"subtitle": "अपनी API कुंजियाँ और डेवलपर संसाधन प्रबंधित करें।",
 			"apiKeysCardTitle": "API कुंजियाँ",
-			"apiKeysCardDescription": "Kaneo तक प्रोग्रामेटिक पहुँच के लिए API कुंजियाँ बनाएँ और प्रबंधित करें।",
+			"apiKeysCardDescription": "Initiative तक प्रोग्रामेटिक पहुँच के लिए API कुंजियाँ बनाएँ और प्रबंधित करें।",
 			"createApiKey": "API कुंजी बनाएँ",
 			"unnamedKey": "अनाम कुंजी"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "API कुंजी बनाएँ",
-				"description": "Kaneo API को प्रोग्रामेटिक रूप से एक्सेस करने के लिए नई API कुंजी बनाएँ।",
+				"description": "Initiative API को प्रोग्रामेटिक रूप से एक्सेस करने के लिए नई API कुंजी बनाएँ।",
 				"nameLabel": "नाम",
 				"namePlaceholder": "मेरी API कुंजी",
 				"nameDescription": "इस API कुंजी के लिए विवरणात्मक नाम",
@@ -926,7 +926,7 @@
 				"removeError": "GitHub एकीकरण हटाने में विफल",
 				"issuesImported": "Issues सफलतापूर्वक आयात किए गए",
 				"importError": "Issues आयात करने में विफल",
-				"commentOnEnabled": "Kaneo नई issues पर कार्य लिंक के साथ टिप्पणी करेगा",
+				"commentOnEnabled": "Initiative नई issues पर कार्य लिंक के साथ टिप्पणी करेगा",
 				"commentOnDisabled": "नई issues पर कार्य लिंक टिप्पणियाँ बंद हैं",
 				"settingsUpdateError": "GitHub एकीकरण अपडेट करने में विफल"
 			},
@@ -937,8 +937,8 @@
 			"badgeNotConnected": "जुड़ा नहीं",
 			"repository": "रिपॉज़िटरी",
 			"repositoryHint": "जुड़ी GitHub रिपॉज़िटरी",
-			"commentTaskLinkTitle": "नई issues पर Kaneo लिंक टिप्पणी करें",
-			"commentTaskLinkHint": "सक्षम होने पर, Kaneo प्रत्येक नई GitHub issue पर कार्य लिंक के साथ टिप्पणी करता है।",
+			"commentTaskLinkTitle": "नई issues पर Initiative लिंक टिप्पणी करें",
+			"commentTaskLinkHint": "सक्षम होने पर, Initiative प्रत्येक नई GitHub issue पर कार्य लिंक के साथ टिप्पणी करता है।",
 			"appStatusTitle": "GitHub App स्थिति",
 			"appStatusHint": "इंस्टॉलेशन और अनुमतियाँ स्थिति",
 			"statusProperlyConfigured": "सही ढंग से कॉन्फ़िगर किया गया",
@@ -989,7 +989,7 @@
 				"removeError": "Gitea एकीकरण हटाने में विफल",
 				"issuesImported": "Issues सफलतापूर्वक आयात किए गए",
 				"importError": "Issues आयात करने में विफल",
-				"commentOnEnabled": "Kaneo नई issues पर कार्य लिंक के साथ टिप्पणी करेगा",
+				"commentOnEnabled": "Initiative नई issues पर कार्य लिंक के साथ टिप्पणी करेगा",
 				"commentOnDisabled": "नई issues पर कार्य लिंक टिप्पणियाँ बंद हैं",
 				"settingsUpdateError": "Gitea एकीकरण अपडेट करने में विफल",
 				"secretCopied": "कॉपी किया",
@@ -1007,8 +1007,8 @@
 			"badgeNotConnected": "जुड़ा नहीं",
 			"repository": "रिपॉज़िटरी",
 			"repositoryHint": "लिंक की गई Gitea रिपॉज़िटरी",
-			"commentTaskLinkTitle": "नई issues पर Kaneo लिंक टिप्पणी करें",
-			"commentTaskLinkHint": "सक्षम होने पर, Kaneo प्रत्येक नई issue पर कार्य लिंक के साथ टिप्पणी करता है।",
+			"commentTaskLinkTitle": "नई issues पर Initiative लिंक टिप्पणी करें",
+			"commentTaskLinkHint": "सक्षम होने पर, Initiative प्रत्येक नई issue पर कार्य लिंक के साथ टिप्पणी करता है।",
 			"webhookTitle": "वेबहुक",
 			"webhookHint": "अपनी Gitea रिपॉज़िटरी में, इस URL और सीक्रेट के साथ एक वेबहुक जोड़ें।",
 			"webhookSecretLabel": "सीक्रेट (Gitea में वेबहुक सीक्रेट से मेल खाना चाहिए)",
@@ -1137,10 +1137,10 @@
 			"paused": "रुका हुआ",
 			"webhookLabel": "एंडपॉइंट URL",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
-			"webhookHint": "Kaneo प्रत्येक सक्षम इवेंट के लिए JSON पेलोड के साथ POST अनुरोध भेजता है।",
+			"webhookHint": "Initiative प्रत्येक सक्षम इवेंट के लिए JSON पेलोड के साथ POST अनुरोध भेजता है।",
 			"secretLabel": "साइनिंग सीक्रेट",
 			"secretPlaceholder": "वैकल्पिक शेयर्ड सीक्रेट",
-			"secretHint": "वैकल्पिक। यदि प्रदान किया गया, तो Kaneo अनुरोध बॉडी पर हस्ताक्षर करता है।",
+			"secretHint": "वैकल्पिक। यदि प्रदान किया गया, तो Initiative अनुरोध बॉडी पर हस्ताक्षर करता है।",
 			"secretHintConfigured": "साइनिंग सीक्रेट पहले से कॉन्फ़िगर है ({{secret}})। बदलने के लिए नया दर्ज करें।",
 			"eventsTitle": "इवेंट सूचनाएँ",
 			"eventsHint": "चुनें कि कौन से प्रोजेक्ट परिवर्तन आउटगोइंग वेबहुक ट्रिगर करें।",
@@ -1194,7 +1194,7 @@
 			"threadIdHint": "वैकल्पिक। Telegram समूहों के अंदर फ़ोरम टॉपिक के लिए इसका उपयोग करें।",
 			"chatLabelLabel": "चैट लेबल",
 			"chatLabelPlaceholder": "इंजीनियरिंग अपडेट",
-			"chatLabelHint": "Kaneo के अंदर आपके संदर्भ के लिए वैकल्पिक लेबल।",
+			"chatLabelHint": "Initiative के अंदर आपके संदर्भ के लिए वैकल्पिक लेबल।",
 			"eventsTitle": "इवेंट सूचनाएँ",
 			"eventsHint": "चुनें कि कौन से प्रोजेक्ट परिवर्तन Telegram पर पोस्ट होने चाहिए।",
 			"events": {
@@ -1986,14 +1986,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} ने आपको Kaneo पर {{workspaceName}} में शामिल होने के लिए आमंत्रित किया है",
-			"preview": "आपको Kaneo पर {{workspaceName}} में आमंत्रित किया गया है",
+			"subject": "{{inviterName}} ने आपको Initiative पर {{workspaceName}} में शामिल होने के लिए आमंत्रित किया है",
+			"preview": "आपको Initiative पर {{workspaceName}} में आमंत्रित किया गया है",
 			"title": "{{workspaceName}} में शामिल हों",
-			"subtitle": "{{inviterName}} ({{inviterEmail}}) ने आपको Kaneo में सहयोग करने के लिए आमंत्रित किया है।",
+			"subtitle": "{{inviterName}} ({{inviterEmail}}) ने आपको Initiative में सहयोग करने के लिए आमंत्रित किया है।",
 			"cta": "निमंत्रण स्वीकार करें",
 			"sameEmail": "आप उसी ईमेल से स्वीकार कर सकते हैं जिस पर यह संदेश मिला।",
 			"ignore": "यदि यह अपेक्षित नहीं था, तो आप इस ईमेल को सुरक्षित रूप से अनदेखा कर सकते हैं।",
-			"footer": "Kaneo वर्कस्पेस निमंत्रण"
+			"footer": "Initiative वर्कस्पेस निमंत्रण"
 		},
 		"pageTitle": "निमंत्रण",
 		"pendingInvitations": "लंबित निमंत्रण",

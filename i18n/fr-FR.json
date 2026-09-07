@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "Annuler",
 			"close": "Fermer",
@@ -100,7 +100,7 @@
 				"errorToast": "Échec de la création du projet"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "Créer un nouvel espace de travail",
 				"description": "Créez un nouvel espace de travail en lui donnant un nom.",
 				"namePlaceholder": "Nom de l'espace de travail",
@@ -222,7 +222,7 @@
 			"toggleMessage": "Vous avez déjà un compte?",
 			"toggleLink": "Se connecter",
 			"instanceStatusError": "Impossible de joindre le serveur. Veuillez réessayer dans un instant.",
-			"instanceAdminTitle": "Configurez votre instance Kaneo",
+			"instanceAdminTitle": "Configurez votre instance Initiative",
 			"instanceAdminSubtitle": "Ce compte devient l'administrateur de l'instance avec un accès complet."
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "Espace de travail: {{workspaceName}}",
 			"joinWorkspace": "Rejoindre {{workspaceName}}",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> vous a invité à rejoindre son espace de travail.",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> vous a invité à rejoindre son espace de travail sur Kaneo.",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> vous a invité à rejoindre son espace de travail sur Initiative.",
 			"createAccountOrSignIn": "Créez un compte pour accepter cette invitation, ou connectez-vous si vous en avez déjà un.",
 			"createAccount": "Créer un compte",
 			"accepting": "Acceptation...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Bienvenue sur Kaneo",
+			"pageTitle": "Bienvenue sur Initiative",
 			"workspacePageTitle": "Créer un espace de travail",
 			"createWorkspaceTitle": "Créer un espace de travail",
 			"createWorkspaceSubtitle": "Configurez votre espace de travail pour commencer à gérer des projets",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "Notifications",
 			"title": "Notifications",
-			"subtitle": "Choisissez comment Kaneo transmet les notifications de votre compte et quels canaux utiliser.",
+			"subtitle": "Choisissez comment Initiative transmet les notifications de votre compte et quels canaux utiliser.",
 			"statusConnected": "Connecté",
 			"statusPaused": "En pause",
 			"emailTitle": "Email",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "Secret partagé facultatif",
 			"webhookSecretHintConfigured": "Un secret de signature est déjà configuré ({{masked}}). Saisissez-en un nouveau pour le remplacer.",
-			"webhookSecretHintOptional": "Facultatif. Kaneo signe le corps de la requête lorsqu'un secret est défini.",
+			"webhookSecretHintOptional": "Facultatif. Initiative signe le corps de la requête lorsqu'un secret est défini.",
 			"connectWebhook": "Connecter le webhook",
 			"workspaceRulesTitle": "Règles d'envoi par espace de travail",
 			"workspaceRulesDescription": "Réutilisez vos canaux globaux, puis choisissez quels espaces de travail et projets sont autorisés à envoyer des notifications de compte.",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "Préférences",
-			"subtitle": "Personnalisez votre expérience Kaneo.",
+			"subtitle": "Personnalisez votre expérience Initiative.",
 			"appearanceTitle": "Apparence",
 			"appearanceSubtitle": "Paramètres visuels et préférences de mise en page.",
 			"theme": "Thème",
@@ -533,7 +533,7 @@
 			"title": "Paramètres développeur",
 			"subtitle": "Gérez vos clés API et vos ressources développeur.",
 			"apiKeysCardTitle": "Clés API",
-			"apiKeysCardDescription": "Créez et gérez des clés API pour un accès programmatique à Kaneo.",
+			"apiKeysCardDescription": "Créez et gérez des clés API pour un accès programmatique à Initiative.",
 			"createApiKey": "Créer une clé API",
 			"unnamedKey": "Clé sans nom"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "Créer une clé API",
-				"description": "Créez une nouvelle clé API pour accéder à l'API Kaneo par programme.",
+				"description": "Créez une nouvelle clé API pour accéder à l'API Initiative par programme.",
 				"nameLabel": "Nom",
 				"namePlaceholder": "Ma clé API",
 				"nameDescription": "Un nom descriptif pour cette clé API",
@@ -764,7 +764,7 @@
 				"removeError": "Échec de la suppression de l'intégration GitHub",
 				"issuesImported": "Problèmes importés avec succès",
 				"importError": "Échec de l'importation des problèmes",
-				"commentOnEnabled": "Kaneo laissera un commentaire avec un lien de tâche sur les nouveaux problèmes",
+				"commentOnEnabled": "Initiative laissera un commentaire avec un lien de tâche sur les nouveaux problèmes",
 				"commentOnDisabled": "Les commentaires de lien de tâche sur les nouveaux problèmes sont désactivés",
 				"settingsUpdateError": "Échec de la mise à jour de l'intégration GitHub"
 			},
@@ -775,8 +775,8 @@
 			"badgeNotConnected": "Non connecté",
 			"repository": "Dépôt",
 			"repositoryHint": "Dépôt GitHub connecté",
-			"commentTaskLinkTitle": "Commenter le lien Kaneo sur les nouveaux problèmes",
-			"commentTaskLinkHint": "Lorsque cette option est activée, Kaneo publie un commentaire avec un lien de tâche sur chaque nouveau problème GitHub.",
+			"commentTaskLinkTitle": "Commenter le lien Initiative sur les nouveaux problèmes",
+			"commentTaskLinkHint": "Lorsque cette option est activée, Initiative publie un commentaire avec un lien de tâche sur chaque nouveau problème GitHub.",
 			"appStatusTitle": "Statut de l'application GitHub",
 			"appStatusHint": "Statut d'installation et de permissions",
 			"statusProperlyConfigured": "Correctement configuré",
@@ -827,7 +827,7 @@
 				"removeError": "Échec de la suppression de l'intégration Gitea",
 				"issuesImported": "Issues importées avec succès",
 				"importError": "Échec de l'importation des issues",
-				"commentOnEnabled": "Kaneo commentera les nouvelles issues avec un lien vers la tâche",
+				"commentOnEnabled": "Initiative commentera les nouvelles issues avec un lien vers la tâche",
 				"commentOnDisabled": "Les commentaires de lien de tâche sur les nouvelles issues sont désactivés",
 				"settingsUpdateError": "Échec de la mise à jour de l'intégration Gitea",
 				"secretCopied": "Copied",
@@ -845,8 +845,8 @@
 			"badgeNotConnected": "Non connecté",
 			"repository": "Repository",
 			"repositoryHint": "Dépôt Gitea lié",
-			"commentTaskLinkTitle": "Commenter le lien Kaneo sur les nouvelles issues",
-			"commentTaskLinkHint": "Lorsque cette option est activée, Kaneo publie un commentaire sur chaque nouvelle issue avec un lien vers la tâche.",
+			"commentTaskLinkTitle": "Commenter le lien Initiative sur les nouvelles issues",
+			"commentTaskLinkHint": "Lorsque cette option est activée, Initiative publie un commentaire sur chaque nouvelle issue avec un lien vers la tâche.",
 			"webhookTitle": "Webhook",
 			"webhookHint": "Dans votre dépôt Gitea, ajoutez un webhook avec cette URL et ce secret. Activez push, pull request, issues, commentaires d'issues et create (pour les labels).",
 			"webhookSecretLabel": "Secret (doit correspondre au secret du webhook dans Gitea)",
@@ -975,10 +975,10 @@
 			"paused": "En pause",
 			"webhookLabel": "URL du point de terminaison",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
-			"webhookHint": "Kaneo envoie des requêtes POST avec une charge JSON pour chaque événement activé.",
+			"webhookHint": "Initiative envoie des requêtes POST avec une charge JSON pour chaque événement activé.",
 			"secretLabel": "Secret de signature",
 			"secretPlaceholder": "Secret partagé facultatif",
-			"secretHint": "Facultatif. Si défini, Kaneo signe le corps de la requête et envoie le digest hexadécimal dans l'en-tête X-Kaneo-Signature.",
+			"secretHint": "Facultatif. Si défini, Initiative signe le corps de la requête et envoie le digest hexadécimal dans l'en-tête X-Kaneo-Signature.",
 			"secretHintConfigured": "Un secret de signature est déjà configuré ({{secret}}). Entrez-en un nouveau pour le remplacer.",
 			"eventsTitle": "Notifications d'événements",
 			"eventsHint": "Choisissez les changements de projet qui déclenchent les webhooks sortants.",
@@ -1032,7 +1032,7 @@
 			"threadIdHint": "Facultatif. Utilisez-le pour les sujets de forum dans les groupes Telegram.",
 			"chatLabelLabel": "Libellé du chat",
 			"chatLabelPlaceholder": "Mises à jour engineering",
-			"chatLabelHint": "Libellé facultatif pour votre référence dans Kaneo.",
+			"chatLabelHint": "Libellé facultatif pour votre référence dans Initiative.",
 			"eventsTitle": "Notifications d'événements",
 			"eventsHint": "Choisissez les changements du projet à publier dans Telegram.",
 			"events": {
@@ -1992,14 +1992,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} vous invite à rejoindre {{workspaceName}} sur Kaneo",
-			"preview": "Vous êtes invité à rejoindre {{workspaceName}} sur Kaneo",
+			"subject": "{{inviterName}} vous invite à rejoindre {{workspaceName}} sur Initiative",
+			"preview": "Vous êtes invité à rejoindre {{workspaceName}} sur Initiative",
 			"title": "Rejoindre {{workspaceName}}",
-			"subtitle": "{{inviterName}} ({{inviterEmail}}) vous invite à collaborer sur Kaneo.",
+			"subtitle": "{{inviterName}} ({{inviterEmail}}) vous invite à collaborer sur Initiative.",
 			"cta": "Accepter l’invitation",
 			"sameEmail": "Vous pouvez accepter l’invitation avec l’adresse e-mail qui a reçu ce message.",
 			"ignore": "Si vous ne vous attendiez pas à recevoir ce message, vous pouvez l’ignorer.",
-			"footer": "Invitation à un espace de travail Kaneo"
+			"footer": "Invitation à un espace de travail Initiative"
 		},
 		"pageTitle": "Invitations",
 		"pendingInvitations": "Invitations en attente",

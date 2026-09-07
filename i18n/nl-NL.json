@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "Annuleren",
 			"close": "Sluiten",
@@ -100,7 +100,7 @@
 				"errorToast": "Aanmaken van project mislukt"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "Een nieuwe werkruimte aanmaken",
 				"description": "Maak een nieuwe werkruimte aan door een naam op te geven.",
 				"namePlaceholder": "Naam werkruimte",
@@ -222,7 +222,7 @@
 			"toggleMessage": "Heb je al een account?",
 			"toggleLink": "Inloggen",
 			"instanceStatusError": "Kan de server niet bereiken. Probeer het over een moment opnieuw.",
-			"instanceAdminTitle": "Stel je Kaneo-instantie in",
+			"instanceAdminTitle": "Stel je Initiative-instantie in",
 			"instanceAdminSubtitle": "Dit account wordt de instantiebeheerder met volledige toegang."
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "Werkruimte: {{workspaceName}}",
 			"joinWorkspace": "Deelnemen aan {{workspaceName}}",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> heeft je uitgenodigd voor hun werkruimte.",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> heeft je uitgenodigd om deel te nemen aan hun werkruimte op Kaneo.",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> heeft je uitgenodigd om deel te nemen aan hun werkruimte op Initiative.",
 			"createAccountOrSignIn": "Maak een account aan om deze uitnodiging te accepteren, of log in als je er al een hebt.",
 			"createAccount": "Account aanmaken",
 			"accepting": "Accepteren...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Welkom bij Kaneo",
+			"pageTitle": "Welkom bij Initiative",
 			"workspacePageTitle": "Werkruimte maken",
 			"createWorkspaceTitle": "Werkruimte maken",
 			"createWorkspaceSubtitle": "Stel je werkruimte in om projecten te beheren",
@@ -386,7 +386,7 @@
 		},
 		"preferencesPage": {
 			"title": "Voorkeuren",
-			"subtitle": "Pas je Kaneo-ervaring aan.",
+			"subtitle": "Pas je Initiative-ervaring aan.",
 			"appearanceTitle": "Uiterlijk",
 			"appearanceSubtitle": "Visuele instellingen en lay-outvoorkeuren.",
 			"theme": "Thema",
@@ -430,7 +430,7 @@
 			"title": "Ontwikkelaarsinstellingen",
 			"subtitle": "Beheer je API-sleutels en ontwikkelaarsbronnen.",
 			"apiKeysCardTitle": "API-sleutels",
-			"apiKeysCardDescription": "Maak en beheer API-sleutels voor programmatische toegang tot Kaneo.",
+			"apiKeysCardDescription": "Maak en beheer API-sleutels voor programmatische toegang tot Initiative.",
 			"createApiKey": "API-sleutel maken",
 			"unnamedKey": "Naamloze sleutel"
 		},
@@ -469,7 +469,7 @@
 			},
 			"createDialog": {
 				"title": "API-sleutel maken",
-				"description": "Maak een nieuwe API-sleutel aan om programmatisch toegang te krijgen tot de Kaneo API.",
+				"description": "Maak een nieuwe API-sleutel aan om programmatisch toegang te krijgen tot de Initiative API.",
 				"nameLabel": "Naam",
 				"namePlaceholder": "Mijn API-sleutel",
 				"nameDescription": "Een beschrijvende naam voor deze API-sleutel",
@@ -661,7 +661,7 @@
 				"removeError": "Verwijderen GitHub integratie mislukt",
 				"issuesImported": "Issues succesvol geïmporteerd",
 				"importError": "Importeren issues mislukt",
-				"commentOnEnabled": "Kaneo zal reageren met een taaklink op nieuwe issues",
+				"commentOnEnabled": "Initiative zal reageren met een taaklink op nieuwe issues",
 				"commentOnDisabled": "Reacties met taaklinks op nieuwe issues staan uit",
 				"settingsUpdateError": "Bijwerken GitHub integratie mislukt"
 			},
@@ -672,8 +672,8 @@
 			"badgeNotConnected": "Niet verbonden",
 			"repository": "Repository",
 			"repositoryHint": "Verbonden GitHub repository",
-			"commentTaskLinkTitle": "Reageer met Kaneo-link op nieuwe issues",
-			"commentTaskLinkHint": "Wanneer ingeschakeld, plaatst Kaneo een reactie op elke nieuwe GitHub issue met een link naar de taak.",
+			"commentTaskLinkTitle": "Reageer met Initiative-link op nieuwe issues",
+			"commentTaskLinkHint": "Wanneer ingeschakeld, plaatst Initiative een reactie op elke nieuwe GitHub issue met een link naar de taak.",
 			"appStatusTitle": "GitHub App Status",
 			"appStatusHint": "Installatie- en permissiestatus",
 			"statusProperlyConfigured": "Correct geconfigureerd",
@@ -796,10 +796,10 @@
 			"paused": "Gepauzeerd",
 			"webhookLabel": "Eindpunt-URL (Endpoint URL)",
 			"webhookPlaceholder": "https://voorbeeld.nl/webhooks/kaneo",
-			"webhookHint": "Kaneo verzendt POST-verzoeken met een JSON-payload voor elke ingeschakelde gebeurtenis.",
+			"webhookHint": "Initiative verzendt POST-verzoeken met een JSON-payload voor elke ingeschakelde gebeurtenis.",
 			"secretLabel": "Ondertekeningsgeheim (Signing secret)",
 			"secretPlaceholder": "Optioneel gedeeld geheim",
-			"secretHint": "Optioneel. Indien opgegeven, ondertekent Kaneo de verzoektekst en verzendt de hex-digest in de 'X-Kaneo-Signature' header.",
+			"secretHint": "Optioneel. Indien opgegeven, ondertekent Initiative de verzoektekst en verzendt de hex-digest in de 'X-Kaneo-Signature' header.",
 			"secretHintConfigured": "Er is al een ondertekeningsgeheim geconfigureerd ({{secret}}). Voer een nieuwe in om deze te vervangen.",
 			"eventsTitle": "Gebeurtenis-meldingen",
 			"eventsHint": "Kies welke projectwijzigingen uitgaande webhooks moeten activeren.",
@@ -890,7 +890,7 @@
 		"notificationsPage": {
 			"pageTitle": "Meldingen",
 			"title": "Meldingen",
-			"subtitle": "Kies hoe Kaneo je accountmeldingen bezorgt en welke kanalen worden gebruikt.",
+			"subtitle": "Kies hoe Initiative je accountmeldingen bezorgt en welke kanalen worden gebruikt.",
 			"statusConnected": "Verbonden",
 			"statusPaused": "Gepauzeerd",
 			"emailTitle": "E-mail",
@@ -926,7 +926,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "Optioneel gedeeld geheim",
 			"webhookSecretHintConfigured": "Er is al een ondertekeningsgeheim geconfigureerd ({{masked}}). Voer een nieuwe in om deze te vervangen.",
-			"webhookSecretHintOptional": "Optioneel. Kaneo ondertekent de verzoektekst wanneer er een geheim is ingesteld.",
+			"webhookSecretHintOptional": "Optioneel. Initiative ondertekent de verzoektekst wanneer er een geheim is ingesteld.",
 			"connectWebhook": "Webhook verbinden",
 			"workspaceRulesTitle": "Bezorgingsregels per werkruimte",
 			"workspaceRulesDescription": "Hergebruik je globale kanalen en bepaal vervolgens welke werkruimtes en projecten accountmeldingen mogen versturen.",
@@ -1174,7 +1174,7 @@
 				"removeError": "Verwijderen Gitea-integratie mislukt",
 				"issuesImported": "Issues succesvol geïmporteerd",
 				"importError": "Importeren issues mislukt",
-				"commentOnEnabled": "Kaneo zal reageren met een taaklink op nieuwe issues",
+				"commentOnEnabled": "Initiative zal reageren met een taaklink op nieuwe issues",
 				"commentOnDisabled": "Reacties met taaklinks op nieuwe issues staan uit",
 				"settingsUpdateError": "Bijwerken Gitea-integratie mislukt",
 				"secretCopied": "Gekopieerd",
@@ -1192,8 +1192,8 @@
 			"badgeNotConnected": "Niet verbonden",
 			"repository": "Repository",
 			"repositoryHint": "Gekoppelde Gitea-repository",
-			"commentTaskLinkTitle": "Reageer met Kaneo-link op nieuwe issues",
-			"commentTaskLinkHint": "Wanneer ingeschakeld, plaatst Kaneo een reactie op elke nieuwe issue met een link naar de taak.",
+			"commentTaskLinkTitle": "Reageer met Initiative-link op nieuwe issues",
+			"commentTaskLinkHint": "Wanneer ingeschakeld, plaatst Initiative een reactie op elke nieuwe issue met een link naar de taak.",
 			"webhookTitle": "Webhook",
 			"webhookHint": "Voeg in je Gitea-repository een webhook toe met deze URL en dit geheim. Schakel push, pull request, issues, issue-reacties en create (voor labels) in.",
 			"webhookSecretLabel": "Geheim (moet overeenkomen met het webhook-geheim in Gitea)",
@@ -1258,7 +1258,7 @@
 			"threadIdHint": "Optioneel. Gebruik dit voor forumtopics binnen Telegram-groepen.",
 			"chatLabelLabel": "Chatlabel",
 			"chatLabelPlaceholder": "Engineering-updates",
-			"chatLabelHint": "Optioneel label voor eigen referentie binnen Kaneo.",
+			"chatLabelHint": "Optioneel label voor eigen referentie binnen Initiative.",
 			"eventsTitle": "Gebeurtenis-meldingen",
 			"eventsHint": "Kies welke projectwijzigingen naar Telegram gepost moeten worden.",
 			"events": {
@@ -1986,14 +1986,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} heeft je uitgenodigd voor {{workspaceName}} op Kaneo",
-			"preview": "Je bent uitgenodigd voor {{workspaceName}} op Kaneo",
+			"subject": "{{inviterName}} heeft je uitgenodigd voor {{workspaceName}} op Initiative",
+			"preview": "Je bent uitgenodigd voor {{workspaceName}} op Initiative",
 			"title": "Word lid van {{workspaceName}}",
-			"subtitle": "{{inviterName}} ({{inviterEmail}}) heeft je uitgenodigd om samen te werken in Kaneo.",
+			"subtitle": "{{inviterName}} ({{inviterEmail}}) heeft je uitgenodigd om samen te werken in Initiative.",
 			"cta": "Uitnodiging accepteren",
 			"sameEmail": "Je kunt accepteren met hetzelfde e-mailadres waarop dit bericht is ontvangen.",
 			"ignore": "Verwachtte je deze e-mail niet, dan kun je deze veilig negeren.",
-			"footer": "Kaneo werkruimte-uitnodiging"
+			"footer": "Initiative werkruimte-uitnodiging"
 		},
 		"pageTitle": "Uitnodigingen",
 		"pendingInvitations": "Openstaande uitnodigingen",

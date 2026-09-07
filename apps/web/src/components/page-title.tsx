@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 type PageTitleProps = {
   title: string;
@@ -8,17 +9,22 @@ type PageTitleProps = {
 
 export default function PageTitle({
   title,
-  suffix = "Kaneo",
+  suffix,
   hideAppName = false,
 }: PageTitleProps) {
+  const { t } = useTranslation();
+  // The product name is branding, so it is read from `common:appName` rather than
+  // hard-coded here — that key is the single place the fork renames the app.
+  const appName = suffix ?? t("common:appName");
+
   useEffect(() => {
     const formattedTitle = hideAppName
       ? title
-      : suffix
-        ? `${title} · ${suffix}`
+      : appName
+        ? `${title} · ${appName}`
         : title;
     document.title = formattedTitle;
-  }, [title, suffix, hideAppName]);
+  }, [title, appName, hideAppName]);
 
   return null;
 }

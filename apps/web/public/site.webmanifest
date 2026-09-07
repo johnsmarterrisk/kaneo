@@ -1,6 +1,6 @@
 {
-	"name": "Kaneo",
-	"short_name": "Kaneo",
+	"name": "Initiative",
+	"short_name": "Initiative",
 	"icons": [
 		{
 			"src": "/web-app-manifest-192x192.png",
@@ -15,7 +15,7 @@
 			"purpose": "maskable"
 		}
 	],
-	"theme_color": "#141414",
-	"background_color": "#141414",
+	"theme_color": "#0f172a",
+	"background_color": "#0f172a",
 	"display": "standalone"
 }

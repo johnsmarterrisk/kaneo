@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "Ακύρωση",
 			"close": "Κλείσιμο",
@@ -100,7 +100,7 @@
 				"errorToast": "Αποτυχία δημιουργίας έργου"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "Δημιουργία νέου χώρου εργασίας",
 				"description": "Δημιουργήστε έναν νέο χώρο εργασίας ορίζοντας ένα όνομα.",
 				"namePlaceholder": "Όνομα χώρου εργασίας",
@@ -222,7 +222,7 @@
 			"toggleMessage": "Έχετε ήδη λογαριασμό;",
 			"toggleLink": "Σύνδεση",
 			"instanceStatusError": "Δεν ήταν δυνατή η επικοινωνία με τον διακομιστή. Δοκιμάστε ξανά σε λίγο.",
-			"instanceAdminTitle": "Ρυθμίστε την εγκατάσταση Kaneo σας",
+			"instanceAdminTitle": "Ρυθμίστε την εγκατάσταση Initiative σας",
 			"instanceAdminSubtitle": "Αυτός ο λογαριασμός γίνεται ο διαχειριστής της εγκατάστασης με πλήρη πρόσβαση."
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "Χώρος εργασίας: {{workspaceName}}",
 			"joinWorkspace": "Συμμετοχή στο {{workspaceName}}",
 			"inviteBodySignedIn": "Ο/Η <inviter>{{inviterName}}</inviter> σας προσκάλεσε να συμμετάσχετε στον χώρο εργασίας του/της.",
-			"inviteBodySignedOut": "Ο/Η <inviter>{{inviterName}}</inviter> σας προσκάλεσε να συμμετάσχετε στον χώρο εργασίας του/της στο Kaneo.",
+			"inviteBodySignedOut": "Ο/Η <inviter>{{inviterName}}</inviter> σας προσκάλεσε να συμμετάσχετε στον χώρο εργασίας του/της στο Initiative.",
 			"createAccountOrSignIn": "Δημιουργήστε λογαριασμό για να αποδεχτείτε αυτήν την πρόσκληση ή συνδεθείτε αν έχετε ήδη.",
 			"createAccount": "Δημιουργία λογαριασμού",
 			"accepting": "Γίνεται αποδοχή...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Καλώς ήρθατε στο Kaneo",
+			"pageTitle": "Καλώς ήρθατε στο Initiative",
 			"workspacePageTitle": "Δημιουργία χώρου εργασίας",
 			"createWorkspaceTitle": "Δημιουργία χώρου εργασίας",
 			"createWorkspaceSubtitle": "Ρυθμίστε τον χώρο εργασίας σας για να ξεκινήσετε τη διαχείριση έργων",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "Ειδοποιήσεις",
 			"title": "Ειδοποιήσεις",
-			"subtitle": "Επιλέξτε πώς παραδίδει το Kaneo τις ειδοποιήσεις του λογαριασμού σας και ποια κανάλια θα χρησιμοποιούνται.",
+			"subtitle": "Επιλέξτε πώς παραδίδει το Initiative τις ειδοποιήσεις του λογαριασμού σας και ποια κανάλια θα χρησιμοποιούνται.",
 			"statusConnected": "Connected",
 			"statusPaused": "Paused",
 			"emailTitle": "Email",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "Προαιρετικό κοινόχρηστο μυστικό",
 			"webhookSecretHintConfigured": "Ένα μυστικό υπογραφής έχει ήδη ρυθμιστεί ({{masked}}). Εισαγάγετε νέο για να το αντικαταστήσετε.",
-			"webhookSecretHintOptional": "Προαιρετικό. Το Kaneo υπογράφει το σώμα του αιτήματος όταν έχει οριστεί μυστικό.",
+			"webhookSecretHintOptional": "Προαιρετικό. Το Initiative υπογράφει το σώμα του αιτήματος όταν έχει οριστεί μυστικό.",
 			"connectWebhook": "Σύνδεση webhook",
 			"workspaceRulesTitle": "Κανόνες παράδοσης χώρων εργασίας",
 			"workspaceRulesDescription": "Επαναχρησιμοποιήστε τα καθολικά σας κανάλια και έπειτα αποφασίστε ποιοι χώροι εργασίας και ποια έργα επιτρέπεται να στέλνουν ειδοποιήσεις λογαριασμού.",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "Προτιμήσεις",
-			"subtitle": "Προσαρμόστε την εμπειρία σας στο Kaneo.",
+			"subtitle": "Προσαρμόστε την εμπειρία σας στο Initiative.",
 			"appearanceTitle": "Εμφάνιση",
 			"appearanceSubtitle": "Οπτικές ρυθμίσεις και προτιμήσεις διάταξης.",
 			"theme": "Θέμα",
@@ -533,7 +533,7 @@
 			"title": "Ρυθμίσεις προγραμματιστή",
 			"subtitle": "Διαχειριστείτε τα API keys και τους πόρους προγραμματιστή.",
 			"apiKeysCardTitle": "Κλειδιά API",
-			"apiKeysCardDescription": "Δημιουργήστε και διαχειριστείτε κλειδιά API για προγραμματιστική πρόσβαση στο Kaneo.",
+			"apiKeysCardDescription": "Δημιουργήστε και διαχειριστείτε κλειδιά API για προγραμματιστική πρόσβαση στο Initiative.",
 			"createApiKey": "Δημιουργία κλειδιού API",
 			"unnamedKey": "Κλειδί χωρίς όνομα"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "Δημιουργία κλειδιού API",
-				"description": "Δημιουργήστε ένα νέο κλειδί API για πρόσβαση στο Kaneo API προγραμματιστικά.",
+				"description": "Δημιουργήστε ένα νέο κλειδί API για πρόσβαση στο Initiative API προγραμματιστικά.",
 				"nameLabel": "Όνομα",
 				"namePlaceholder": "Το κλειδί API μου",
 				"nameDescription": "Ένα περιγραφικό όνομα για αυτό το κλειδί API",
@@ -764,7 +764,7 @@
 				"removeError": "Αποτυχία αφαίρεσης ενσωμάτωσης GitHub",
 				"issuesImported": "Τα issues εισήχθησαν με επιτυχία",
 				"importError": "Αποτυχία εισαγωγής issues",
-				"commentOnEnabled": "Το Kaneo θα δημοσιεύει σχόλιο με σύνδεσμο εργασίας στα νέα issues",
+				"commentOnEnabled": "Το Initiative θα δημοσιεύει σχόλιο με σύνδεσμο εργασίας στα νέα issues",
 				"commentOnDisabled": "Τα σχόλια με σύνδεσμο εργασίας στα νέα issues είναι απενεργοποιημένα",
 				"settingsUpdateError": "Αποτυχία ενημέρωσης ενσωμάτωσης GitHub"
 			},
@@ -775,8 +775,8 @@
 			"badgeNotConnected": "Μη συνδεδεμένο",
 			"repository": "Αποθετήριο",
 			"repositoryHint": "Συνδεδεμένο αποθετήριο GitHub",
-			"commentTaskLinkTitle": "Σχολιασμός με σύνδεσμο Kaneo σε νέα issues",
-			"commentTaskLinkHint": "Όταν είναι ενεργό, το Kaneo δημοσιεύει σχόλιο σε κάθε νέο GitHub issue με σύνδεσμο προς την εργασία.",
+			"commentTaskLinkTitle": "Σχολιασμός με σύνδεσμο Initiative σε νέα issues",
+			"commentTaskLinkHint": "Όταν είναι ενεργό, το Initiative δημοσιεύει σχόλιο σε κάθε νέο GitHub issue με σύνδεσμο προς την εργασία.",
 			"appStatusTitle": "Κατάσταση εφαρμογής GitHub",
 			"appStatusHint": "Κατάσταση εγκατάστασης και δικαιωμάτων",
 			"statusProperlyConfigured": "Σωστά ρυθμισμένο",
@@ -827,7 +827,7 @@
 				"removeError": "Αποτυχία αφαίρεσης ενσωμάτωσης Gitea",
 				"issuesImported": "Τα issues εισήχθησαν με επιτυχία",
 				"importError": "Αποτυχία εισαγωγής issues",
-				"commentOnEnabled": "Το Kaneo θα δημοσιεύει σχόλιο με σύνδεσμο εργασίας στα νέα issues",
+				"commentOnEnabled": "Το Initiative θα δημοσιεύει σχόλιο με σύνδεσμο εργασίας στα νέα issues",
 				"commentOnDisabled": "Τα σχόλια με σύνδεσμο εργασίας στα νέα issues είναι απενεργοποιημένα",
 				"settingsUpdateError": "Αποτυχία ενημέρωσης ενσωμάτωσης Gitea",
 				"secretCopied": "Copied",
@@ -845,8 +845,8 @@
 			"badgeNotConnected": "Μη συνδεδεμένο",
 			"repository": "Repository",
 			"repositoryHint": "Συνδεδεμένο αποθετήριο Gitea",
-			"commentTaskLinkTitle": "Σχολιασμός με σύνδεσμο Kaneo σε νέα issues",
-			"commentTaskLinkHint": "Όταν είναι ενεργό, το Kaneo δημοσιεύει σχόλιο σε κάθε νέο issue με σύνδεσμο προς την εργασία.",
+			"commentTaskLinkTitle": "Σχολιασμός με σύνδεσμο Initiative σε νέα issues",
+			"commentTaskLinkHint": "Όταν είναι ενεργό, το Initiative δημοσιεύει σχόλιο σε κάθε νέο issue με σύνδεσμο προς την εργασία.",
 			"webhookTitle": "Webhook",
 			"webhookHint": "Στο αποθετήριό σας στο Gitea, προσθέστε ένα webhook με αυτό το URL και το μυστικό. Ενεργοποιήστε push, pull request, issues, σχόλια issues και create (για ετικέτες).",
 			"webhookSecretLabel": "Μυστικό (πρέπει να ταιριάζει με το μυστικό του webhook στο Gitea)",
@@ -980,7 +980,7 @@
 			"eventsTitle": "Ειδοποιήσεις γεγονότων",
 			"paused": "Σε παύση",
 			"saveChanges": "Αποθήκευση αλλαγών",
-			"secretHint": "Προαιρετικό. Αν δοθεί, το Kaneo υπογράφει το σώμα του αιτήματος και στέλνει το hex digest στην κεφαλίδα X-Kaneo-Signature.",
+			"secretHint": "Προαιρετικό. Αν δοθεί, το Initiative υπογράφει το σώμα του αιτήματος και στέλνει το hex digest στην κεφαλίδα X-Kaneo-Signature.",
 			"secretHintConfigured": "Έχει ήδη ρυθμιστεί ένα μυστικό υπογραφής ({{secret}}). Εισαγάγετε ένα νέο για να το αντικαταστήσετε.",
 			"secretLabel": "Μυστικό υπογραφής",
 			"secretPlaceholder": "Προαιρετικό κοινόχρηστο μυστικό",
@@ -996,7 +996,7 @@
 			"validation": {
 				"webhookInvalid": "Εισαγάγετε ένα έγκυρο URL webhook"
 			},
-			"webhookHint": "Το Kaneo στέλνει αιτήματα POST με JSON payload για κάθε ενεργοποιημένο γεγονός.",
+			"webhookHint": "Το Initiative στέλνει αιτήματα POST με JSON payload για κάθε ενεργοποιημένο γεγονός.",
 			"webhookLabel": "URL endpoint",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
 			"reminderLeadTimeLabel": "Αποστολή του webhook τόσες ώρες πριν από τη λήξη"
@@ -1032,7 +1032,7 @@
 			"threadIdHint": "Προαιρετικό. Χρησιμοποιήστε το για θέματα forum μέσα σε ομάδες Telegram.",
 			"chatLabelLabel": "Ετικέτα συνομιλίας",
 			"chatLabelPlaceholder": "Ενημερώσεις ομάδας μηχανικών",
-			"chatLabelHint": "Προαιρετική ετικέτα για δική σας αναφορά μέσα στο Kaneo.",
+			"chatLabelHint": "Προαιρετική ετικέτα για δική σας αναφορά μέσα στο Initiative.",
 			"eventsTitle": "Ειδοποιήσεις συμβάντων",
 			"eventsHint": "Επιλέξτε ποιες αλλαγές έργου θα δημοσιεύονται στο Telegram.",
 			"events": {
@@ -1986,14 +1986,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "Ο/Η {{inviterName}} σας προσκάλεσε να συμμετάσχετε στο {{workspaceName}} στο Kaneo",
-			"preview": "Έχετε πρόσκληση για το {{workspaceName}} στο Kaneo",
+			"subject": "Ο/Η {{inviterName}} σας προσκάλεσε να συμμετάσχετε στο {{workspaceName}} στο Initiative",
+			"preview": "Έχετε πρόσκληση για το {{workspaceName}} στο Initiative",
 			"title": "Συμμετοχή στο {{workspaceName}}",
-			"subtitle": "Ο/Η {{inviterName}} ({{inviterEmail}}) σας προσκάλεσε να συνεργαστείτε στο Kaneo.",
+			"subtitle": "Ο/Η {{inviterName}} ({{inviterEmail}}) σας προσκάλεσε να συνεργαστείτε στο Initiative.",
 			"cta": "Αποδοχή πρόσκλησης",
 			"sameEmail": "Μπορείτε να αποδεχτείτε την πρόσκληση με το ίδιο email που έλαβε αυτό το μήνυμα.",
 			"ignore": "Αν δεν το περιμένατε, μπορείτε να αγνοήσετε με ασφάλεια αυτό το email.",
-			"footer": "Πρόσκληση χώρου εργασίας Kaneo"
+			"footer": "Πρόσκληση χώρου εργασίας Initiative"
 		},
 		"pageTitle": "Προσκλήσεις",
 		"pendingInvitations": "Εκκρεμείς προσκλήσεις",

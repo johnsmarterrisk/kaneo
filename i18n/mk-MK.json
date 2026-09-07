@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "Откажи",
 			"close": "Затвори",
@@ -100,7 +100,7 @@
 				"errorToast": "Неуспешно креирање на проект"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "Креирај нов работен простор",
 				"description": "Креирај нов работен простор со внесување на име.",
 				"namePlaceholder": "Име на работен простор",
@@ -222,7 +222,7 @@
 			"toggleMessage": "Веќе имаш сметка?",
 			"toggleLink": "Најави се",
 			"instanceStatusError": "Не можеше да се воспостави врска со серверот. Обиди се повторно за момент.",
-			"instanceAdminTitle": "Постави ја твојата Kaneo инстанца",
+			"instanceAdminTitle": "Постави ја твојата Initiative инстанца",
 			"instanceAdminSubtitle": "Оваа сметка станува администратор на инстанцата со целосен пристап."
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "Работен простор: {{workspaceName}}",
 			"joinWorkspace": "Приклучи се на {{workspaceName}}",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> те покани да се приклучиш на нивниот работен простор.",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> те покани да се приклучиш на нивниот работен простор на Kaneo.",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> те покани да се приклучиш на нивниот работен простор на Initiative.",
 			"createAccountOrSignIn": "Креирај сметка за да ја прифатиш оваа покана, или најави се ако веќе имаш.",
 			"createAccount": "Креирај сметка",
 			"accepting": "Се прифаќа...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Добредојде на Kaneo",
+			"pageTitle": "Добредојде на Initiative",
 			"workspacePageTitle": "Креирај работен простор",
 			"createWorkspaceTitle": "Креирај работен простор",
 			"createWorkspaceSubtitle": "Постави го твојот работен простор за да почнеш со управување на проекти",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "Известувања",
 			"title": "Известувања",
-			"subtitle": "Избери како Kaneo ги доставува известувањата за твојата сметка и кои канали да се користат.",
+			"subtitle": "Избери како Initiative ги доставува известувањата за твојата сметка и кои канали да се користат.",
 			"statusConnected": "Connected",
 			"statusPaused": "Paused",
 			"emailTitle": "Email",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "Опционална заедничка тајна",
 			"webhookSecretHintConfigured": "Тајна за потпис веќе е конфигурирана ({{masked}}). Внеси нова за да ја замениш.",
-			"webhookSecretHintOptional": "Опционално. Kaneo го потпишува телото на барањето кога е поставена тајна.",
+			"webhookSecretHintOptional": "Опционално. Initiative го потпишува телото на барањето кога е поставена тајна.",
 			"connectWebhook": "Поврзи webhook",
 			"workspaceRulesTitle": "Правила за достава по работен простор",
 			"workspaceRulesDescription": "Искористи ги твоите глобални канали, па одлучи кои работни простори и проекти смеат да испраќаат известувања за сметката.",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "Преференции",
-			"subtitle": "Прилагоди го твоето Kaneo искуство.",
+			"subtitle": "Прилагоди го твоето Initiative искуство.",
 			"appearanceTitle": "Изглед",
 			"appearanceSubtitle": "Визуелни поставки и преференции за распоред.",
 			"theme": "Тема",
@@ -533,7 +533,7 @@
 			"title": "Програмерски поставки",
 			"subtitle": "Управувај со твоите API клучеви и програмерски ресурси.",
 			"apiKeysCardTitle": "API клучеви",
-			"apiKeysCardDescription": "Креирај и управувај со API клучеви за програмски пристап до Kaneo.",
+			"apiKeysCardDescription": "Креирај и управувај со API клучеви за програмски пристап до Initiative.",
 			"createApiKey": "Креирај API клуч",
 			"unnamedKey": "Неименуван клуч"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "Креирај API клуч",
-				"description": "Креирај нов API клуч за програмски пристап до Kaneo API.",
+				"description": "Креирај нов API клуч за програмски пристап до Initiative API.",
 				"nameLabel": "Име",
 				"namePlaceholder": "Мојот API клуч",
 				"nameDescription": "Описно име за овој API клуч",
@@ -764,7 +764,7 @@
 				"removeError": "Неуспешно отстранување на GitHub интеграцијата",
 				"issuesImported": "Issues се успешно увезени",
 				"importError": "Неуспешен увоз на issues",
-				"commentOnEnabled": "Kaneo ќе коментира со линк до задачата на новите issues",
+				"commentOnEnabled": "Initiative ќе коментира со линк до задачата на новите issues",
 				"commentOnDisabled": "Коментарите со линк до задачата на новите issues се исклучени",
 				"settingsUpdateError": "Неуспешно ажурирање на GitHub интеграцијата"
 			},
@@ -775,8 +775,8 @@
 			"badgeNotConnected": "Неповрзан",
 			"repository": "Репозиториум",
 			"repositoryHint": "Поврзан GitHub репозиториум",
-			"commentTaskLinkTitle": "Коментирај Kaneo линк на нови issues",
-			"commentTaskLinkHint": "Кога е вклучено, Kaneo објавува коментар на секој нов GitHub issue со линк до задачата.",
+			"commentTaskLinkTitle": "Коментирај Initiative линк на нови issues",
+			"commentTaskLinkHint": "Кога е вклучено, Initiative објавува коментар на секој нов GitHub issue со линк до задачата.",
 			"appStatusTitle": "Статус на GitHub апликација",
 			"appStatusHint": "Статус на инсталација и дозволи",
 			"statusProperlyConfigured": "Правилно конфигуриран",
@@ -827,7 +827,7 @@
 				"removeError": "Неуспешно отстранување на Gitea интеграцијата",
 				"issuesImported": "Issues се успешно увезени",
 				"importError": "Неуспешен увоз на issues",
-				"commentOnEnabled": "Kaneo ќе коментира со линк до задачата на новите issues",
+				"commentOnEnabled": "Initiative ќе коментира со линк до задачата на новите issues",
 				"commentOnDisabled": "Коментарите со линк до задачата на новите issues се исклучени",
 				"settingsUpdateError": "Неуспешно ажурирање на Gitea интеграцијата",
 				"secretCopied": "Copied",
@@ -845,8 +845,8 @@
 			"badgeNotConnected": "Неповрзан",
 			"repository": "Repository",
 			"repositoryHint": "Поврзан Gitea репозиториум",
-			"commentTaskLinkTitle": "Коментирај Kaneo линк на новите issues",
-			"commentTaskLinkHint": "Кога е вклучено, Kaneo објавува коментар на секој нов issue со линк до задачата.",
+			"commentTaskLinkTitle": "Коментирај Initiative линк на новите issues",
+			"commentTaskLinkHint": "Кога е вклучено, Initiative објавува коментар на секој нов issue со линк до задачата.",
 			"webhookTitle": "Webhook",
 			"webhookHint": "Во твојот Gitea репозиториум, додади webhook со оваа URL и тајна. Овозможи push, pull request, issues, коментари на issues и create (за ознаки).",
 			"webhookSecretLabel": "Тајна (мора да се совпаѓа со webhook тајната во Gitea)",
@@ -975,10 +975,10 @@
 			"paused": "Паузирано",
 			"webhookLabel": "URL на endpoint",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
-			"webhookHint": "Kaneo испраќа POST барања со JSON за секој овозможен настан.",
+			"webhookHint": "Initiative испраќа POST барања со JSON за секој овозможен настан.",
 			"secretLabel": "Тајна за потпис",
 			"secretPlaceholder": "Опционална заедничка тајна",
-			"secretHint": "Опционално. Ако е поставена, Kaneo го потпишува телото на барањето и го испраќа hex-от во X-Kaneo-Signature.",
+			"secretHint": "Опционално. Ако е поставена, Initiative го потпишува телото на барањето и го испраќа hex-от во X-Kaneo-Signature.",
 			"secretHintConfigured": "Тајна за потпис веќе е конфигурирана ({{secret}}). Внеси нова за да ја замениш.",
 			"eventsTitle": "Известувања за настани",
 			"eventsHint": "Избери кои промени на проектот да го активираат излезниот webhook.",
@@ -1032,7 +1032,7 @@
 			"threadIdHint": "Опционално. Користи го ова за forum теми во Telegram групи.",
 			"chatLabelLabel": "Ознака за разговор",
 			"chatLabelPlaceholder": "Тимски ажурирања",
-			"chatLabelHint": "Опционална ознака за твоја референца во Kaneo.",
+			"chatLabelHint": "Опционална ознака за твоја референца во Initiative.",
 			"eventsTitle": "Известувања за настани",
 			"eventsHint": "Избери кои промени во проектот треба да се објавуваат во Telegram.",
 			"events": {
@@ -1986,14 +1986,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} те покани да се приклучиш на {{workspaceName}} на Kaneo",
-			"preview": "Поканет си во {{workspaceName}} на Kaneo",
+			"subject": "{{inviterName}} те покани да се приклучиш на {{workspaceName}} на Initiative",
+			"preview": "Поканет си во {{workspaceName}} на Initiative",
 			"title": "Приклучи се на {{workspaceName}}",
-			"subtitle": "{{inviterName}} ({{inviterEmail}}) те покани да соработувате во Kaneo.",
+			"subtitle": "{{inviterName}} ({{inviterEmail}}) те покани да соработувате во Initiative.",
 			"cta": "Прифати ја поканата",
 			"sameEmail": "Можеш да прифатиш со истата е-пошта на која е примена оваа порака.",
 			"ignore": "Ако не го очекуваше ова, слободно игнорирај ја оваа е-порака.",
-			"footer": "Покана за Kaneo работен простор"
+			"footer": "Покана за Initiative работен простор"
 		},
 		"pageTitle": "Покани",
 		"pendingInvitations": "Покани на чекање",

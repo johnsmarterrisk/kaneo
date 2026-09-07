@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "Hủy",
 			"close": "Đóng",
@@ -100,7 +100,7 @@
 				"errorToast": "Không thể tạo dự án"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "Tạo không gian làm việc mới",
 				"description": "Tạo một không gian làm việc mới bằng cách đặt tên cho nó.",
 				"namePlaceholder": "Tên không gian làm việc",
@@ -222,7 +222,7 @@
 			"toggleMessage": "Đã có tài khoản?",
 			"toggleLink": "Đăng nhập",
 			"instanceStatusError": "Không thể kết nối đến máy chủ. Vui lòng thử lại sau giây lát.",
-			"instanceAdminTitle": "Thiết lập phiên bản Kaneo của bạn",
+			"instanceAdminTitle": "Thiết lập phiên bản Initiative của bạn",
 			"instanceAdminSubtitle": "Tài khoản này sẽ trở thành quản trị viên của phiên bản với toàn quyền truy cập."
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "Không gian làm việc: {{workspaceName}}",
 			"joinWorkspace": "Tham gia {{workspaceName}}",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> đã mời bạn tham gia không gian làm việc của họ.",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> đã mời bạn tham gia không gian làm việc của họ trên Kaneo.",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> đã mời bạn tham gia không gian làm việc của họ trên Initiative.",
 			"createAccountOrSignIn": "Tạo tài khoản để chấp nhận lời mời này, hoặc đăng nhập nếu bạn đã có tài khoản.",
 			"createAccount": "Tạo tài khoản",
 			"accepting": "Đang chấp nhận...",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "Chào mừng đến với Kaneo",
+			"pageTitle": "Chào mừng đến với Initiative",
 			"workspacePageTitle": "Tạo không gian làm việc",
 			"createWorkspaceTitle": "Tạo không gian làm việc",
 			"createWorkspaceSubtitle": "Thiết lập không gian làm việc để bắt đầu quản lý dự án",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "Thông báo",
 			"title": "Thông báo",
-			"subtitle": "Chọn cách Kaneo gửi thông báo tài khoản của bạn và các kênh sử dụng.",
+			"subtitle": "Chọn cách Initiative gửi thông báo tài khoản của bạn và các kênh sử dụng.",
 			"statusConnected": "Đã kết nối",
 			"statusPaused": "Đã tạm dừng",
 			"emailTitle": "Email",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "Khóa bí mật dùng chung (không bắt buộc)",
 			"webhookSecretHintConfigured": "Đã cấu hình khóa bí mật ký ({{masked}}). Nhập khóa mới để thay thế.",
-			"webhookSecretHintOptional": "Không bắt buộc. Kaneo sẽ ký nội dung yêu cầu khi có thiết lập khóa bí mật.",
+			"webhookSecretHintOptional": "Không bắt buộc. Initiative sẽ ký nội dung yêu cầu khi có thiết lập khóa bí mật.",
 			"connectWebhook": "Kết nối webhook",
 			"workspaceRulesTitle": "Quy tắc gửi thông báo theo không gian làm việc",
 			"workspaceRulesDescription": "Tái sử dụng các kênh chung của bạn, sau đó quyết định không gian làm việc và dự án nào được phép gửi thông báo tài khoản.",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "Tùy chọn",
-			"subtitle": "Tùy chỉnh trải nghiệm Kaneo của bạn.",
+			"subtitle": "Tùy chỉnh trải nghiệm Initiative của bạn.",
 			"appearanceTitle": "Giao diện",
 			"appearanceSubtitle": "Cài đặt hiển thị và bố cục.",
 			"theme": "Chủ đề",
@@ -533,7 +533,7 @@
 			"title": "Cài đặt nhà phát triển",
 			"subtitle": "Quản lý khóa API và tài nguyên dành cho nhà phát triển của bạn.",
 			"apiKeysCardTitle": "Khóa API",
-			"apiKeysCardDescription": "Tạo và quản lý khóa API để truy cập Kaneo bằng chương trình.",
+			"apiKeysCardDescription": "Tạo và quản lý khóa API để truy cập Initiative bằng chương trình.",
 			"createApiKey": "Tạo khóa API",
 			"unnamedKey": "Khóa chưa đặt tên"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "Tạo khóa API",
-				"description": "Tạo một khóa API mới để truy cập Kaneo API bằng chương trình.",
+				"description": "Tạo một khóa API mới để truy cập Initiative API bằng chương trình.",
 				"nameLabel": "Tên",
 				"namePlaceholder": "Khóa API của tôi",
 				"nameDescription": "Tên mô tả cho khóa API này",
@@ -925,7 +925,7 @@
 				"removeError": "Không thể gỡ bỏ tích hợp GitHub",
 				"issuesImported": "Nhập issue thành công",
 				"importError": "Không thể nhập issue",
-				"commentOnEnabled": "Kaneo sẽ bình luận kèm liên kết công việc trên các issue mới",
+				"commentOnEnabled": "Initiative sẽ bình luận kèm liên kết công việc trên các issue mới",
 				"commentOnDisabled": "Đã tắt bình luận liên kết công việc trên issue mới",
 				"settingsUpdateError": "Không thể cập nhật tích hợp GitHub"
 			},
@@ -936,8 +936,8 @@
 			"badgeNotConnected": "Chưa kết nối",
 			"repository": "Kho lưu trữ",
 			"repositoryHint": "Kho lưu trữ GitHub đã kết nối",
-			"commentTaskLinkTitle": "Bình luận liên kết Kaneo trên issue mới",
-			"commentTaskLinkHint": "Khi bật, Kaneo sẽ đăng bình luận trên mỗi issue GitHub mới kèm liên kết đến công việc.",
+			"commentTaskLinkTitle": "Bình luận liên kết Initiative trên issue mới",
+			"commentTaskLinkHint": "Khi bật, Initiative sẽ đăng bình luận trên mỗi issue GitHub mới kèm liên kết đến công việc.",
 			"appStatusTitle": "Trạng thái ứng dụng GitHub",
 			"appStatusHint": "Trạng thái cài đặt và quyền",
 			"statusProperlyConfigured": "Đã cấu hình đúng",
@@ -988,7 +988,7 @@
 				"removeError": "Không thể gỡ bỏ tích hợp Gitea",
 				"issuesImported": "Nhập issue thành công",
 				"importError": "Không thể nhập issue",
-				"commentOnEnabled": "Kaneo sẽ bình luận kèm liên kết công việc trên các issue mới",
+				"commentOnEnabled": "Initiative sẽ bình luận kèm liên kết công việc trên các issue mới",
 				"commentOnDisabled": "Đã tắt bình luận liên kết công việc trên issue mới",
 				"settingsUpdateError": "Không thể cập nhật tích hợp Gitea",
 				"secretCopied": "Đã sao chép",
@@ -1006,8 +1006,8 @@
 			"badgeNotConnected": "Chưa kết nối",
 			"repository": "Kho lưu trữ",
 			"repositoryHint": "Kho lưu trữ Gitea đã liên kết",
-			"commentTaskLinkTitle": "Bình luận liên kết Kaneo trên issue mới",
-			"commentTaskLinkHint": "Khi bật, Kaneo sẽ đăng bình luận trên mỗi issue mới kèm liên kết đến công việc.",
+			"commentTaskLinkTitle": "Bình luận liên kết Initiative trên issue mới",
+			"commentTaskLinkHint": "Khi bật, Initiative sẽ đăng bình luận trên mỗi issue mới kèm liên kết đến công việc.",
 			"webhookTitle": "Webhook",
 			"webhookHint": "Trong kho lưu trữ Gitea của bạn, hãy thêm một webhook với URL và khóa bí mật này. Bật push, pull request, issues, issue comments và create (cho nhãn).",
 			"webhookSecretLabel": "Khóa bí mật (phải khớp với khóa bí mật webhook trong Gitea)",
@@ -1136,10 +1136,10 @@
 			"paused": "Đã tạm dừng",
 			"webhookLabel": "URL điểm cuối",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
-			"webhookHint": "Kaneo gửi yêu cầu POST với nội dung JSON cho mỗi sự kiện đã bật.",
+			"webhookHint": "Initiative gửi yêu cầu POST với nội dung JSON cho mỗi sự kiện đã bật.",
 			"secretLabel": "Khóa bí mật ký",
 			"secretPlaceholder": "Khóa bí mật dùng chung (không bắt buộc)",
-			"secretHint": "Không bắt buộc. Nếu được cung cấp, Kaneo sẽ ký nội dung yêu cầu và gửi mã băm hex trong tiêu đề X-Kaneo-Signature.",
+			"secretHint": "Không bắt buộc. Nếu được cung cấp, Initiative sẽ ký nội dung yêu cầu và gửi mã băm hex trong tiêu đề X-Kaneo-Signature.",
 			"secretHintConfigured": "Đã cấu hình khóa bí mật ký ({{secret}}). Nhập khóa mới để thay thế.",
 			"eventsTitle": "Thông báo sự kiện",
 			"eventsHint": "Chọn thay đổi dự án nào sẽ kích hoạt webhook gửi đi.",
@@ -1193,7 +1193,7 @@
 			"threadIdHint": "Không bắt buộc. Dùng cho các chủ đề diễn đàn trong nhóm Telegram.",
 			"chatLabelLabel": "Nhãn cuộc trò chuyện",
 			"chatLabelPlaceholder": "Cập nhật kỹ thuật",
-			"chatLabelHint": "Nhãn tùy chọn để bạn tham khảo trong Kaneo.",
+			"chatLabelHint": "Nhãn tùy chọn để bạn tham khảo trong Initiative.",
 			"eventsTitle": "Thông báo sự kiện",
 			"eventsHint": "Chọn thay đổi dự án nào sẽ đăng lên Telegram.",
 			"events": {
@@ -1980,14 +1980,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} đã mời bạn tham gia {{workspaceName}} trên Kaneo",
-			"preview": "Bạn được mời tham gia {{workspaceName}} trên Kaneo",
+			"subject": "{{inviterName}} đã mời bạn tham gia {{workspaceName}} trên Initiative",
+			"preview": "Bạn được mời tham gia {{workspaceName}} trên Initiative",
 			"title": "Tham gia {{workspaceName}}",
-			"subtitle": "{{inviterName}} ({{inviterEmail}}) đã mời bạn cộng tác trên Kaneo.",
+			"subtitle": "{{inviterName}} ({{inviterEmail}}) đã mời bạn cộng tác trên Initiative.",
 			"cta": "Chấp nhận lời mời",
 			"sameEmail": "Bạn có thể chấp nhận bằng email đã nhận thư này.",
 			"ignore": "Nếu bạn không mong đợi email này, bạn có thể yên tâm bỏ qua.",
-			"footer": "Lời mời không gian làm việc Kaneo"
+			"footer": "Lời mời không gian làm việc Initiative"
 		},
 		"pageTitle": "Lời mời",
 		"pendingInvitations": "Lời mời đang chờ",

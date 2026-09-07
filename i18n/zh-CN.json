@@ -1,6 +1,6 @@
 {
 	"common": {
-		"appName": "Kaneo",
+		"appName": "Initiative",
 		"actions": {
 			"cancel": "取消",
 			"close": "关闭",
@@ -100,7 +100,7 @@
 				"errorToast": "项目创建失败"
 			},
 			"createWorkspace": {
-				"breadcrumbKaneo": "KANEO",
+				"breadcrumbKaneo": "INITIATIVE",
 				"title": "创建新工作区",
 				"description": "为你的工作区提供一个名称即可创建。",
 				"namePlaceholder": "工作区名称",
@@ -222,7 +222,7 @@
 			"toggleMessage": "已经有账户？",
 			"toggleLink": "登录",
 			"instanceStatusError": "无法连接服务器，请稍后重试。",
-			"instanceAdminTitle": "设置你的 Kaneo 实例",
+			"instanceAdminTitle": "设置你的 Initiative 实例",
 			"instanceAdminSubtitle": "此账户将成为拥有完整权限的实例管理员。"
 		},
 		"verifyOtp": {
@@ -280,7 +280,7 @@
 			"workspaceLabel": "工作区：{{workspaceName}}",
 			"joinWorkspace": "加入 {{workspaceName}}",
 			"inviteBodySignedIn": "<inviter>{{inviterName}}</inviter> 邀请你加入他们的工作区。",
-			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> 邀请你加入他们 Kaneo 上的工作区。",
+			"inviteBodySignedOut": "<inviter>{{inviterName}}</inviter> 邀请你加入他们 Initiative 上的工作区。",
 			"createAccountOrSignIn": "创建账户以接受此邀请；如已有账户，请直接登录。",
 			"createAccount": "创建账户",
 			"accepting": "接受中…",
@@ -296,7 +296,7 @@
 			}
 		},
 		"onboarding": {
-			"pageTitle": "欢迎使用 Kaneo",
+			"pageTitle": "欢迎使用 Initiative",
 			"workspacePageTitle": "创建工作区",
 			"createWorkspaceTitle": "创建工作区",
 			"createWorkspaceSubtitle": "设置你的工作区以开始管理项目",
@@ -388,7 +388,7 @@
 		"notificationsPage": {
 			"pageTitle": "通知",
 			"title": "通知",
-			"subtitle": "选择 Kaneo 发送账户通知的方式和渠道。",
+			"subtitle": "选择 Initiative 发送账户通知的方式和渠道。",
 			"statusConnected": "已连接",
 			"statusPaused": "已暂停",
 			"emailTitle": "邮箱",
@@ -424,7 +424,7 @@
 			"webhookUrlPlaceholder": "https://example.com/webhooks/kaneo",
 			"webhookSecretPlaceholder": "可选的共享密钥",
 			"webhookSecretHintConfigured": "已配置签名密钥（{{masked}}），输入新密钥以替换。",
-			"webhookSecretHintOptional": "可选。设置密钥后，Kaneo 会对请求体进行签名。",
+			"webhookSecretHintOptional": "可选。设置密钥后，Initiative 会对请求体进行签名。",
 			"connectWebhook": "连接 Webhook",
 			"workspaceRulesTitle": "工作区通知规则",
 			"workspaceRulesDescription": "复用你的全局渠道，然后决定哪些工作区和项目可以发送账户通知。",
@@ -489,7 +489,7 @@
 		},
 		"preferencesPage": {
 			"title": "偏好设置",
-			"subtitle": "自定义你的 Kaneo 体验。",
+			"subtitle": "自定义你的 Initiative 体验。",
 			"appearanceTitle": "外观",
 			"appearanceSubtitle": "视觉设置和布局偏好。",
 			"theme": "主题",
@@ -533,7 +533,7 @@
 			"title": "开发者设置",
 			"subtitle": "管理你的 API 密钥和开发者资源。",
 			"apiKeysCardTitle": "API 密钥",
-			"apiKeysCardDescription": "创建并管理用于以编程方式访问 Kaneo 的 API 密钥。",
+			"apiKeysCardDescription": "创建并管理用于以编程方式访问 Initiative 的 API 密钥。",
 			"createApiKey": "创建 API 密钥",
 			"unnamedKey": "未命名密钥"
 		},
@@ -572,7 +572,7 @@
 			},
 			"createDialog": {
 				"title": "创建 API 密钥",
-				"description": "创建新的 API 密钥以编程方式访问 Kaneo API。",
+				"description": "创建新的 API 密钥以编程方式访问 Initiative API。",
 				"nameLabel": "姓名",
 				"namePlaceholder": "我的 API 密钥",
 				"nameDescription": "此 API 密钥的描述性名称",
@@ -925,7 +925,7 @@
 				"removeError": "移除 GitHub 集成失败",
 				"issuesImported": "Issues 导入成功",
 				"importError": "导入 Issues 失败",
-				"commentOnEnabled": "Kaneo 将在新 Issue 上评论任务链接",
+				"commentOnEnabled": "Initiative 将在新 Issue 上评论任务链接",
 				"commentOnDisabled": "新 Issue 的任务链接评论已关闭",
 				"settingsUpdateError": "更新 GitHub 集成失败"
 			},
@@ -936,8 +936,8 @@
 			"badgeNotConnected": "未连接",
 			"repository": "仓库",
 			"repositoryHint": "已连接的 GitHub 仓库",
-			"commentTaskLinkTitle": "在新 Issue 上评论 Kaneo 链接",
-			"commentTaskLinkHint": "启用后，Kaneo 会在每个新 GitHub Issue 上发布包含任务链接的评论。",
+			"commentTaskLinkTitle": "在新 Issue 上评论 Initiative 链接",
+			"commentTaskLinkHint": "启用后，Initiative 会在每个新 GitHub Issue 上发布包含任务链接的评论。",
 			"appStatusTitle": "GitHub App 状态",
 			"appStatusHint": "安装与权限状态",
 			"statusProperlyConfigured": "配置正确",
@@ -988,7 +988,7 @@
 				"removeError": "移除 Gitea 集成失败",
 				"issuesImported": "Issues 导入成功",
 				"importError": "导入 Issues 失败",
-				"commentOnEnabled": "Kaneo 将在新 Issue 上评论任务链接",
+				"commentOnEnabled": "Initiative 将在新 Issue 上评论任务链接",
 				"commentOnDisabled": "新 Issue 的任务链接评论已关闭",
 				"settingsUpdateError": "更新 Gitea 集成失败",
 				"secretCopied": "已复制",
@@ -1006,8 +1006,8 @@
 			"badgeNotConnected": "未连接",
 			"repository": "仓库",
 			"repositoryHint": "已关联的 Gitea 仓库",
-			"commentTaskLinkTitle": "在新 Issue 上评论 Kaneo 链接",
-			"commentTaskLinkHint": "启用后，Kaneo 会在每个新 Issue 上发布一条包含任务链接的评论。",
+			"commentTaskLinkTitle": "在新 Issue 上评论 Initiative 链接",
+			"commentTaskLinkHint": "启用后，Initiative 会在每个新 Issue 上发布一条包含任务链接的评论。",
 			"webhookTitle": "Webhook",
 			"webhookHint": "在你的 Gitea 仓库中，添加使用此 URL 和密钥的 Webhook。启用 push、pull request、issues、issue comments 和 create（用于标签）。",
 			"webhookSecretLabel": "密钥（必须与 Gitea 中的 Webhook 密钥一致）",
@@ -1136,10 +1136,10 @@
 			"paused": "已暂停",
 			"webhookLabel": "端点 URL",
 			"webhookPlaceholder": "https://example.com/webhooks/kaneo",
-			"webhookHint": "Kaneo 会为每个已启用的事件发送带 JSON 负载的 POST 请求。",
+			"webhookHint": "Initiative 会为每个已启用的事件发送带 JSON 负载的 POST 请求。",
 			"secretLabel": "签名密钥",
 			"secretPlaceholder": "可选的共享密钥",
-			"secretHint": "可选。提供后，Kaneo 会对请求体进行签名，并通过 X-Kaneo-Signature 头发送十六进制摘要。",
+			"secretHint": "可选。提供后，Initiative 会对请求体进行签名，并通过 X-Kaneo-Signature 头发送十六进制摘要。",
 			"secretHintConfigured": "已配置签名密钥（{{secret}}），输入新密钥以替换。",
 			"eventsTitle": "事件通知",
 			"eventsHint": "选择哪些项目变更会触发出站 Webhook。",
@@ -1193,7 +1193,7 @@
 			"threadIdHint": "可选。用于 Telegram 群组内的论坛话题。",
 			"chatLabelLabel": "聊天标签",
 			"chatLabelPlaceholder": "工程更新",
-			"chatLabelHint": "在 Kaneo 中作为参考的可选标签。",
+			"chatLabelHint": "在 Initiative 中作为参考的可选标签。",
 			"eventsTitle": "事件通知",
 			"eventsHint": "选择应发布到 Telegram 的项目变更。",
 			"events": {
@@ -1980,14 +1980,14 @@
 	},
 	"invitations": {
 		"email": {
-			"subject": "{{inviterName}} 邀请你加入 Kaneo 上的 {{workspaceName}}",
-			"preview": "你被邀请加入 Kaneo 上的 {{workspaceName}}",
+			"subject": "{{inviterName}} 邀请你加入 Initiative 上的 {{workspaceName}}",
+			"preview": "你被邀请加入 Initiative 上的 {{workspaceName}}",
 			"title": "加入 {{workspaceName}}",
-			"subtitle": "{{inviterName}}（{{inviterEmail}}）邀请你在 Kaneo 中协作。",
+			"subtitle": "{{inviterName}}（{{inviterEmail}}）邀请你在 Initiative 中协作。",
 			"cta": "接受邀请",
 			"sameEmail": "你可以使用收到此邮件的同一邮箱接受。",
 			"ignore": "如果这不是你预期的，可以安全忽略此邮件。",
-			"footer": "Kaneo 工作区邀请"
+			"footer": "Initiative 工作区邀请"
 		},
 		"pageTitle": "邀请",
 		"pendingInvitations": "待处理的邀请",

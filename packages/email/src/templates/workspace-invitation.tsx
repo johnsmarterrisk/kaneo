@@ -28,15 +28,16 @@ export type WorkspaceInvitationEmailCopy = {
 // tsc, so the import would survive into dist and resolve outside the published
 // files at runtime.
 const DEFAULT_COPY: WorkspaceInvitationEmailCopy = {
-  subject: "{{inviterName}} invited you to join {{workspaceName}} on Kaneo",
-  preview: "You're invited to {{workspaceName}} on Kaneo",
+  subject:
+    "{{inviterName}} invited you to join {{workspaceName}} on Initiative",
+  preview: "You're invited to {{workspaceName}} on Initiative",
   title: "Join {{workspaceName}}",
   subtitle:
-    "{{inviterName}} ({{inviterEmail}}) invited you to collaborate in Kaneo.",
+    "{{inviterName}} ({{inviterEmail}}) invited you to collaborate in Initiative.",
   cta: "Accept invitation",
   sameEmail: "You can accept with the same email that received this message.",
   ignore: "If this wasn't expected, you can safely ignore this email.",
-  footer: "Kaneo workspace invitation",
+  footer: "Initiative workspace invitation",
 };
 
 function interpolate(template: string, values: Record<string, string>) {
@@ -81,15 +82,16 @@ WorkspaceInvitationEmail.PreviewProps = {
   invitationLink: "https://kaneo.app/invite/abc123",
   to: "invitee@example.com",
   copy: {
-    subject: "{{inviterName}} invited you to join {{workspaceName}} on Kaneo",
-    preview: "You're invited to {{workspaceName}} on Kaneo",
+    subject:
+      "{{inviterName}} invited you to join {{workspaceName}} on Initiative",
+    preview: "You're invited to {{workspaceName}} on Initiative",
     title: "Join {{workspaceName}}",
     subtitle:
-      "{{inviterName}} ({{inviterEmail}}) invited you to collaborate in Kaneo.",
+      "{{inviterName}} ({{inviterEmail}}) invited you to collaborate in Initiative.",
     cta: "Accept invitation",
     sameEmail: "You can accept with the same email that received this message.",
     ignore: "If this wasn't expected, you can safely ignore this email.",
-    footer: "Kaneo workspace invitation",
+    footer: "Initiative workspace invitation",
   },
 } as WorkspaceInvitationEmailProps;
 

@@ -1,3 +1,7 @@
+// Operon fork (task B10): the expected subjects below quote the product name from
+// the locale bundles, which B10 rebranded from "Kaneo" to "Initiative". Only the
+// brand token changed (R13); the translations, the locale fallback behaviour and
+// every other assertion are upstream's.
 import { describe, expect, it } from "vitest";
 import { getInvitationEmailSubject } from "../../../apps/api/src/utils/get-invitation-email-subject";
 
@@ -14,7 +18,7 @@ describe("getInvitationEmailSubject", () => {
     );
 
     expect(subject).toBe(
-      "Alice vous invite à rejoindre Équipe produit sur Kaneo",
+      "Alice vous invite à rejoindre Équipe produit sur Initiative",
     );
   });
 
@@ -30,7 +34,7 @@ describe("getInvitationEmailSubject", () => {
     );
 
     expect(subject).toBe(
-      "Alice hat dich eingeladen, Produkt auf Kaneo beizutreten",
+      "Alice hat dich eingeladen, Produkt auf Initiative beizutreten",
     );
   });
 
@@ -46,7 +50,7 @@ describe("getInvitationEmailSubject", () => {
     );
 
     expect(subject).toBe(
-      "Alice convidou você para participar de Equipe produto no Kaneo",
+      "Alice convidou você para participar de Equipe produto no Initiative",
     );
   });
 
@@ -62,7 +66,7 @@ describe("getInvitationEmailSubject", () => {
     );
 
     expect(subject).toBe(
-      "Alice さんが Kaneo の「プロダクト」にあなたを招待しました",
+      "Alice さんが Initiative の「プロダクト」にあなたを招待しました",
     );
   });
 
@@ -77,6 +81,6 @@ describe("getInvitationEmailSubject", () => {
       workspaceName,
     );
 
-    expect(subject).toBe("Alice invited you to join Producto on Kaneo");
+    expect(subject).toBe("Alice invited you to join Producto on Initiative");
   });
 });
