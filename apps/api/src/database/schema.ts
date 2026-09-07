@@ -932,17 +932,28 @@ export const externalLinkTable = pgTable(
     // index makes them converge on one row instead of two. The write route pairs
     // it with ON CONFLICT (task_id, integration_id, external_id) DO UPDATE.
     //
-    // WHY THE INTEGRATION ID IS IN THE KEY.
+    // WHY THE INTEGRATION ID AND THE RESOURCE TYPE ARE BOTH IN THE KEY.
     // Spec R15 names the pair (task_id, external_id), but that pair is narrower
-    // than upstream's own writers need: `UNIQUE (projectId, type)` lets ONE project
-    // carry both a `github` and a `gitea` integration, and
-    // `plugins/*/services/link-manager.ts` would then legitimately write two rows
-    // for issue #5 — or for the same branch name — on one task. Keying on the
-    // triple keeps that working while still giving Operon exactly the convergence
-    // it needs, because there is exactly one `telegraph` integration per project.
+    // than upstream's own writers need, in two independent ways.
+    //
+    // `UNIQUE (projectId, type)` lets ONE project carry both a `github` and a
+    // `gitea` integration, and `plugins/*/services/link-manager.ts` would then
+    // legitimately write two rows for issue #5 on one task — hence the integration
+    // id.
+    //
+    // And within ONE integration, upstream's link manager writes a row per resource
+    // KIND: it recognises the `{number}` branch pattern, so branch "5" and issue #5
+    // are two real, different links from the same task through the same integration.
+    // Without `resource_type` the constraint collapsed them — rejecting the second
+    // write on a live instance, and refusing to apply at all on one that already
+    // held the pair. The write route pairs it with
+    // ON CONFLICT (task_id, integration_id, resource_type, external_id) DO UPDATE,
+    // and pins Telegraph's own resource type to "message" so its idempotency is
+    // unaffected by the wider key.
     unique("external_link_task_integration_external_unique").on(
       table.taskId,
       table.integrationId,
+      table.resourceType,
       table.externalId,
     ),
   ],

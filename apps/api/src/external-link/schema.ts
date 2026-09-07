@@ -14,7 +14,17 @@ export const taskIdParam = z.object({ taskId: z.string() });
 export const createExternalLinkBody = z.object({
   taskId: z.string().min(1),
   integrationId: z.string().min(1),
-  resourceType: z.string().min(1).max(64),
+  // ALWAYS "message", and a literal rather than a free string.
+  //
+  // This route is Telegraph's, and Telegraph's external resource is a Nostr event
+  // rendered as a message. Two things follow. It is now part of migration 0045's
+  // unique key `(task_id, integration_id, resource_type, external_id)`, so a free
+  // string would let one caller fragment its own idempotency by varying it. And a
+  // caller able to name any resource type on a `telegraph` integration could write
+  // rows shaped like the ones upstream's github/gitea link managers synchronise
+  // against. Defaulted rather than required so an existing caller that omits it
+  // keeps working.
+  resourceType: z.literal("message").default("message"),
   externalId: z.string().min(1).max(256),
   // http/https only. This value is rendered straight into an `<a href>` by
   // `apps/web/src/components/external-links/external-links-accordion.tsx`, and every

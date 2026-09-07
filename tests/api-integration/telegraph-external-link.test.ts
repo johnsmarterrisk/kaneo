@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { auth } from "../../apps/api/src/auth";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
 import { mockAuthenticatedSession } from "./helpers/auth";
@@ -12,9 +13,14 @@ import {
 /**
  * Operon fork checks (spec R15, R16, R26, decisions 31 and 35, task B12).
  *
- * Nine claims, one test each. The tenth lives in
- * `apps/web/src/__tests__/telegraph-external-link.test.tsx`, because the rendered
- * href is a web concern.
+ * One claim per test. The rendered-href claim lives in
+ * `apps/web/src/__tests__/telegraph-external-link.test.tsx`, because that is a web
+ * concern.
+ *
+ * The authorization block is what a Codex review turned up: `workspaceAccess` alone
+ * answers "are you IN this workspace" and nothing about what you may DO there, so a
+ * viewer and a read-scoped API key could both write links, and the route accepted a
+ * GitHub or Gitea integration id — rows upstream's own synchronisers trust.
  *
  * See `docs/fork-discipline.md` in the Operon repository for why these live in the
  * fork rather than in Operon.
@@ -75,12 +81,29 @@ function attachBody(taskId: string, integrationId: string) {
 function post(
   app: ReturnType<typeof createApp>["app"],
   body: Record<string, unknown>,
+  headers: Record<string, string> = {},
 ) {
   return app.request("/api/external-link", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * A real API key for a real user, minted SERVER-side so `permissions` can be named
+ * without a session — the same call the workspace bootstrap makes.
+ */
+async function mintKeyFor(
+  userId: string,
+  permissions: Record<string, string[]>,
+) {
+  const created = await auth.api.createApiKey({
+    body: { userId, name: `test-${Date.now() % 100000}`, permissions },
+  });
+  const key = created?.key;
+  if (!key) throw new Error("failed to mint a test api key");
+  return key;
 }
 
 describe("API integration: the telegraph external-link write route", () => {
@@ -225,14 +248,72 @@ describe("API integration: the telegraph external-link write route", () => {
     expect(rows[0]?.externalId).toBe(EVENT_ID);
   });
 
-  it("keeps two providers' links to the same externalId on one task apart", async () => {
-    // The reason the key is the TRIPLE and not the (taskId, externalId) pair the
-    // spec first named. `UNIQUE (projectId, type)` lets one project carry a second
-    // integration, and upstream's own github/gitea link managers legitimately write
-    // a row each for the same issue number on the same task. A two-column key would
-    // have made the second write overwrite the first.
-    const { member, project, task, integration } = await seedTelegraphProject();
-    const [otherIntegration] = await db
+  it("refuses a VIEWER with 403 — reading a task is not writing to one", async () => {
+    // `workspaceAccess.fromTaskId` only asks "are you in this workspace", which a viewer
+    // is. The permission this route now also demands, `task: ["update"]`, is the one
+    // every upstream task-mutating route demands, and viewers do not have it.
+    const { member, task, integration } = await seedTelegraphProject("viewer");
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id));
+
+    expect(response.status).toBe(403);
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("refuses an API KEY whose scope omits task:update with 403", async () => {
+    // An API key's `permissions` are a CEILING over its holder's role
+    // (`utils/require-workspace-permission.ts`), so a key minted by a full workspace
+    // member is still refused when its scope does not name this action. Operon's own
+    // service key carries `task: ["update"]` deliberately.
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const readOnlyKey = await mintKeyFor(member.user.id, {
+      task: ["read"],
+      workspace: ["read"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": readOnlyKey,
+    });
+
+    expect(response.status).toBe(403);
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("accepts an API key that does carry task:update", async () => {
+    // The negative above would also pass against a route that refused every API key.
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const serviceKey = await mintKeyFor(member.user.id, {
+      workspace: ["manage_settings"],
+      task: ["update"],
+      operon: ["rekey"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": serviceKey,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a NON-TELEGRAPH integration with 409", async () => {
+    // A project may legitimately carry a `github` or `gitea` integration beside its
+    // telegraph one, and upstream's own link managers treat the rows under those
+    // integrations as their synchronisation state. This fork route must not be a way for
+    // a workspace member to write them.
+    const { member, project, task } = await seedTelegraphProject();
+    const [gitea] = await db
       .insert(schema.integrationTable)
       .values({
         projectId: project.id,
@@ -245,25 +326,99 @@ describe("API integration: the telegraph external-link write route", () => {
     mockAuthenticatedSession(member.user);
     const { app } = createApp();
 
-    expect((await post(app, attachBody(task.id, integration.id))).status).toBe(
-      200,
-    );
-    const second = await post(app, {
-      ...attachBody(task.id, otherIntegration.id),
+    const response = await post(app, attachBody(task.id, gitea.id));
+
+    expect(response.status).toBe(409);
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("refuses a resourceType other than message", async () => {
+    const { member, task, integration } = await seedTelegraphProject();
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const response = await post(app, {
+      ...attachBody(task.id, integration.id),
       resourceType: "issue",
-      url: "https://gitea.example/owner/repo/issues/1",
-      title: "A gitea issue that happens to share the id",
     });
-    expect(second.status).toBe(200);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("keeps an upstream issue and branch with the SAME id apart on one task", async () => {
+    // Migration 0045's whole correction. Upstream's link manager recognises the
+    // `{number}` branch pattern, so branch "5" and issue #5 are two real links from one
+    // task through ONE integration. Written directly, because these rows are upstream's
+    // writers' and this fork's route is telegraph-only — the claim is about the
+    // CONSTRAINT, not about the route.
+    const { member, project, task } = await seedTelegraphProject();
+    const [gitea] = await db
+      .insert(schema.integrationTable)
+      .values({
+        projectId: project.id,
+        type: "gitea",
+        config: JSON.stringify({ baseUrl: "https://gitea.example" }),
+        isActive: true,
+      })
+      .returning();
+
+    await db.insert(schema.externalLinkTable).values([
+      {
+        taskId: task.id,
+        integrationId: gitea.id,
+        resourceType: "issue",
+        externalId: "5",
+        url: "https://gitea.example/owner/repo/issues/5",
+      },
+      {
+        taskId: task.id,
+        integrationId: gitea.id,
+        resourceType: "branch",
+        externalId: "5",
+        url: "https://gitea.example/owner/repo/src/branch/5",
+      },
+    ]);
 
     const rows = await db
       .select()
       .from(schema.externalLinkTable)
       .where(eq(schema.externalLinkTable.taskId, task.id));
     expect(rows).toHaveLength(2);
-    expect(new Set(rows.map((row) => row.integrationId))).toEqual(
-      new Set([integration.id, otherIntegration.id]),
+    expect(new Set(rows.map((row) => row.resourceType))).toEqual(
+      new Set(["issue", "branch"]),
     );
+    expect(member.user.id).toBeTruthy();
+  });
+
+  it("still refuses a genuine duplicate of the same resource kind", async () => {
+    // The other half: widening the key must not have turned it off.
+    const { project, task } = await seedTelegraphProject();
+    const [gitea] = await db
+      .insert(schema.integrationTable)
+      .values({
+        projectId: project.id,
+        type: "gitea",
+        config: JSON.stringify({ baseUrl: "https://gitea.example" }),
+        isActive: true,
+      })
+      .returning();
+
+    const row = {
+      taskId: task.id,
+      integrationId: gitea.id,
+      resourceType: "issue",
+      externalId: "5",
+      url: "https://gitea.example/owner/repo/issues/5",
+    };
+    await db.insert(schema.externalLinkTable).values(row);
+
+    await expect(
+      db.insert(schema.externalLinkTable).values(row),
+    ).rejects.toThrow();
   });
 
   it("GET /task/tasks/{projectId} carries updatedAt, and it advances after an update", async () => {

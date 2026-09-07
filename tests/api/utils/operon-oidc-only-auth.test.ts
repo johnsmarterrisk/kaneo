@@ -116,6 +116,17 @@ describe("the OIDC-only disable knobs", () => {
     expect(isLocalSignInPath("/oauth2/callback/custom")).toBe(false);
     expect(isLocalSignInPath("/sign-in/oauth2")).toBe(false);
   });
+
+  it("does NOT cover /sign-up/email, which is why the fork adds a second refusal", () => {
+    // Upstream's predicate is about SIGNING IN. Signing UP is a different path and it was
+    // never in this set, so `DISABLE_LOGIN_FORM` never reached it — and upstream's two
+    // registration gates both exempt the very first user, plus a valid invitation. On an
+    // Operon instance those exemptions are a way to obtain a Kaneo session without ever
+    // passing Operon, which is what `hooks.before`'s unconditional Operon-mode refusal
+    // closes. The HTTP proof is `tests/api-integration/operon-oidc-only.test.ts`; this
+    // assertion is the reason that refusal has to exist separately at all.
+    expect(isLocalSignInPath("/sign-up/email")).toBe(false);
+  });
 });
 
 describe("mapCustomOAuthProfileToUser", () => {

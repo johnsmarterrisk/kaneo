@@ -12,6 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  2. Its Telegraph link points at the apex host taken from CONFIGURATION. The test sets a
  *     host that appears nowhere in the source, so a hard-coded literal — including the
  *     dev fallback — fails it.
+ *  2b. `apexUrl` accepts a configured value by PARSING it. The same claim against the
+ *     COMPILED bundle, with `env.sh`'s substitution actually applied, lives in
+ *     `operon-apex-bundle.test.ts` — esbuild cannot run under jsdom, and that is the
+ *     only place the sentinel-comparison bug was visible.
  *  3. `WorkspaceSwitcher` is not rendered by `AppSidebar`. The real module is replaced by a
  *     marker component, so re-adding it anywhere in that tree turns this test red rather
  *     than passing quietly.
@@ -32,9 +36,13 @@ vi.mock("@/hooks/use-user-websocket", () => ({
   useUserWebSocket: vi.fn(),
 }));
 
-const { OperonSwitcher, OPERON_MODULES } = await import(
-  "@/components/operon-switcher"
-);
+const {
+  OperonSwitcher,
+  OPERON_MODULES,
+  apexUrl,
+  DEV_APEX_URL,
+  __resetApexUrlWarning,
+} = await import("@/components/operon-switcher");
 
 afterEach(() => {
   cleanup();
@@ -87,6 +95,35 @@ describe("OperonSwitcher", () => {
     expect(telegraph.getAttribute("href")).toBe("https://apex.b11.test:9443/");
     // The dev fallback must not have been used while a value was configured.
     expect(telegraph.getAttribute("href")).not.toContain("lvh.me");
+  });
+});
+
+describe("apexUrl", () => {
+  beforeEach(() => {
+    __resetApexUrlWarning();
+  });
+
+  it("uses a configured absolute url and strips its trailing slashes", () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.b11.test:9443//");
+    expect(apexUrl()).toBe("https://apex.b11.test:9443");
+  });
+
+  it("falls back when the placeholder token was never substituted", () => {
+    // The literal `apps/web/.env.production` bakes in. It is not a URL, which is now
+    // the whole test: nothing compares it against a copy of itself.
+    vi.stubEnv("VITE_OPERON_APEX_URL", "OPERON_APEX_URL");
+    expect(apexUrl()).toBe(DEV_APEX_URL);
+  });
+
+  it("falls back on an empty value", () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "   ");
+    expect(apexUrl()).toBe(DEV_APEX_URL);
+  });
+
+  it("refuses a non-http scheme rather than rendering it into an href", () => {
+    // `apexUrl()`'s return value is interpolated straight into `<a href>`.
+    vi.stubEnv("VITE_OPERON_APEX_URL", "javascript:alert(1)");
+    expect(apexUrl()).toBe(DEV_APEX_URL);
   });
 });
 

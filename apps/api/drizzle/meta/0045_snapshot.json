@@ -1370,7 +1370,12 @@
 				"external_link_task_integration_external_unique": {
 					"name": "external_link_task_integration_external_unique",
 					"nullsNotDistinct": false,
-					"columns": ["task_id", "integration_id", "external_id"]
+					"columns": [
+						"task_id",
+						"integration_id",
+						"resource_type",
+						"external_id"
+					]
 				}
 			},
 			"policies": {},

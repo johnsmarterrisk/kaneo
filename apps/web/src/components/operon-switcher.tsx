@@ -72,13 +72,6 @@ export const OPERON_MODULES: readonly OperonModule[] = [
 const CURRENT_MODULE: OperonModuleKey = "initiative";
 
 /**
- * The literal `apps/web/env.sh` substitutes at container start. It survives in the bundle
- * only when `OPERON_APEX_URL` was left unset, and it is not a URL — so it is treated as
- * "unconfigured" rather than navigated to.
- */
-const APEX_URL_PLACEHOLDER = "OPERON_APEX_URL";
-
-/**
  * The dev default, matching `DEV_INITIATIVE_URL`'s sibling in `app/src/shell/branding.ts`:
  * the apex on the local TLS domain family, carrying the `:8443` an unprivileged
  * `OPERON_HTTPS_PORT` needs. Only ever reached when the container was started without
@@ -96,25 +89,47 @@ let apexUrlFallbackWarned = false;
  * into the bundle. In production the pair is `operon.smarterrisk.app` and
  * `initiative.operon.smarterrisk.app`; nothing guarantees that relationship in every
  * environment, and a wrong guess sends a signed-in user to a host that does not exist.
- * `VITE_OPERON_APEX_URL` is baked as a placeholder at image build time and replaced by
- * `apps/web/env.sh` at container start, exactly as `KANEO_API_URL` and `KANEO_CLIENT_URL`
- * are, so the value is runtime-configurable without a rebuild.
+ * `apps/web/.env.production` bakes a placeholder token at image build time and
+ * `apps/web/env.sh` replaces it at container start, exactly as `KANEO_API_URL` and
+ * `KANEO_CLIENT_URL` are replaced, so the value is runtime-configurable without a rebuild.
  *
- * A missing value is said out loud rather than swallowed: an unconfigured deployment gets
- * a console warning naming the variable, once, and the dev default.
+ * ── THE CHECK IS A URL PARSE, AND IT HAS TO BE ───────────────────────────────────────
+ *
+ * The first revision asked "is this string still equal to the placeholder token?" — and
+ * that question can never be answered yes after substitution, because `env.sh` runs a
+ * global `sed` over every `.js` file in the bundle: it replaces the token in the baked
+ * VALUE and in the compiled COMPARISON CONSTANT, in the same pass. Both sides moved
+ * together, the strings stayed equal, and a fully configured production deployment took
+ * the dev fallback — sending the switcher and every Telegraph link to `lvh.me`. Verified
+ * by compiling this module and substituting `https://operon.example.org`, which still
+ * returned the local default.
+ *
+ * A parse has no such twin. An unsubstituted token is not an absolute URL and throws; any
+ * value `env.sh` actually wrote is one and does not. The protocol is checked too, so a
+ * `javascript:` or `data:` value configured by mistake is refused rather than rendered
+ * into an `<a href>`.
+ *
+ * A missing or unusable value is said out loud rather than swallowed: once, on the
+ * console, with the dev default. The message deliberately does not contain the
+ * placeholder token — `env.sh`'s `sed` would rewrite that too, and a diagnostic that
+ * rewrites itself is worse than none.
  */
 export function apexUrl(): string {
   // Read through a widened type: `apps/web/src/vite-env.d.ts` is not on the fork's touch
   // list, so this variable is not declared on `ImportMetaEnv` and must not be added there.
   const configured = (import.meta.env as Record<string, string | undefined>)
     .VITE_OPERON_APEX_URL;
+  const trimmed = typeof configured === "string" ? configured.trim() : "";
 
-  if (
-    typeof configured === "string" &&
-    configured.trim() !== "" &&
-    configured.trim() !== APEX_URL_PLACEHOLDER
-  ) {
-    return configured.trim().replace(/\/+$/, "");
+  if (trimmed !== "") {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return trimmed.replace(/\/+$/, "");
+      }
+    } catch {
+      // Not an absolute URL — the unsubstituted placeholder is the ordinary case.
+    }
   }
 
   if (!apexUrlFallbackWarned) {
@@ -122,12 +137,18 @@ export function apexUrl(): string {
     console.warn(
       JSON.stringify({
         evt: "operon.apex_url_unset",
-        reason: "OPERON_APEX_URL was not substituted into the bundle",
+        reason:
+          "the configured apex is not an absolute http(s) url; it was probably never substituted into the bundle",
         fallback: DEV_APEX_URL,
       }),
     );
   }
   return DEV_APEX_URL;
+}
+
+/** Test seam: `apexUrl` warns once per module instance, and suites need that reset. */
+export function __resetApexUrlWarning() {
+  apexUrlFallbackWarned = false;
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { externalLinkListSchema } from "./response";
 import { createExternalLinkBody, taskIdParam } from "./schema";
@@ -71,12 +72,32 @@ const externalLink = apiRouter<
 // list in docs/fork-discipline.md — the same reason task A8 mounted
 // `/api/internal/operon` as a plain handler. It is registered on this same router,
 // so it sits behind `api.use("*")`'s `authenticateApiRequest` exactly like the read
-// route above, and it declares the SAME authorization middleware the read route
-// uses, `workspaceAccess.fromTaskId("taskId")`. That middleware reads `taskId` off
-// the raw JSON body (its `lookup` source accepts a path param or a body key and
-// deliberately refuses the query string), resolves the task's workspace and calls
-// `validateWorkspaceAccess` — so an unauthorized caller is refused before this
-// handler runs.
+// route above.
+//
+// TWO MIDDLEWARES, NOT ONE, AND THE SECOND IS THE POINT
+// `workspaceAccess.fromTaskId("taskId")` reads `taskId` off the raw JSON body (its
+// `lookup` source accepts a path param or a body key and deliberately refuses the
+// query string), resolves the task's workspace and calls `validateWorkspaceAccess`.
+// That answers "are you IN this workspace" and nothing else — which is how the first
+// revision let a VIEWER, and an API key with no `task` scope at all, insert and
+// overwrite links. Reading a task and writing to one are not the same right.
+//
+// `requireWorkspacePermission({ task: ["update"] })` is therefore chained after it:
+// the exact permission every upstream task-mutating route already demands
+// (`apps/api/src/task/index.ts`), so a viewer gets the same 403 here that they get
+// there, and an API key whose `permissions` omit `task: ["update"]` is refused by the
+// key-ceiling branch of that middleware before the workspace role is even consulted.
+// The Operon service key carries the scope deliberately
+// (`OPERON_SERVICE_KEY_PERMISSIONS` in `auth.ts`).
+//
+// TELEGRAPH ONLY
+// A project may legitimately carry a `github` or `gitea` integration beside its
+// `telegraph` one, and upstream's `plugins/*/services/link-manager.ts` treats the
+// rows under those integrations as its own synchronisation state. This fork route
+// exists for Telegraph message links; pointing it at a GitHub integration would let a
+// workspace member rewrite records upstream's synchroniser trusts. Any other
+// integration type is a 409 — the request names a resource that is not there for THIS
+// route to write.
 //
 // IDEMPOTENCY IS THE DATABASE'S JOB, NOT A READ-BEFORE-INSERT
 // Migration 0045 adds `UNIQUE (task_id, integration_id, external_id)`. Two
@@ -87,115 +108,138 @@ const externalLink = apiRouter<
 // by it — see the note on the constraint in `../database/schema.ts` for the
 // upstream behaviour the narrower `(task_id, external_id)` pair would have broken.
 // ---------------------------------------------------------------------------
-externalLink.post("/", workspaceAccess.fromTaskId("taskId"), async (c) => {
-  const parsed = createExternalLinkBody.safeParse(
-    await c.req.json().catch(() => ({})),
-  );
+externalLink.post(
+  "/",
+  workspaceAccess.fromTaskId("taskId"),
+  requireWorkspacePermission({ task: ["update"] }),
+  async (c) => {
+    const parsed = createExternalLinkBody.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
 
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const field = issue?.path.join(".");
-    throw new HTTPException(400, {
-      message: issue
-        ? `${field || "request"}: ${issue.message}`
-        : "Invalid request",
-    });
-  }
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const field = issue?.path.join(".");
+      throw new HTTPException(400, {
+        message: issue
+          ? `${field || "request"}: ${issue.message}`
+          : "Invalid request",
+      });
+    }
 
-  const { taskId, integrationId, resourceType, externalId, url, title } =
-    parsed.data;
-  const metadata = parsed.data.metadata ?? null;
+    const { taskId, integrationId, resourceType, externalId, url, title } =
+      parsed.data;
+    const metadata = parsed.data.metadata ?? null;
 
-  // The integration must exist AND belong to the same project as the task.
-  // The FK alone only proves existence, which would let a member of workspace A
-  // hang a link off their own task pointing at workspace B's integration row.
-  // A miss on either half is a 409: the request names a resource that is not
-  // there to be referenced.
-  const [pairing] = await db
-    .select({
-      integrationId: integrationTable.id,
-      integrationType: integrationTable.type,
-    })
-    .from(taskTable)
-    .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
-    .innerJoin(
-      integrationTable,
-      and(
-        eq(integrationTable.id, integrationId),
-        eq(integrationTable.projectId, projectTable.id),
-      ),
-    )
-    .where(eq(taskTable.id, taskId))
-    .limit(1);
-
-  if (!pairing) {
-    throw new HTTPException(409, {
-      message:
-        "Unknown integrationId, or it does not belong to the task's project",
-    });
-  }
-
-  let created: typeof externalLinkTable.$inferSelect | undefined;
-
-  try {
-    [created] = await db
-      .insert(externalLinkTable)
-      .values({
-        taskId,
-        integrationId,
-        resourceType,
-        externalId,
-        url,
-        title: title ?? null,
-        metadata: metadata ? JSON.stringify(metadata) : null,
+    // The integration must exist AND belong to the same project as the task.
+    // The FK alone only proves existence, which would let a member of workspace A
+    // hang a link off their own task pointing at workspace B's integration row.
+    // A miss on either half is a 409: the request names a resource that is not
+    // there to be referenced.
+    const [pairing] = await db
+      .select({
+        integrationId: integrationTable.id,
+        integrationType: integrationTable.type,
       })
-      .onConflictDoUpdate({
-        target: [
-          externalLinkTable.taskId,
-          externalLinkTable.integrationId,
-          externalLinkTable.externalId,
-        ],
-        set: {
+      .from(taskTable)
+      .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
+      .innerJoin(
+        integrationTable,
+        and(
+          eq(integrationTable.id, integrationId),
+          eq(integrationTable.projectId, projectTable.id),
+        ),
+      )
+      .where(eq(taskTable.id, taskId))
+      .limit(1);
+
+    if (!pairing) {
+      throw new HTTPException(409, {
+        message:
+          "Unknown integrationId, or it does not belong to the task's project",
+      });
+    }
+
+    if (pairing.integrationType !== TELEGRAPH_INTEGRATION_TYPE) {
+      throw new HTTPException(409, {
+        message: "This route writes telegraph links only",
+      });
+    }
+
+    let created: typeof externalLinkTable.$inferSelect | undefined;
+
+    try {
+      [created] = await db
+        .insert(externalLinkTable)
+        .values({
+          taskId,
+          integrationId,
           resourceType,
+          externalId,
           url,
           title: title ?? null,
           metadata: metadata ? JSON.stringify(metadata) : null,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-  } catch (error) {
-    // 23503 = foreign_key_violation. Reachable when the task or the integration
-    // is deleted between the check above and this write; drizzle re-throws the pg
-    // error either bare or wrapped, so both shapes are inspected.
-    if (isForeignKeyViolation(error)) {
-      throw new HTTPException(409, {
-        message: "Unknown taskId or integrationId",
+        })
+        .onConflictDoUpdate({
+          // The same four columns migration 0045 makes unique. `resource_type` is
+          // in the key because upstream's `{number}` branch pattern means branch "5"
+          // and issue #5 are two legitimate links from one task through one
+          // integration; a three-column key rejected the second, or refused to
+          // migrate an instance that already held both.
+          target: [
+            externalLinkTable.taskId,
+            externalLinkTable.integrationId,
+            externalLinkTable.resourceType,
+            externalLinkTable.externalId,
+          ],
+          set: {
+            resourceType,
+            url,
+            title: title ?? null,
+            metadata: metadata ? JSON.stringify(metadata) : null,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+    } catch (error) {
+      // 23503 = foreign_key_violation. Reachable when the task or the integration
+      // is deleted between the check above and this write; drizzle re-throws the pg
+      // error either bare or wrapped, so both shapes are inspected.
+      if (isForeignKeyViolation(error)) {
+        throw new HTTPException(409, {
+          message: "Unknown taskId or integrationId",
+        });
+      }
+      throw error;
+    }
+
+    if (!created) {
+      throw new HTTPException(500, {
+        message: "Failed to write the external link",
       });
     }
-    throw error;
-  }
 
-  if (!created) {
-    throw new HTTPException(500, {
-      message: "Failed to write the external link",
-    });
-  }
-
-  return c.json(
-    {
-      ...created,
-      metadata: created.metadata ? JSON.parse(created.metadata) : null,
-      // Mirrors the read route's projection exactly: id and type only, never
-      // `config`, which holds plaintext provider secrets.
-      integration: {
-        id: pairing.integrationId,
-        type: pairing.integrationType,
+    return c.json(
+      {
+        ...created,
+        metadata: created.metadata ? JSON.parse(created.metadata) : null,
+        // Mirrors the read route's projection exactly: id and type only, never
+        // `config`, which holds plaintext provider secrets.
+        integration: {
+          id: pairing.integrationId,
+          type: pairing.integrationType,
+        },
       },
-    },
-    200,
-  );
-});
+      200,
+    );
+  },
+);
+
+/**
+ * The integration type this write route is for. Declared here rather than imported
+ * from `plugins/telegraph/config.ts` so the route carries no plugin dependency.
+ */
+const TELEGRAPH_INTEGRATION_TYPE = "telegraph";
 
 function isForeignKeyViolation(error: unknown): boolean {
   const codes: unknown[] = [];

@@ -333,6 +333,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "userId": {
             "type": [
               "string",
@@ -384,6 +388,7 @@
           "dueDate",
           "position",
           "createdAt",
+          "updatedAt",
           "userId",
           "assigneeName",
           "assigneeId",
@@ -796,11 +801,16 @@
                   "string",
                   "null"
                 ]
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
               "assigneeName",
-              "assigneeId"
+              "assigneeId",
+              "updatedAt"
             ]
           }
         ]
