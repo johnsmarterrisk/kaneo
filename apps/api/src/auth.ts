@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import {
   sendMagicLinkEmail,
@@ -33,7 +34,7 @@ import {
 import type { AccessControl } from "better-auth/plugins/access";
 import type { UserWithAnonymous } from "better-auth/plugins/anonymous";
 import { config } from "dotenv-mono";
-import { count, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import {
   findBillableWorkspaces,
   formatBillableWorkspacesMessage,
@@ -44,7 +45,11 @@ import { publishEvent } from "./events";
 import deleteAccountData from "./user/controllers/delete-account-data";
 import { checkRegistrationAllowed } from "./utils/check-registration-allowed";
 import { checkWorkspaceName } from "./utils/check-workspace-name";
-import { mapCustomOAuthProfileToUser } from "./utils/custom-oauth-profile";
+import {
+  hasOperonOidcClaims,
+  mapCustomOAuthProfileToUser,
+  takeOperonOidcClaims,
+} from "./utils/custom-oauth-profile";
 import { generateDemoName } from "./utils/generate-demo-name";
 import { getDefaultCookieAttributes } from "./utils/get-default-cookie-attributes";
 import { getInvitationEmailSubject } from "./utils/get-invitation-email-subject";
@@ -191,6 +196,247 @@ function trustedProxies(): string[] {
 function getDeviceAuthVerificationUri(): string {
   const base = clientUrl.replace(/\/$/, "");
   return `${base}/device`;
+}
+
+// ─── Operon: one workspace, bootstrapped by the first admin's login ───────────
+//
+// Operon owns identity for this instance (Operon spec decisions 39, 40, 49). This
+// block is the whole of the fork's side of that, and it exists because the pin has
+// NO auto-join and NO auto-create path: membership is invitation-only and
+// `hooks.after` below merely activates a membership that already exists. Without
+// it the very first person to sign in through Operon lands in Initiative with
+// nowhere to be.
+//
+// It runs from `databaseHooks.user.create.after`, so it runs exactly once per
+// person — on the login that creates their Kaneo user, and never again.
+
+/** The single workspace's name and slug. Initiative has exactly one (decision 49). */
+const OPERON_WORKSPACE_NAME = "Operon";
+const OPERON_WORKSPACE_SLUG = "operon";
+
+/** The `genericOAuth` provider id Operon is registered under (`:519` below). */
+const OPERON_OIDC_PROVIDER_ID = "custom";
+
+/** Same 10s budget upstream gives its own outbound webhook. */
+const OPERON_S2S_TIMEOUT_MS = 10_000;
+
+/** The id of the single workspace, or null when none exists yet. */
+async function findOperonWorkspaceId(): Promise<string | null> {
+  const [row] = await db
+    .select({ id: schema.workspaceTable.id })
+    .from(schema.workspaceTable)
+    .orderBy(schema.workspaceTable.createdAt)
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
+ * Create the single workspace, or recover the one a concurrent first login just
+ * created.
+ *
+ * NO advisory lock, unlike the first-user-admin promotion above, and that is a
+ * decision rather than an oversight: `auth.api.createOrganization` uses its own
+ * connection out of the pool, so a `pg_advisory_xact_lock` taken here would not
+ * cover it. `workspace.slug` carries a UNIQUE index, which already makes the race
+ * a losable one — the loser gets a constraint violation and reads back the winner's
+ * row, which is the same outcome a lock would have produced.
+ *
+ * `createOrganization` rather than a direct insert, because the upstream endpoint
+ * also seeds the editable default roles, creates the default team and makes the
+ * caller the workspace OWNER. A hand-rolled insert would silently skip all three.
+ * It is called with NO `headers`: the endpoint treats "no session but a `userId`"
+ * as a system action (`better-auth/dist/plugins/organization/routes/crud-org.mjs`),
+ * and passing headers would make it demand a session it can never have here.
+ */
+async function createOperonWorkspace(userId: string): Promise<string | null> {
+  try {
+    const organization = await auth.api.createOrganization({
+      body: {
+        name: OPERON_WORKSPACE_NAME,
+        slug: OPERON_WORKSPACE_SLUG,
+        userId,
+      },
+    });
+    return organization?.id ?? null;
+  } catch (error) {
+    const recovered = await findOperonWorkspaceId();
+    if (recovered) {
+      console.warn(
+        "[operon] workspace already created by a concurrent login; joining it",
+      );
+      return recovered;
+    }
+    throw error;
+  }
+}
+
+/** Add a later user to the single workspace. Idempotent. */
+async function joinOperonWorkspace(workspaceId: string, userId: string) {
+  const [existing] = await db
+    .select({ id: schema.workspaceUserTable.id })
+    .from(schema.workspaceUserTable)
+    .where(
+      and(
+        eq(schema.workspaceUserTable.workspaceId, workspaceId),
+        eq(schema.workspaceUserTable.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (existing) return;
+
+  await auth.api.addMember({
+    body: {
+      userId,
+      organizationId: workspaceId,
+      // `roles: { owner }` above keeps only `owner` STATIC, so better-auth infers
+      // the role union as `"owner"` alone. `member` is real — it is one of
+      // `DEFAULT_ROLE_NAMES`, seeded into `workspace_role` by
+      // `afterCreateOrganization` and resolved through dynamic access control —
+      // it simply is not in the static type. Same cast, and same reason, as the
+      // `ac as unknown as AccessControl` widening above.
+      role: "member" as unknown as "owner",
+    },
+  });
+}
+
+/**
+ * Mint the least-privilege key platform-service calls Kaneo with (decision 48).
+ *
+ * `{ workspace: ["manage_settings"] }` and nothing more: `hasWorkspacePermission`
+ * treats an API key's `permissions` as a CEILING over the holder's workspace role
+ * (`utils/require-workspace-permission.ts`), so this key can reach the integration
+ * and webhook provisioning routes and is refused everywhere else — even though its
+ * holder is the workspace owner.
+ *
+ * No `metadata`: the plugin defaults `enableMetadata` to false and rejects the
+ * field outright, and no `request` is passed, which is what lets a server-side
+ * caller name a `userId` at all.
+ */
+async function mintOperonApiKey(userId: string): Promise<string | null> {
+  const created = await auth.api.createApiKey({
+    body: {
+      userId,
+      name: "operon-platform-service",
+      permissions: { workspace: ["manage_settings"] },
+    },
+  });
+  return created?.key ?? null;
+}
+
+/**
+ * POST the new Kaneo user back to Operon, HMAC-signed (decision 48).
+ *
+ * The signature is over the EXACT bytes sent, in the same shape as Kaneo's own
+ * outgoing `X-Kaneo-Signature` (`plugins/generic-webhook/client.ts:23-27`), because
+ * Operon verifies it against `req.rawBody` — a re-serialised body verifies against
+ * a different string and is refused, which is the property that makes the header
+ * mean anything.
+ *
+ * `OPERON_INTERNAL_API_URL` is an IN-NETWORK address (`http://platform-service:3001`),
+ * never the public one: this call carries no user session and must not leave the
+ * compose network.
+ *
+ * Failure is logged, never thrown. The user row is already committed by the time
+ * this runs, so throwing would fail a sign-in for an account that now exists and
+ * whose `user.create.after` hook will never fire again — a strictly worse outcome
+ * than a missing `kaneo_user_id`, which is a record rather than a permission.
+ */
+async function postOperonKaneoUser(payload: {
+  sub: string;
+  kaneoUserId: string;
+  email: string;
+  name: string;
+  workspaceId: string | null;
+  apiKey?: string;
+}) {
+  const base = (process.env.OPERON_INTERNAL_API_URL || "").replace(/\/+$/, "");
+  const secret = process.env.OPERON_KANEO_S2S_SECRET || "";
+  if (!base || !secret) {
+    console.warn(
+      "[operon] OPERON_INTERNAL_API_URL or OPERON_KANEO_S2S_SECRET is unset; kaneo_user_id was not reported",
+    );
+    return;
+  }
+
+  const body = JSON.stringify(payload);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPERON_S2S_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${base}/internal/kaneo/user`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Operon-Signature": createHmac("sha256", secret)
+          .update(body)
+          .digest("hex"),
+      },
+      body,
+      signal: controller.signal,
+      // A redirect would replay a signed body at an address nobody vouched for.
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      console.error(
+        `[operon] internal/kaneo/user rejected the callback (${response.status})`,
+      );
+      return;
+    }
+    // The key itself is never logged (Operon AGENTS.md rule 23).
+    console.log(
+      `[operon] reported kaneo user for workspace ${payload.workspaceId ?? "none"}`,
+    );
+  } catch (error) {
+    console.error("[operon] internal/kaneo/user callback failed", error);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * The whole of the Operon side of a first Initiative sign-in.
+ *
+ * A no-op for every user who did not arrive through Operon's OIDC flow, because
+ * `takeOperonOidcClaims` only has an entry for one that did.
+ */
+async function provisionOperonUser(user: {
+  id: string;
+  email: string;
+  name?: string | null;
+}) {
+  const claims = takeOperonOidcClaims(user.email);
+  if (!claims) return;
+
+  let workspaceId = await findOperonWorkspaceId();
+  let apiKey: string | undefined;
+
+  if (workspaceId) {
+    await joinOperonWorkspace(workspaceId, user.id);
+  } else if (claims.role === "admin") {
+    // Decision 49: the FIRST ADMIN's login bootstraps the workspace, and the key
+    // platform-service will call back with is minted in the same breath.
+    workspaceId = await createOperonWorkspace(user.id);
+    if (workspaceId) {
+      apiKey = (await mintOperonApiKey(user.id)) ?? undefined;
+    }
+  } else {
+    // A member reached Initiative before any admin did. Refusing the sign-in would
+    // be worse than landing them in an empty shell: Operon already authenticated
+    // them, and the first admin's login will not retroactively join them, so this
+    // is loud on purpose.
+    console.warn(
+      "[operon] no workspace exists and this user is not an Operon admin; nothing was bootstrapped",
+    );
+  }
+
+  await postOperonKaneoUser({
+    sub: claims.sub,
+    kaneoUserId: user.id,
+    email: user.email,
+    name: user.name || claims.name,
+    workspaceId,
+    ...(apiKey ? { apiKey } : {}),
+  });
 }
 
 export const auth = betterAuth({
@@ -598,6 +844,24 @@ export const auth = betterAuth({
             return;
           }
 
+          // Operon spec decisions 40 and 42. `DISABLE_REGISTRATION` here means
+          // "no account is created OUTSIDE the OIDC flow" — it is set precisely so
+          // that Operon is the only way in. Operon has already authenticated and
+          // authorised this person against its own custody database, and the Kaneo
+          // user is a downstream artefact of that profile, created on their first
+          // Initiative visit. Requiring a Kaneo invitation on top would make the one
+          // sanctioned path the one path that cannot work.
+          //
+          // The test is the captured profile, NOT `ctx.path`. An earlier revision
+          // matched the callback path and was refused live: by the time this hook
+          // runs, Better Auth's context carries an internal path spelling this fork
+          // does not control. A live capture from `mapCustomOAuthProfileToUser` is
+          // both stabler and stricter — it proves Operon's own userinfo document
+          // produced this address moments ago.
+          if (hasOperonOidcClaims(user.email)) {
+            return;
+          }
+
           const invitationId = normalizeInvitationId(
             ctx?.body?.invitationId ||
               ctx?.query?.invitationId ||
@@ -661,6 +925,20 @@ export const auth = betterAuth({
                 .where(eq(schema.userTable.id, user.id));
             }
           });
+
+          // Operon: bootstrap or join the single workspace, then report the new
+          // Kaneo user back to Operon (decisions 48, 49). A no-op for any user who
+          // did not arrive through Operon's OIDC flow.
+          //
+          // CAUGHT, not thrown. The user row is committed by the time this runs,
+          // and this hook never fires again for that user, so a throw would turn a
+          // recoverable provisioning failure into an account that exists but can
+          // never sign in.
+          try {
+            await provisionOperonUser(user);
+          } catch (error) {
+            console.error("[operon] user provisioning failed", error);
+          }
         },
       },
     },
