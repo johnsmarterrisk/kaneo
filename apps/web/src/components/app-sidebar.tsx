@@ -2,6 +2,7 @@ import type * as React from "react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
+import { OperonSwitcher } from "@/components/operon-switcher";
 import { ThemeToggleDropdown } from "@/components/theme-toggle-dropdown";
 import { TrialCard } from "@/components/trial-card";
 import {
@@ -12,7 +13,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { VersionDisplay } from "@/components/version-display";
-import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { shortcuts } from "@/constants/shortcuts";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import Search from "./search";
@@ -35,8 +35,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       className="border-none pt-1.5"
       {...props}
     >
+      {/*
+        Operon chrome (spec R14, task B11). `OperonSwitcher` stands where
+        `WorkspaceSwitcher` stood: the header slot is unchanged and the sidebar below it is
+        not restructured, so every upstream surface underneath is untouched (R35). The
+        workspace dropdown is gone because Initiative has exactly one workspace by design
+        (decision 49); the notification bell, the user avatar and the user-scoped WebSocket
+        that dropdown also owned are re-mounted inside `OperonSwitcher` rather than lost.
+      */}
       <SidebarHeader className="pt-1 pb-1.5">
-        <WorkspaceSwitcher />
+        <OperonSwitcher />
       </SidebarHeader>
       <SidebarContent className="overflow-hidden gap-1 py-1">
         <Search />

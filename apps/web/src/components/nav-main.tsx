@@ -16,12 +16,32 @@ import {
 } from "@/components/ui/sidebar";
 import { usePendingInvitations } from "@/hooks/queries/invitation/use-pending-invitations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
+import { authClient } from "@/lib/auth-client";
 
 export function NavMain() {
   const { t } = useTranslation();
-  const { data: workspace } = useActiveWorkspace();
+  const { data: activeWorkspace } = useActiveWorkspace();
+  const { data: organizations } = authClient.useListOrganizations();
   const navigate = useNavigate();
   const { data: invitations = [] } = usePendingInvitations();
+
+  /*
+    Operon change (spec R14, task B11): fall back to the session's single workspace.
+
+    `useActiveWorkspace` resolves from the route's `workspaceId` param first and the
+    session's active organization second, so on a route that carries neither — the
+    invitations list and every account settings page — this nav rendered nothing at all.
+    Upstream that was tolerable because `WorkspaceSwitcher` sat above it and could put a
+    workspace back into the session. B11 hides that switcher, so the fallback has to come
+    from the session itself, and per decision 49 Initiative has exactly ONE workspace: when
+    the session lists exactly one, that is unambiguously the workspace this nav belongs to.
+    More than one is not a state this deployment creates, and guessing between them would
+    be worse than rendering nothing, so the fallback deliberately applies only to a list of
+    length one.
+  */
+  const sessionWorkspace =
+    organizations?.length === 1 ? organizations[0] : undefined;
+  const workspace = activeWorkspace ?? sessionWorkspace;
 
   if (!workspace) return null;
 

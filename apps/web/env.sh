@@ -40,6 +40,29 @@ if [ ! -z "$KANEO_CLIENT_URL" ]; then
   echo "✅ Replaced KANEO_CLIENT_URL with $KANEO_CLIENT_URL"
 fi
 
+# Process OPERON_APEX_URL (Operon fork, task B11)
+#
+# The injected Operon switcher needs the apex origin to link back to, and it must be a
+# RUNTIME value for the same reason KANEO_CLIENT_URL is: one image is built and then
+# pointed at a domain family by compose, so a build arg would force a rebuild per
+# environment. `apps/web/.env.production` bakes the literal `OPERON_APEX_URL` into the
+# bundle and this block substitutes it here. Left unset, the literal survives and
+# `operon-switcher.tsx` recognises it as unconfigured, warns once and falls back — it is
+# never navigated to.
+#
+# NOTE: it is handled explicitly rather than by the generic loop below, which matches
+# `KANEO_`-prefixed names only.
+if [ ! -z "$OPERON_APEX_URL" ]; then
+  echo "Found OPERON_APEX_URL: $OPERON_APEX_URL"
+
+  find /usr/share/nginx/html -type f -name "*.js" -exec grep -l "OPERON_APEX_URL" {} \; | xargs -r sed -i "s#OPERON_APEX_URL#$OPERON_APEX_URL#g"
+  find /usr/share/nginx/html -type f -name "*.js" -exec grep -l "\"OPERON_APEX_URL\"" {} \; | xargs -r sed -i "s#\"OPERON_APEX_URL\"#\"$OPERON_APEX_URL\"#g"
+
+  echo "✅ Replaced OPERON_APEX_URL with $OPERON_APEX_URL"
+else
+  echo "WARNING: OPERON_APEX_URL is not set. The Operon switcher will fall back to its dev default."
+fi
+
 # Process any other KANEO_ prefixed environment variables (for future extensibility)
 # Exclude the ones we've already processed
 for key in $(env | grep '^KANEO_' | grep -v 'KANEO_API_URL\|KANEO_CLIENT_URL' | cut -d= -f1); do

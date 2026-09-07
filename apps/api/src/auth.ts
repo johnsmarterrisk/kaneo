@@ -214,9 +214,6 @@ function getDeviceAuthVerificationUri(): string {
 const OPERON_WORKSPACE_NAME = "Operon";
 const OPERON_WORKSPACE_SLUG = "operon";
 
-/** The `genericOAuth` provider id Operon is registered under (`:519` below). */
-const OPERON_OIDC_PROVIDER_ID = "custom";
-
 /** Same 10s budget upstream gives its own outbound webhook. */
 const OPERON_S2S_TIMEOUT_MS = 10_000;
 
