@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import {
   sendMagicLinkEmail,
@@ -484,6 +484,67 @@ async function revokeOperonServiceKeys(): Promise<number> {
 }
 
 /**
+ * The public fingerprint of a service key — the handle Operon can compute from the
+ * credential it HOLDS and this fork can compute from a row it has never seen in plaintext.
+ *
+ * Better Auth stores `base64url(sha256(key))`, unpadded, in `apikey.key`
+ * (`@better-auth/api-key/dist/index.mjs:2314`; this fork's own `utils/verify-api-key.ts`
+ * hashes identically), so the first {@link OPERON_SERVICE_KEY_ID_LENGTH} characters of that
+ * column ARE this fingerprint — no new column, no metadata to backfill, and every
+ * historical row already carries one.
+ *
+ * It is truncated on purpose. The full 43-character hash is the verifier the database
+ * compares against, so shipping it would be shipping a credential; 16 base64url characters
+ * is 96 bits — unique across any set of keys this instance will ever hold, and useless as
+ * a verifier.
+ */
+export const OPERON_SERVICE_KEY_ID_LENGTH = 16;
+
+/** The fingerprint of a key held in PLAINTEXT — one just minted, or one Operon holds. */
+export function operonServiceKeyId(key: string): string {
+  return createHash("sha256")
+    .update(key)
+    .digest("base64url")
+    .slice(0, OPERON_SERVICE_KEY_ID_LENGTH);
+}
+
+/**
+ * The fingerprints of every `operonService` key this instance would still accept.
+ *
+ * This is the list Operon needs in order to tell a REVOKED credential from a live one.
+ * Operon holds the key in its process and cannot ask the `apikey` table anything, so its
+ * acknowledgement reported PRESENCE — and a revoked key is present. Round-3's blocker was
+ * exactly that gap: a delivery carrying an already-revoked key installed cleanly, and no
+ * later login could tell the difference.
+ *
+ * The filter is the one `verifyApiKey` applies — enabled, unexpired, carrying the
+ * unforgeable marker — so a fingerprint in this list is a key that would actually
+ * authenticate. It rides inside the HMAC-signed callback body with everything else, so it
+ * costs no second round trip and no second signing scheme.
+ */
+async function enabledOperonServiceKeyIds(): Promise<string[]> {
+  const rows = await db
+    .select({
+      key: schema.apikeyTable.key,
+      metadata: schema.apikeyTable.metadata,
+      enabled: schema.apikeyTable.enabled,
+      expiresAt: schema.apikeyTable.expiresAt,
+    })
+    .from(schema.apikeyTable);
+
+  const now = Date.now();
+  return rows
+    .filter(
+      (row) =>
+        row.enabled !== false &&
+        !(row.expiresAt instanceof Date && row.expiresAt.getTime() <= now) &&
+        hasOperonServiceMarker(row.metadata),
+    )
+    .map((row) => String(row.key || "").slice(0, OPERON_SERVICE_KEY_ID_LENGTH))
+    .filter((id) => id.length === OPERON_SERVICE_KEY_ID_LENGTH);
+}
+
+/**
  * Does this `apikey.metadata` blob carry the bootstrap's marker?
  *
  * Tolerates the plugin's historical double-stringified shape, exactly as
@@ -580,14 +641,45 @@ export async function requestCarriesOperonServiceKey(
  * ── WHAT IT RETURNS, AND WHY IT RETURNS ANYTHING ─────────────────────────────────
  *
  * `null` for "this delivery did not land" — unconfigured, refused, timed out, threw —
- * and Operon's parsed acknowledgement otherwise. The one field that matters is
- * `serviceKeyOnFile`: Operon holds the API key in its PROCESS, not in a table, so it is
- * the only party that can say whether a credential is actually in use, and
+ * and Operon's parsed acknowledgement otherwise. The field that matters is
+ * `serviceKeyValid`: Operon holds the API key in its PROCESS, not in a table, so it is the
+ * only party that can say whether a credential is actually in use, and
  * {@link provisionOperonUser} re-mints on a `false`. Distinguishing "no answer" from
  * "answered false" is the whole point of the `null` — a mint we cannot deliver is churn,
  * not recovery.
+ *
+ * ── AND EVERY BODY NAMES THE KEYS THIS INSTANCE STILL ACCEPTS ────────────────────
+ *
+ * `enabledServiceKeyIds` is {@link enabledOperonServiceKeyIds}, signed with the rest of the
+ * body. It is what turns Operon's answer from "I hold a key" into "I hold a key that still
+ * works": Operon fingerprints the credential in its process and looks for it in this list.
+ * A callback that omits it (an older fork against a newer Operon) leaves Operon unable to
+ * judge, and it falls back to reporting presence — the previous behaviour, no worse.
+ *
+ * It is also what lets the receiver refuse to INSTALL a revoked key: a delivery whose own
+ * `apiKey` is not in its own `enabledServiceKeyIds` is a delivery the sender revoked
+ * between minting and sending, and installing it is the round-3 blocker.
  */
-type OperonCallbackAck = { serviceKeyOnFile?: boolean } | null;
+type OperonCallbackAck = {
+  /** @deprecated Presence, not validity. Kept for one release; read `serviceKeyValid`. */
+  serviceKeyOnFile?: boolean;
+  /** The installed key is one of `enabledServiceKeyIds`. Absent on an older Operon. */
+  serviceKeyValid?: boolean;
+} | null;
+
+/**
+ * Does Operon need a fresh service key?
+ *
+ * `serviceKeyValid` when Operon reports it, `serviceKeyOnFile` when it does not — a newer
+ * fork must not silently stop repairing an Operon that has not been redeployed yet. `null`
+ * (no answer) is never a reason to mint.
+ */
+function operonNeedsServiceKey(ack: OperonCallbackAck): boolean {
+  if (!ack) return false;
+  if (typeof ack.serviceKeyValid === "boolean")
+    return ack.serviceKeyValid === false;
+  return ack.serviceKeyOnFile === false;
+}
 
 async function postOperonKaneoUser(payload: {
   sub: string;
@@ -596,6 +688,13 @@ async function postOperonKaneoUser(payload: {
   name: string;
   workspaceId: string | null;
   apiKey?: string;
+  /**
+   * The enabled set as of the moment the caller checked it. Passed by the two paths that
+   * deliver a key — they read it inside the advisory lock, immediately before sending, so
+   * the list and the key it vouches for cannot drift apart. Every other caller lets this
+   * read it fresh.
+   */
+  enabledServiceKeyIds?: string[];
 }): Promise<OperonCallbackAck> {
   const base = (process.env.OPERON_INTERNAL_API_URL || "").replace(/\/+$/, "");
   const secret = process.env.OPERON_KANEO_S2S_SECRET || "";
@@ -606,8 +705,11 @@ async function postOperonKaneoUser(payload: {
     return null;
   }
 
+  const { enabledServiceKeyIds, ...rest } = payload;
   const body = JSON.stringify({
-    ...payload,
+    ...rest,
+    enabledServiceKeyIds:
+      enabledServiceKeyIds ?? (await enabledOperonServiceKeyIds()),
     deliveryId: randomUUID(),
     timestamp: new Date().toISOString(),
   });
@@ -727,21 +829,28 @@ async function syncOperonInstanceRole(
  * found the workspace already there and delivered a callback with no key — so Operon was
  * left without a credential permanently, and `kaneoApiFetch` threw on every call.
  *
- * Operon's acknowledgement now reports `serviceKeyOnFile`. On an ADMIN's login, when the
- * workspace already exists and Operon answers that it holds no key, this mints a fresh
- * one — revoking every earlier `operonService`-marked key first, so the instance never
- * carries two credentials that satisfy the re-key route's marker — and delivers it in a
- * SECOND signed callback with its own delivery id and timestamp. The receiver installs it
- * under the same never-backwards ordering rule as any other delivery.
+ * Operon's acknowledgement reports `serviceKeyValid` — whether the credential in its
+ * process is one of the `enabledServiceKeyIds` this fork signs into every callback body.
+ * VALIDITY, not presence: the round-3 blocker was that a revoked key is present, so
+ * `serviceKeyOnFile` could not distinguish "the bootstrap key arrived" from "the bootstrap
+ * key arrived and was revoked a second later", and no later login could repair it. On an
+ * ADMIN's login, when the workspace already exists and Operon answers `false`, this mints
+ * a fresh one — revoking every earlier `operonService`-marked key first, so the instance
+ * never carries two credentials that satisfy the re-key route's marker — and delivers it
+ * in a SECOND signed callback with its own delivery id and timestamp. The receiver installs
+ * it under the same never-backwards ordering rule as any other delivery.
  *
- * Three things keep that from being a key mill:
+ * Four things keep that from being a key mill:
  *
- *   * it needs an explicit `serviceKeyOnFile === false`, so an unreachable Operon (ack
- *     `null`) mints nothing — a credential we cannot deliver is churn, not recovery;
+ *   * it needs an explicit `false`, so an unreachable Operon (ack `null`) mints nothing —
+ *     a credential we cannot deliver is churn, not recovery;
  *   * it needs `claims.role === "admin"`, because a member's key would hang off a user
- *     without the permissions the ceiling is a ceiling over; and
+ *     without the permissions the ceiling is a ceiling over;
  *   * a login that just delivered a freshly minted key does not ask again — Operon
- *     computes the flag AFTER installing, so that same response already says `true`.
+ *     computes the flag AFTER installing, so that same response already says `true`; and
+ *   * the premise is re-asked INSIDE the advisory lock before anything is revoked, so a
+ *     repair that queued behind the bootstrap does not destroy the key the bootstrap just
+ *     delivered.
  */
 async function provisionOperonUser(user: {
   id: string;
@@ -759,10 +868,10 @@ async function provisionOperonUser(user: {
   // Whether the workspace was ALREADY there when this login started, which is the
   // question the re-mint below asks — not "is there one now". A login that is itself
   // part of the bootstrap must never re-mint: the concurrent-bootstrap loser would read
-  // `serviceKeyOnFile: false` simply because the WINNER's delivery had not landed yet,
+  // `serviceKeyValid: false` simply because the WINNER's delivery had not landed yet,
   // and would revoke the winning credential to replace it with its own.
   const workspaceExisted = workspaceId !== null;
-  let apiKey: string | undefined;
+  let bootstrapped = false;
 
   if (workspaceId) {
     await joinOperonWorkspace(workspaceId, user.id);
@@ -774,7 +883,7 @@ async function provisionOperonUser(user: {
     const bootstrap = await createOperonWorkspace(user.id);
     workspaceId = bootstrap.id;
     if (workspaceId && bootstrap.created) {
-      apiKey = (await mintOperonApiKey(user.id)) ?? undefined;
+      bootstrapped = true;
     } else if (workspaceId) {
       await joinOperonWorkspace(workspaceId, user.id);
     }
@@ -788,20 +897,47 @@ async function provisionOperonUser(user: {
     );
   }
 
-  const ack = await postOperonKaneoUser({
+  const identity = {
     sub: claims.sub,
     kaneoUserId: user.id,
     email: user.email,
     name: user.name || claims.name,
     workspaceId,
-    ...(apiKey ? { apiKey } : {}),
-  });
+  };
+
+  // ── THE BOOTSTRAP MINT AND ITS DELIVERY ARE ONE CRITICAL SECTION ────────────────
+  //
+  // Round-3's blocker. The mint used to sit here, outside the lock, and the delivery
+  // rode along on the ordinary callback below: admin 1 created the workspace and minted
+  // key A, admin 2 then found the workspace, was told no key was on file, revoked A and
+  // delivered B — and admin 1's callback finally went out carrying A with a LATER signed
+  // timestamp, so Operon installed the revoked credential and never learned otherwise.
+  //
+  // Mint → confirm-still-enabled → deliver now runs under the same advisory lock the
+  // repair takes, so the two sequences cannot interleave at all. Losing the lock is not
+  // an error: the login that holds it is either bootstrapping or repairing, and this one
+  // falls through to the key-less callback below.
+  if (bootstrapped && workspaceId) {
+    const outcome = await withOperonServiceKeyLock(() =>
+      mintAndDeliverBootstrapServiceKey(identity),
+    );
+    if (!outcome.locked) {
+      console.warn(
+        "[operon] another login holds the service-key lock; the bootstrap minted nothing",
+      );
+    }
+    // The delivery inside the lock IS this login's callback. Sending a second one would
+    // re-report the same user for no reason and burn a delivery id.
+    if (outcome.result) return;
+  }
+
+  const ack = await postOperonKaneoUser(identity);
 
   if (
     claims.role === "admin" &&
     workspaceExisted &&
     workspaceId &&
-    ack?.serviceKeyOnFile === false
+    operonNeedsServiceKey(ack)
   ) {
     await remintAndDeliverOperonServiceKey({
       sub: claims.sub,
@@ -822,20 +958,109 @@ async function provisionOperonUser(user: {
 const OPERON_REMINT_LOCK = 2027;
 
 /**
+ * Run `work` while holding {@link OPERON_REMINT_LOCK}, or report that somebody else has it.
+ *
+ * Both writers of the service key take this — the bootstrap mint and the repair — because
+ * a lock only one of two racing sequences respects is not a lock. Before round 3 the
+ * bootstrap did not take it at all, which is how a repair could revoke a key the bootstrap
+ * had already minted and was about to deliver.
+ *
+ * `pg_try_advisory_xact_lock`, not the blocking form: the holder keeps the lock across an
+ * HTTP callback, and a login that sat waiting on that would be a login sitting on a pool
+ * connection for the length of somebody else's network round trip. It skips instead, and
+ * the next admin login asks Operon again — the recovery path exists precisely so a skipped
+ * repair is not a permanent one.
+ *
+ * The lock is transaction-scoped, so a throw anywhere inside releases it. Nothing inside
+ * uses `tx` for its statements: Better Auth's `createApiKey` and the revoke run on `db`,
+ * and the transaction here is a mutex, not a unit of work.
+ *
+ * @returns `locked: false` when another login holds it, and `result` otherwise.
+ */
+async function withOperonServiceKeyLock<T>(
+  work: () => Promise<T>,
+): Promise<{ locked: boolean; result?: T }> {
+  return db.transaction(async (tx) => {
+    // `sql.raw` with a numeric constant, and not a bound parameter, for the same reason
+    // `databaseHooks.user.create.after` writes `pg_advisory_xact_lock(2026)` literally:
+    // a lock key is a constant, and a bound `unknown` would leave Postgres resolving the
+    // function's argument type at run time rather than at parse time.
+    const claim = await tx.execute(
+      sql.raw(
+        `SELECT pg_try_advisory_xact_lock(${OPERON_REMINT_LOCK}) AS locked`,
+      ),
+    );
+    const locked = claim.rows[0]?.locked;
+    if (locked !== true && locked !== "t") return { locked: false };
+    return { locked: true, result: await work() };
+  });
+}
+
+/**
+ * Mint the bootstrap service key and deliver it — inside the lock, and never after it has
+ * been revoked.
+ *
+ * The enabled-set read between the mint and the POST is the "never deliver a dead key"
+ * guard the reviewer asked for. Under the lock it should be impossible for the key to have
+ * been revoked already, which is exactly why the check is cheap to keep: it is the
+ * assertion that the lock is doing its job, and if a future caller ever mints outside the
+ * lock again this refuses to ship the result rather than silently poisoning Operon.
+ *
+ * The same read is what the callback carries as `enabledServiceKeyIds`, so the list Operon
+ * validates against and the list this function checked are literally the same array.
+ *
+ * @returns true when a callback carrying the key went out.
+ */
+async function mintAndDeliverBootstrapServiceKey(identity: {
+  sub: string;
+  kaneoUserId: string;
+  email: string;
+  name: string;
+  workspaceId: string | null;
+}): Promise<boolean> {
+  const minted = await mintOperonApiKey(identity.kaneoUserId);
+  if (!minted) {
+    console.error(
+      "[operon] the bootstrap mint returned nothing; the next admin login will recover",
+    );
+    return false;
+  }
+
+  const enabledServiceKeyIds = await enabledOperonServiceKeyIds();
+  if (!enabledServiceKeyIds.includes(operonServiceKeyId(minted))) {
+    // The key itself is never logged (Operon AGENTS.md rule 23).
+    console.error(
+      "[operon] the key just minted is already revoked; refusing to deliver it",
+    );
+    return false;
+  }
+
+  await postOperonKaneoUser({
+    ...identity,
+    apiKey: minted,
+    enabledServiceKeyIds,
+  });
+  return true;
+}
+
+/**
  * Replace the Operon service key and deliver the replacement, at most one at a time.
  *
  * ── WHY THE LOCK SPANS THE DELIVERY AND NOT ONLY THE MINT ────────────────────────
  *
- * Two admins signing in at the same moment into a key-less Operon would both be told
- * `serviceKeyOnFile: false`. Serialising only the mint does not help: A mints Ka, B
- * revokes Ka and mints Kb, and then the two POSTs race — each callback's `timestamp` is
- * stamped when it is SENT, so A's delivery of the already-revoked Ka can carry the later
- * timestamp and win Operon's never-backwards comparison. Operon would end up holding a
- * disabled key, which is the exact failure this whole path exists to repair.
+ * Two admins signing in at the same moment into a key-less Operon would both be told the
+ * key is not valid. Serialising only the mint does not help: A mints Ka, B revokes Ka and
+ * mints Kb, and then the two POSTs race — each callback's `timestamp` is stamped when it is
+ * SENT, so A's delivery of the already-revoked Ka can carry the later timestamp and win
+ * Operon's never-backwards comparison. Operon would end up holding a disabled key, which is
+ * the exact failure this whole path exists to repair.
  *
- * Holding the lock across the delivery makes the sequence revoke → mint → deliver
- * indivisible, so the last delivery to be SENT is always the one carrying the only
- * enabled credential.
+ * Holding the lock across the delivery makes the sequence re-check → revoke → mint →
+ * deliver indivisible, so the last delivery to be SENT is always the one carrying the only
+ * enabled credential. Round 3 found the other half of that argument missing: the BOOTSTRAP
+ * mint and delivery were outside this lock entirely, so a repair could interleave with them
+ * however it liked. {@link mintAndDeliverBootstrapServiceKey} now takes the same lock,
+ * through {@link withOperonServiceKeyLock}.
  *
  * `pg_try_advisory_xact_lock`, not the blocking form: a login that finds another one
  * already repairing has nothing useful to add and should not sit on a pool connection
@@ -848,20 +1073,44 @@ async function remintAndDeliverOperonServiceKey(args: {
   name: string;
   workspaceId: string;
 }) {
-  await db.transaction(async (tx) => {
-    // `sql.raw` with a numeric constant, and not a bound parameter, for the same reason
-    // `databaseHooks.user.create.after` writes `pg_advisory_xact_lock(2026)` literally:
-    // a lock key is a constant, and a bound `unknown` would leave Postgres resolving the
-    // function's argument type at run time rather than at parse time.
-    const claim = await tx.execute(
-      sql.raw(
-        `SELECT pg_try_advisory_xact_lock(${OPERON_REMINT_LOCK}) AS locked`,
-      ),
-    );
-    const locked = claim.rows[0]?.locked;
-    if (locked !== true && locked !== "t") {
+  const identity = {
+    sub: args.sub,
+    kaneoUserId: args.user.id,
+    email: args.user.email,
+    name: args.name,
+  };
+
+  const outcome = await withOperonServiceKeyLock(async () => {
+    // ── ELIGIBILITY IS RE-ASKED INSIDE THE LOCK ────────────────────────────────
+    //
+    // The `serviceKeyValid: false` that got us here was read OUTSIDE the lock, and by
+    // the time the lock is granted it may be minutes stale — the login that held the
+    // lock in the meantime was very probably the bootstrap, or another repair, either
+    // of which has just delivered a live key. Revoking on the strength of that stale
+    // answer is precisely how the winner's credential gets destroyed.
+    //
+    // So both halves of the premise are re-checked here, before anything is revoked:
+    // the workspace still exists, and Operon still says it has no key that works. The
+    // re-check is a key-less callback, so it can install nothing and cost nothing but
+    // one delivery id.
+    const workspaceId = await findOperonWorkspaceId();
+    if (!workspaceId) {
       console.warn(
-        "[operon] another login is already re-minting the service key; skipping",
+        "[operon] the workspace is gone; not re-minting a service key for it",
+      );
+      return;
+    }
+
+    const recheck = await postOperonKaneoUser({ ...identity, workspaceId });
+    if (!recheck) {
+      console.warn(
+        "[operon] operon did not answer the re-mint re-check; nothing was revoked",
+      );
+      return;
+    }
+    if (!operonNeedsServiceKey(recheck)) {
+      console.log(
+        "[operon] operon now holds a valid service key; the re-mint is not needed",
       );
       return;
     }
@@ -872,24 +1121,36 @@ async function remintAndDeliverOperonServiceKey(args: {
       // Nothing to deliver, and the old keys are already off. Say so loudly rather than
       // leaving a silent gap; the next admin login tries again.
       console.error(
-        `[operon] operon reported no service key on file and the re-mint returned nothing (${revoked} earlier key(s) revoked)`,
+        `[operon] operon reported no valid service key and the re-mint returned nothing (${revoked} earlier key(s) revoked)`,
+      );
+      return;
+    }
+
+    const enabledServiceKeyIds = await enabledOperonServiceKeyIds();
+    if (!enabledServiceKeyIds.includes(operonServiceKeyId(replacement))) {
+      console.error(
+        "[operon] the replacement key is already revoked; refusing to deliver it",
       );
       return;
     }
 
     // The key itself is never logged (Operon AGENTS.md rule 23).
     console.warn(
-      `[operon] operon reported no service key on file; re-minted (${revoked} earlier key(s) revoked)`,
+      `[operon] operon reported no valid service key; re-minted (${revoked} earlier key(s) revoked)`,
     );
     await postOperonKaneoUser({
-      sub: args.sub,
-      kaneoUserId: args.user.id,
-      email: args.user.email,
-      name: args.name,
-      workspaceId: args.workspaceId,
+      ...identity,
+      workspaceId,
       apiKey: replacement,
+      enabledServiceKeyIds,
     });
   });
+
+  if (!outcome.locked) {
+    console.warn(
+      "[operon] another login is already re-minting the service key; skipping",
+    );
+  }
 }
 
 /**

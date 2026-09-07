@@ -52,7 +52,7 @@ setEnv("OPERON_INTERNAL_API_URL", "http://platform-service.test:3001");
 setEnv("OPERON_KANEO_S2S_SECRET", "an-s2s-secret-for-the-suite");
 
 const { createApp } = await import("../../apps/api/src/index");
-const { auth, reconcileOperonSession } = await import(
+const { auth, reconcileOperonSession, operonServiceKeyId } = await import(
   "../../apps/api/src/auth"
 );
 const { rememberOperonOidcClaims, __resetOperonOidcClaims } = await import(
@@ -75,6 +75,8 @@ type Delivery = {
   kaneoUserId: string;
   workspaceId: string | null;
   apiKey?: string;
+  /** The fingerprints of every key the fork would still accept when it built this body. */
+  enabledServiceKeyIds?: string[];
   deliveryId: string;
   timestamp: string;
 };
@@ -85,42 +87,90 @@ const SEEDED_PASSWORD = "a-perfectly-good-password";
 let deliveries: Delivery[];
 let failNextCallback: boolean;
 /**
- * Operon's side of the credential, modelled as the one bit its acknowledgement carries.
+ * Operon's side of the credential, modelled as the receiver really holds it.
  *
- * The real receiver holds the API key in its PROCESS and answers `serviceKeyOnFile` after
+ * The real receiver keeps the API key in its PROCESS and answers `serviceKeyValid` after
  * running its install rules, which is what makes the fork's re-mint path possible at all
  * (round-1 finding 8). A stub that always said `true` — or that omitted the field — could
- * not fail any of the recovery tests below, so this flips exactly when a delivery
- * carrying a key is accepted.
+ * not fail any of the recovery tests below, so this models the two rules that decide the
+ * answer: never install a key the delivery's own `enabledServiceKeyIds` disowns (round-3
+ * blocker), and never install one signed earlier than the key already in use.
  */
-let operonHoldsServiceKey: boolean;
+let operonHeldKey: string | null;
+/** The signed timestamp of the delivery that installed {@link operonHeldKey}. */
+let operonInstalledAtMs: number | null;
+/**
+ * Run something before the Nth callback from now — the seam the "re-check inside the
+ * lock" test needs, because the state it has to change is state that changes BETWEEN two
+ * callbacks of the same login.
+ */
+let beforeCallback: { countdown: number; run: () => void } | null;
+
+/** The receiver's install rules, as the round-3 fix leaves them. */
+function operonReceive(delivery: Delivery) {
+  if (!delivery.apiKey) return;
+  const enabled = delivery.enabledServiceKeyIds;
+  // Never a dead key: a delivery that does not vouch for its own credential is one the
+  // sender revoked between minting and sending.
+  if (
+    Array.isArray(enabled) &&
+    !enabled.includes(operonServiceKeyId(delivery.apiKey))
+  ) {
+    return;
+  }
+  // Never backwards. Ties go to arrival order, which the real receiver settles under an
+  // advisory lock; nothing here turns on a tie.
+  const at = Date.parse(delivery.timestamp);
+  if (operonInstalledAtMs !== null && at < operonInstalledAtMs) return;
+  operonHeldKey = delivery.apiKey;
+  operonInstalledAtMs = at;
+}
+
+/** `serviceKeyValid`, computed exactly as the receiver computes it: AFTER the install. */
+function operonServiceKeyValid(delivery: Delivery) {
+  if (operonHeldKey === null) return false;
+  const enabled = delivery.enabledServiceKeyIds;
+  if (!Array.isArray(enabled)) return true;
+  return enabled.includes(operonServiceKeyId(operonHeldKey));
+}
 
 beforeEach(async () => {
   await resetTestDatabase();
   __resetOperonOidcClaims();
   deliveries = [];
   failNextCallback = false;
-  operonHoldsServiceKey = false;
+  operonHeldKey = null;
+  operonInstalledAtMs = null;
+  beforeCallback = null;
 
   // The S2S callback, intercepted. Its CONTENTS are the assertion in several tests
   // below — one key, once — so it is captured rather than merely silenced, and its
-  // RESPONSE is asserted on too: `serviceKeyOnFile` is the signal the fork re-mints on.
+  // RESPONSE is asserted on too: `serviceKeyValid` is the signal the fork re-mints on.
   vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+    if (beforeCallback) {
+      beforeCallback.countdown -= 1;
+      if (beforeCallback.countdown <= 0) {
+        const { run } = beforeCallback;
+        beforeCallback = null;
+        run();
+      }
+    }
     if (failNextCallback) {
       failNextCallback = false;
       throw new Error("platform-service is down");
     }
     const delivery = JSON.parse(init.body) as Delivery;
     deliveries.push(delivery);
-    if (delivery.apiKey) operonHoldsServiceKey = true;
+    operonReceive(delivery);
     return {
       ok: true,
       status: 200,
       text: async () => "",
-      // Computed AFTER the install, exactly as the receiver computes it.
+      // Computed AFTER the install, exactly as the receiver computes them.
       json: async () => ({
         ok: true,
-        serviceKeyOnFile: operonHoldsServiceKey,
+        serviceKeyOnFile: operonHeldKey !== null,
+        serviceKeyValid: operonServiceKeyValid(delivery),
       }),
     } as unknown as Response;
   });
@@ -359,13 +409,14 @@ describe("Operon mode: provisioning reconciles on every login", () => {
     await signIn(admin, "admin");
 
     expect(deliveries[0]?.kaneoUserId).toBe(admin.id);
-    // Two: the ordinary reconciliation report, which Operon answers with
-    // `serviceKeyOnFile: false` because the bootstrap's key never reached it, and the
-    // re-mint that answer triggers. Before round-1 finding 8 was fixed there was only
+    // Three: the ordinary reconciliation report, which Operon answers with
+    // `serviceKeyValid: false` because the bootstrap's key never reached it; the re-check
+    // the repair makes INSIDE the advisory lock before it revokes anything (round 3); and
+    // the delivery of the replacement. Before round-1 finding 8 was fixed there was only
     // the first, forever.
-    expect(deliveries).toHaveLength(2);
+    expect(deliveries).toHaveLength(3);
     expect(deliveries.filter((delivery) => delivery.apiKey)).toHaveLength(1);
-    expect(operonHoldsServiceKey).toBe(true);
+    expect(operonHeldKey).not.toBeNull();
   });
 
   it("recovers a membership that was never created", async () => {
@@ -642,16 +693,18 @@ describe("Operon mode: a service key that never arrived is re-minted", () => {
     expect(await db.select().from(schema.workspaceTable)).toHaveLength(1);
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0]?.apiKey).toBeUndefined();
-    expect(operonHoldsServiceKey).toBe(false);
+    expect(operonHeldKey).toBeNull();
     // NOT on this login: the workspace was created by it, and a bootstrapping login must
     // never re-mint — the concurrent loser would otherwise revoke the winner's key.
     expect(await markedKeys()).toHaveLength(0);
 
     await signIn(admin, "admin");
 
-    expect(deliveries).toHaveLength(3);
+    // Four: the bootstrap's key-less report, then the second login's report, the repair's
+    // in-lock re-check, and the delivery of the replacement.
+    expect(deliveries).toHaveLength(4);
     expect(deliveries.filter((delivery) => delivery.apiKey)).toHaveLength(1);
-    expect(operonHoldsServiceKey).toBe(true);
+    expect(operonHeldKey).not.toBeNull();
   });
 
   it("ends with a key Operon can actually use, and revokes the earlier ones", async () => {
@@ -663,13 +716,14 @@ describe("Operon mode: a service key that never arrived is re-minted", () => {
     expect(bootstrapKey).toBeTruthy();
 
     // Operon lost it — a restart with nothing in `.env` is exactly this state.
-    operonHoldsServiceKey = false;
+    operonHeldKey = null;
+    operonInstalledAtMs = null;
     await signIn(admin, "admin");
 
     const replacement = deliveries.at(-1)?.apiKey ?? "";
     expect(replacement).toBeTruthy();
     expect(replacement).not.toBe(bootstrapKey);
-    expect(operonHoldsServiceKey).toBe(true);
+    expect(operonHeldKey).toBe(replacement);
 
     // Usable: it verifies, it is enabled, it carries the marker and the same ceiling.
     const verified = await verifyApiKey(replacement);
@@ -695,7 +749,8 @@ describe("Operon mode: a service key that never arrived is re-minted", () => {
     const member = await seedUser(`member-${randomUUID()}@example.com`);
 
     // A member's key would hang off a user without the permissions the ceiling ceilings.
-    operonHoldsServiceKey = false;
+    operonHeldKey = null;
+    operonInstalledAtMs = null;
     await signIn(member, "member");
     expect(deliveries.at(-1)?.apiKey).toBeUndefined();
 
@@ -705,6 +760,121 @@ describe("Operon mode: a service key that never arrived is re-minted", () => {
     failNextCallback = true;
     await signIn(admin, "admin");
     expect(await markedKeys()).toHaveLength(before);
+  });
+
+  it("re-checks INSIDE the lock, so a key that arrived meanwhile is not revoked", async () => {
+    // The stale-premise half of round 3. `serviceKeyValid: false` is read outside the
+    // lock; by the time the lock is granted the login that held it — the bootstrap, or
+    // another repair — may already have delivered a live key. Revoking on the strength of
+    // that stale answer destroys the winner's credential.
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    await signIn(admin, "admin");
+    const bootstrapKey =
+      deliveries.find((delivery) => delivery.apiKey)?.apiKey ?? "";
+    expect(bootstrapKey).toBeTruthy();
+
+    // Operon looks key-less to the login's first callback...
+    operonHeldKey = null;
+    operonInstalledAtMs = null;
+    // ...and has it back by the time the repair asks again from inside the lock, which is
+    // the second callback of this login.
+    beforeCallback = {
+      countdown: 2,
+      run: () => {
+        operonHeldKey = bootstrapKey;
+      },
+    };
+
+    await signIn(admin, "admin");
+
+    // No revoke, no mint, no delivery: two callbacks and nothing else.
+    expect(deliveries.filter((delivery) => delivery.apiKey)).toHaveLength(1);
+    expect(await markedKeys()).toHaveLength(1);
+    expect(await verifyApiKey(bootstrapKey)).not.toBeNull();
+    expect(operonHeldKey).toBe(bootstrapKey);
+  });
+});
+
+describe("Operon mode: a bootstrap that races a repair (round-3 blocker)", () => {
+  /**
+   * The reviewer's staggered sequence, reproduced against the real provisioning path and
+   * a real Postgres advisory lock.
+   *
+   * Admin 1 bootstraps: it creates the workspace and mints key A. Before that key is
+   * delivered, admin 2 signs in, finds the workspace already there, is told Operon holds
+   * no valid key, and repairs — revoking A and delivering B. Admin 1's delivery of A then
+   * goes out with a LATER signed timestamp, wins Operon's never-backwards comparison, and
+   * Operon installs a credential Kaneo has already turned off. Because the acknowledgement
+   * reported PRESENCE rather than validity, no later login could repair it either.
+   *
+   * The mint used to sit outside the lock the repair takes, which is what let the two
+   * sequences interleave at all. They now share `pg_try_advisory_xact_lock(2027)` from the
+   * mint through the delivery, so one of them simply loses it and does nothing.
+   *
+   * The gate is opened inside `createApiKey`, not inside `fetch`: the callback's timestamp
+   * is stamped when the BODY is built, so pausing at the fetch would hand admin 1 the
+   * earlier timestamp and quietly stop reproducing the bug.
+   */
+  it("leaves Operon holding an ENABLED key, and mints exactly one", async () => {
+    const first = await seedUser(`admin-a-${randomUUID()}@example.com`);
+    const second = await seedUser(`admin-b-${randomUUID()}@example.com`);
+
+    let releaseBootstrap: () => void = () => {};
+    const bootstrapReachedTheMint = new Promise<void>((resolve) => {
+      const held = new Promise<void>((release) => {
+        releaseBootstrap = release;
+      });
+      const realCreate = auth.api.createApiKey.bind(auth.api);
+      vi.spyOn(auth.api, "createApiKey").mockImplementationOnce(
+        async (opts) => {
+          const created = await realCreate(opts as never);
+          resolve();
+          await held;
+          return created;
+        },
+      );
+    });
+
+    rememberOperonOidcClaims({
+      sub: "a".repeat(64),
+      email: first.email,
+      name: "Admin A",
+      role: "admin",
+    });
+    const bootstrap = reconcileOperonSession(first.id);
+    await bootstrapReachedTheMint;
+
+    // Admin 2's whole login, start to finish, while admin 1 sits on the minted key.
+    await signIn(second, "admin");
+
+    releaseBootstrap();
+    await bootstrap;
+    vi.restoreAllMocks();
+
+    // Exactly one service key was ever minted, and it is still live — the repair found
+    // the lock taken and revoked nothing.
+    const marked = await db
+      .select()
+      .from(schema.apikeyTable)
+      .then((rows) =>
+        rows.filter(
+          (row) =>
+            (
+              JSON.parse(row.metadata ?? "null") as {
+                operonService?: boolean;
+              } | null
+            )?.operonService === true,
+        ),
+      );
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.enabled).not.toBe(false);
+
+    // And the credential Operon ended up holding is that key, verifiably usable.
+    expect(operonHeldKey).toBeTruthy();
+    const verified = await verifyApiKey(operonHeldKey ?? "");
+    expect(verified?.valid).toBe(true);
+    expect(verified?.key.enabled).toBe(true);
+    expect(verified?.key.id).toBe(marked[0]?.id);
   });
 });
 
