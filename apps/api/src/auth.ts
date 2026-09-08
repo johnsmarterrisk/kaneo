@@ -9,6 +9,7 @@ import {
   ac,
   DEFAULT_ROLE_NAMES,
   defaultRolePayloads,
+  operonMemberPayload,
   owner,
 } from "@kaneo/permissions";
 import bcrypt from "bcryptjs";
@@ -253,6 +254,141 @@ const OPERON_WORKSPACE_SLUG = "operon";
 /** Same 10s budget upstream gives its own outbound webhook. */
 const OPERON_S2S_TIMEOUT_MS = 10_000;
 
+/**
+ * Upstream's `member` payload AS IT STOOD when the Operon upgrade was written —
+ * a FROZEN literal, deliberately not `defaultRolePayloads.member`.
+ *
+ * It is the only payload {@link upgradeOperonMemberRolePayload} will overwrite, so
+ * it is the line between "this row is still the default nobody has touched" and
+ * "an admin edited this row and we must leave it alone". Deriving it from the live
+ * export would move that line every time upstream changes the default, which would
+ * re-target the upgrade at rows an operator may have deliberately set — see
+ * decision 114 and the matching comment on `operonMemberPayload`.
+ */
+const PREVIOUS_DEFAULT_MEMBER_PAYLOAD: Record<string, string[]> = {
+  organization: [],
+  member: [],
+  invitation: [],
+  team: [],
+  ac: ["read"],
+  project: ["create", "read"],
+  task: ["create", "read", "update"],
+  label: ["create", "read", "update", "delete"],
+  workspace: ["read"],
+};
+
+/**
+ * Whether a stored `workspace_role.permission` string means the same thing as
+ * `expected`.
+ *
+ * Compared as parsed JSON with each action list order-insensitive, NOT as bytes:
+ * the rows are hand-editable in the Roles UI and one was hand-edited on the dev
+ * instance, so a payload that differs only in key or action order is the same
+ * grant and must not be mistaken for a customisation.
+ */
+function isSamePermissionPayload(
+  stored: string,
+  expected: Record<string, string[]>,
+): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch {
+    return false;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return false;
+  }
+  const actual = parsed as Record<string, unknown>;
+  const expectedKeys = Object.keys(expected);
+  if (Object.keys(actual).length !== expectedKeys.length) return false;
+
+  for (const key of expectedKeys) {
+    const value = actual[key];
+    if (!Array.isArray(value)) return false;
+    const want = [...(expected[key] ?? [])].sort();
+    const have = [...value].map(String).sort();
+    if (have.length !== want.length) return false;
+    if (have.some((action, index) => action !== want[index])) return false;
+  }
+  return true;
+}
+
+export type OperonMemberRoleUpgrade =
+  | "upgraded"
+  | "already-upgraded"
+  | "customised"
+  | "missing"
+  | "skipped";
+
+/**
+ * Give the Operon workspace's `member` role `task: delete` and `task: assign`
+ * (R13/R14, decisions 114 and 124).
+ *
+ * TWO GATES, BOTH REQUIRED. `@kaneo/permissions` ships to every instance that
+ * builds this fork and `seed-default-workspace-roles.ts` enumerates every
+ * workspace with no filter, so an ungated version of this would grant the extra
+ * permissions on an ordinary Kaneo instance and in every workspace on it. It
+ * therefore runs only when this instance is in Operon mode AND only against the
+ * workspace whose slug is Operon's; every other caller gets `"skipped"` and no
+ * write at all.
+ *
+ * IT ONLY EVER OVERWRITES THE PREVIOUS DEFAULT. A row that already carries the
+ * upgraded payload is `"already-upgraded"` (this is what makes the boot backfill
+ * idempotent over an instance whose row was fixed by hand), and a row carrying
+ * anything else is `"customised"` and is left exactly as the operator set it.
+ *
+ * It is exported because it has TWO callers, and needs both (decision 124):
+ * `seedDefaultWorkspaceRoles` at boot, for a workspace that already exists, and
+ * `afterCreateOrganization` for one that does not exist yet — without the second,
+ * a fresh install's members cannot assign or delete until somebody restarts the
+ * API.
+ */
+export async function upgradeOperonMemberRolePayload(
+  workspaceId: string,
+  workspaceSlug: string | null | undefined,
+): Promise<OperonMemberRoleUpgrade> {
+  if (!isOperonOidcOnly) return "skipped";
+  if (workspaceSlug !== OPERON_WORKSPACE_SLUG) return "skipped";
+
+  const [row] = await db
+    .select({
+      id: schema.workspaceRoleTable.id,
+      permission: schema.workspaceRoleTable.permission,
+    })
+    .from(schema.workspaceRoleTable)
+    .where(
+      and(
+        eq(schema.workspaceRoleTable.workspaceId, workspaceId),
+        eq(schema.workspaceRoleTable.role, "member"),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return "missing";
+  if (isSamePermissionPayload(row.permission, operonMemberPayload)) {
+    return "already-upgraded";
+  }
+  if (
+    !isSamePermissionPayload(row.permission, PREVIOUS_DEFAULT_MEMBER_PAYLOAD)
+  ) {
+    return "customised";
+  }
+
+  await db
+    .update(schema.workspaceRoleTable)
+    .set({
+      permission: JSON.stringify(operonMemberPayload),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.workspaceRoleTable.id, row.id));
+
+  console.log(
+    `[operon] workspace ${workspaceId}: member role upgraded to the operon payload (task: delete, assign).`,
+  );
+  return "upgraded";
+}
+
 /** The id of the single workspace, or null when none exists yet. */
 async function findOperonWorkspaceId(): Promise<string | null> {
   const [row] = await db
@@ -330,10 +466,37 @@ async function createOperonWorkspace(
   }
 }
 
-/** Add a later user to the single workspace. Idempotent. */
-async function joinOperonWorkspace(workspaceId: string, userId: string) {
+/**
+ * Add a later user to the single workspace, at the role Operon says they hold —
+ * and RECONCILE that role on every subsequent login. Idempotent.
+ *
+ * The workspace role follows `claims.role` in both directions, exactly as
+ * `syncOperonInstanceRole` already makes the INSTANCE role follow it: an Operon
+ * admin is a Kaneo workspace `admin`, an Operon member is a workspace `member`,
+ * and a row that disagrees with the claim is corrected rather than left stale
+ * (R15).
+ *
+ * WITH ONE FIXED POINT: `owner` is NEVER demoted (decision 115).
+ * `createOperonWorkspace` goes through `auth.api.createOrganization` precisely
+ * because that endpoint makes the caller the workspace OWNER, so the bootstrap
+ * admin's row is `owner` — and no OIDC claim will ever say `owner`, because
+ * Operon's `role` claim is two-valued. An unconditional reconcile would therefore
+ * demote the bootstrap admin on their very next login and leave the workspace
+ * with no owner, which Better Auth's own member-update path refuses anyway.
+ * Moving ownership off a person is an explicit operator action, not a login side
+ * effect, so the disagreement is LOGGED with both roles named and nothing is
+ * changed.
+ */
+async function joinOperonWorkspace(
+  workspaceId: string,
+  userId: string,
+  role: "admin" | "member",
+) {
   const [existing] = await db
-    .select({ id: schema.workspaceUserTable.id })
+    .select({
+      id: schema.workspaceUserTable.id,
+      role: schema.workspaceUserTable.role,
+    })
     .from(schema.workspaceUserTable)
     .where(
       and(
@@ -342,19 +505,37 @@ async function joinOperonWorkspace(workspaceId: string, userId: string) {
       ),
     )
     .limit(1);
-  if (existing) return;
+
+  if (existing) {
+    if (existing.role === "owner") {
+      console.warn(
+        `[operon] workspace membership for kaneo user ${userId} is "owner" but the oidc claim says "${role}"; owner is never demoted by reconciliation`,
+      );
+      return;
+    }
+    if (existing.role === role) return;
+
+    await db
+      .update(schema.workspaceUserTable)
+      .set({ role })
+      .where(eq(schema.workspaceUserTable.id, existing.id));
+    console.log(
+      `[operon] workspace role for kaneo user ${userId} set from the oidc claim: ${role} (was ${existing.role})`,
+    );
+    return;
+  }
 
   await auth.api.addMember({
     body: {
       userId,
       organizationId: workspaceId,
       // `roles: { owner }` above keeps only `owner` STATIC, so better-auth infers
-      // the role union as `"owner"` alone. `member` is real — it is one of
-      // `DEFAULT_ROLE_NAMES`, seeded into `workspace_role` by
+      // the role union as `"owner"` alone. `member` and `admin` are real — they
+      // are `DEFAULT_ROLE_NAMES`, seeded into `workspace_role` by
       // `afterCreateOrganization` and resolved through dynamic access control —
-      // it simply is not in the static type. Same cast, and same reason, as the
+      // they simply are not in the static type. Same cast, and same reason, as the
       // `ac as unknown as AccessControl` widening above.
-      role: "member" as unknown as "owner",
+      role: role as unknown as "owner",
     },
   });
 }
@@ -874,7 +1055,7 @@ async function provisionOperonUser(user: {
   let bootstrapped = false;
 
   if (workspaceId) {
-    await joinOperonWorkspace(workspaceId, user.id);
+    await joinOperonWorkspace(workspaceId, user.id, claims.role);
   } else if (claims.role === "admin") {
     // Decision 49: the FIRST ADMIN's login bootstraps the workspace, and the key
     // platform-service will call back with is minted in the same breath — but ONLY
@@ -885,7 +1066,7 @@ async function provisionOperonUser(user: {
     if (workspaceId && bootstrap.created) {
       bootstrapped = true;
     } else if (workspaceId) {
-      await joinOperonWorkspace(workspaceId, user.id);
+      await joinOperonWorkspace(workspaceId, user.id, claims.role);
     }
   } else {
     // A member reached Initiative before any admin did. Refusing the sign-in would
@@ -1420,6 +1601,20 @@ export const auth = betterAuth({
             if (rows.length > 0) {
               await db.insert(schema.workspaceRoleTable).values(rows);
             }
+
+            // OPERON FORK — decision 124. The boot backfill cannot reach a
+            // workspace that does not exist yet: on an empty install
+            // `seedDefaultWorkspaceRoles` returns before this hook has ever run,
+            // and the Operon workspace is then born HERE carrying upstream's
+            // `member` payload — so without this call its members could not
+            // assign or delete a task until somebody restarted the API. Upstream's
+            // insert above is unchanged and still runs first; the upgrade is the
+            // same twice-gated, previous-default-only rewrite the backfill applies,
+            // and it is a no-op on every workspace that is not Operon's.
+            await upgradeOperonMemberRolePayload(
+              organization.id,
+              organization.slug,
+            );
           } catch (error) {
             console.error(
               "Failed to seed default workspace roles for workspace",

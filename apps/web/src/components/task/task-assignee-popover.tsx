@@ -106,7 +106,35 @@ export default function TaskAssigneePopover({
 
   useNumberedShortcuts(open, shortcutOptions);
 
-  if (!canAssign) return <>{children}</>;
+  // OPERON FORK — R16. This used to be `return <>{children}</>`: the assignee chip
+  // silently became inert markup, so a member who could not assign saw a control
+  // that looked live and did nothing, which reads as a bug rather than as a
+  // permission. It now renders DISABLED, with a tooltip naming the permission that
+  // is missing.
+  //
+  // The tooltip reuses the `task: assign` permission's OWN description string
+  // rather than introducing a new i18n key: `docs/fork-discipline.md` §3 row 2
+  // opens the 19 locale bundles for values only, never keys, and a new key would
+  // also have to be written into all nineteen to keep B10's parity test honest.
+  // `title` rather than the `Tooltip` component for the same
+  // stay-inside-the-touch-list reason the rest of this file already uses it (the
+  // unassigned avatar below), and because it needs no provider in a component that
+  // is rendered from board, list and detail views alike.
+  if (!canAssign) {
+    const missingPermission = t(
+      "settings:workspaceRoles.permissions.task.assign.description",
+    );
+    return (
+      <span
+        aria-disabled="true"
+        data-disabled=""
+        title={missingPermission}
+        className="inline-flex cursor-not-allowed opacity-60 [&>*]:pointer-events-none"
+      >
+        {children}
+      </span>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>

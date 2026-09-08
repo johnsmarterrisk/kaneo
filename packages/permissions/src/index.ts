@@ -82,3 +82,27 @@ export const defaultRolePayloads: Record<
   member: toMutablePayload(member.statements),
   admin: toMutablePayload(admin.statements),
 };
+
+// OPERON FORK ONLY — decision 114. `member` above is left EXACTLY as upstream
+// wrote it, because this package is compiled into every instance that builds
+// this fork: editing that role would hand `task: delete` and `task: assign` to
+// ordinary Kaneo installations too. The upgraded payload is a SECOND literal
+// instead, and the API applies it only when the instance is in Operon mode AND
+// only to the workspace whose slug is Operon's — see
+// `upgradeOperonMemberRolePayload` in `apps/api/src/auth.ts`.
+//
+// It is spelled out rather than derived from `member.statements` on purpose: it
+// is the payload an Operon member has been REVIEWED to have, so a later upstream
+// change to `member` cannot silently redefine it, nor silently re-target the
+// boot upgrade at a payload nobody approved.
+export const operonMemberPayload: Record<string, string[]> = {
+  organization: [],
+  member: [],
+  invitation: [],
+  team: [],
+  ac: ["read"],
+  project: ["create", "read"],
+  task: ["create", "read", "update", "delete", "assign"],
+  label: ["create", "read", "update", "delete"],
+  workspace: ["read"],
+};
