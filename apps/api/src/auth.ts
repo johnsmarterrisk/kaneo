@@ -525,19 +525,57 @@ async function joinOperonWorkspace(
     return;
   }
 
-  await auth.api.addMember({
-    body: {
-      userId,
-      organizationId: workspaceId,
-      // `roles: { owner }` above keeps only `owner` STATIC, so better-auth infers
-      // the role union as `"owner"` alone. `member` and `admin` are real — they
-      // are `DEFAULT_ROLE_NAMES`, seeded into `workspace_role` by
-      // `afterCreateOrganization` and resolved through dynamic access control —
-      // they simply are not in the static type. Same cast, and same reason, as the
-      // `ac as unknown as AccessControl` widening above.
-      role: role as unknown as "owner",
-    },
-  });
+  try {
+    await auth.api.addMember({
+      body: {
+        userId,
+        organizationId: workspaceId,
+        // `roles: { owner }` above keeps only `owner` STATIC, so better-auth infers
+        // the role union as `"owner"` alone. `member` and `admin` are real — they
+        // are `DEFAULT_ROLE_NAMES`, seeded into `workspace_role` by
+        // `afterCreateOrganization` and resolved through dynamic access control —
+        // they simply are not in the static type. Same cast, and same reason, as the
+        // `ac as unknown as AccessControl` widening above.
+        role: role as unknown as "owner",
+      },
+    });
+  } catch (error) {
+    // ── THE SELECT ABOVE AND THIS INSERT ARE NOT ONE STATEMENT (T11) ──────────────
+    //
+    // `workspace_member` has a SECOND writer now: `POST /internal/operon/user` puts a
+    // provisioned person into the workspace before they have ever signed in. So a login
+    // can read "no membership", the other writer can insert one, and `addMember` — which
+    // re-checks and throws `User is already a member of this organization` — then fails
+    // the WHOLE sign-in over a row that says exactly what this call was about to write.
+    // Re-read: if the row is there, the other writer won a race whose outcome we wanted,
+    // and all that is left is to reconcile its role under the same owner rule above.
+    const [raced] = await db
+      .select({
+        id: schema.workspaceUserTable.id,
+        role: schema.workspaceUserTable.role,
+      })
+      .from(schema.workspaceUserTable)
+      .where(
+        and(
+          eq(schema.workspaceUserTable.workspaceId, workspaceId),
+          eq(schema.workspaceUserTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (!raced) throw error;
+
+    if (raced.role !== "owner" && raced.role !== role) {
+      await db
+        .update(schema.workspaceUserTable)
+        .set({ role })
+        .where(eq(schema.workspaceUserTable.id, raced.id));
+    }
+
+    console.warn(
+      `[operon] workspace membership for kaneo user ${userId} was created by a concurrent writer; reconciled to "${role}"`,
+    );
+  }
 }
 
 /**

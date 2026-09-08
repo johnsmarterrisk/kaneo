@@ -92,7 +92,21 @@ export const accountTable = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)],
+  // Operon fork addition (spec R17, decision 116, task T11) — the ONE constraint that
+  // makes "one Operon subject, one Kaneo user" a fact the database enforces rather than a
+  // hope. `POST /internal/operon/user` and Better Auth's own OIDC first-login path both
+  // create this row for the same `(provider_id, account_id)` pair, and this unique key is
+  // the coordination point they share: whichever writer loses the race gets a violation to
+  // recover from instead of minting a second user and stranding the person's history behind
+  // the first. See `apps/api/drizzle/0046_operon_account_provider_unique.sql` and
+  // `docs/fork-discipline.md` §3 in the Operon repository.
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    unique("account_provider_account_unique").on(
+      table.providerId,
+      table.accountId,
+    ),
+  ],
 );
 
 export const userAvatarTable = pgTable(

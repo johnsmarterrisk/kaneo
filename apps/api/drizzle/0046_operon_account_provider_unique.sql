@@ -1,0 +1,28 @@
+-- Operon fork addition (spec R17, decision 116, task T11).
+--
+-- WHAT THIS FORBIDS
+-- Two `account` rows carrying the same `(provider_id, account_id)` pair. On this instance
+-- `provider_id = 'custom'` and `account_id` is the person's Operon OIDC subject — their
+-- 64-hex Nostr pubkey — so the pair IS the identity, and two rows holding it means two
+-- Kaneo users for one person.
+--
+-- WHY IT HAS TO BE THE DATABASE
+-- Upstream's `accountTable` carries one index, `account_userId_idx` on `user_id`, and no
+-- unique key at all. Two writers now create this row: Better Auth's OIDC first-login path
+-- (`createOAuthUser`) and Operon's `POST /internal/operon/user`, which pre-creates the user
+-- so a provisioned person is assignable before they have ever opened Initiative. A
+-- read-then-write check between them is not serialisable — both readers see nothing and
+-- both insert — and an advisory lock would have to be held across Better Auth's own pool
+-- connection inside a hook this fork does not get to wrap, which is the same objection
+-- `createOperonWorkspace` records against locking the workspace claim. A unique-insert claim
+-- is the answer in both places: the loser gets a violation, re-reads the winner, and returns
+-- the winner's id.
+--
+-- IT IS NOT ASSUMED TO APPLY, AND FAILING IS THE INTENDED OUTCOME
+-- A database that ALREADY holds a duplicate `(provider_id, account_id)` pair will refuse
+-- this migration, loudly, at startup. That is correct and deliberate: the duplicate is
+-- exactly the state the constraint exists to prevent, and silently keeping it — by dropping
+-- a row, or by adding the constraint NOT VALID — would leave the constraint's whole purpose
+-- unmet while reporting success. Deciding WHICH of two Kaneo users is the real one is an
+-- operator's call over that person's history, not a migration's.
+ALTER TABLE "account" ADD CONSTRAINT "account_provider_account_unique" UNIQUE("provider_id","account_id");
