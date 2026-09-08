@@ -15,6 +15,15 @@ import type { ExternalLink } from "@/types/external-link";
  * A github link is rendered alongside, so the test also proves the change did not
  * redirect every other provider's link through the apex.
  *
+ * A SECOND claim (spec R12, task T9): the telegraph link carries NO `target`, so it
+ * navigates the tab it was clicked in, while the github link keeps `target="_blank"`.
+ * That asymmetry is the claim — Operon's session-restore profile lives in
+ * `sessionStorage`, which a tab opened from this cross-origin document does not inherit,
+ * so a `_blank` telegraph link lands on Operon's login rather than on the message.
+ * Asserting only the absence would also pass if the attribute had been dropped from
+ * EVERY link, which would silently change GitHub and Gitea too, so both halves are
+ * asserted. `rel` is asserted on both because it stays on both.
+ *
  * See `docs/fork-discipline.md` in the Operon repository.
  */
 
@@ -81,5 +90,25 @@ describe("ExternalLinksAccordion — telegraph links", () => {
       "https://github.com/example/repo/issues/412",
     );
     expect(github?.getAttribute("data-testid")).toBeNull();
+  });
+
+  it("opens a telegraph link in the current tab and every other link in a new one", () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.b12.test:9443/");
+
+    render(
+      <ExternalLinksAccordion externalLinks={[telegraphLink, githubLink]} />,
+    );
+
+    // No `target` at all — not `_self`, which would be an equally same-tab but
+    // needlessly explicit spelling; React renders `undefined` as an absent attribute.
+    const telegraph = screen.getByTestId("telegraph-external-link");
+    expect(telegraph.getAttribute("target")).toBeNull();
+    expect(telegraph.getAttribute("rel")).toBe("noopener noreferrer");
+
+    // The negative control: a third-party host has no Operon session to keep, so it
+    // still opens away from the board the reader is working on.
+    const github = screen.getByText("Upstream issue").closest("a");
+    expect(github?.getAttribute("target")).toBe("_blank");
+    expect(github?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 });

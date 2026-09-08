@@ -161,7 +161,28 @@ export function ExternalLinksAccordion({
                 isTelegraphLink(link) ? "telegraph-external-link" : undefined
               }
               href={isTelegraphLink(link) ? telegraphLinkHref(link) : link.url}
-              target="_blank"
+              /*
+               * A TELEGRAPH LINK NAVIGATES THIS TAB; EVERY OTHER PROVIDER STILL OPENS
+               * A NEW ONE (Operon spec R12, decision 108).
+               *
+               * Operon's session-restore profile is `sessionStorage`
+               * (`app/src/auth/AuthContext.tsx:99,122` in the Operon repository), so it
+               * is scoped to the tab, and the restore returns early when it is absent
+               * (`AuthContext.tsx:326-330`). A `target="_blank"` tab opened from THIS
+               * document inherits no sessionStorage — the opener is the `initiative.`
+               * sibling, a different origin from the apex — so the new tab holds no
+               * profile for Operon and meets the login instead of the message.
+               * Navigating in place is what the injected switcher already relies on
+               * (`operon-switcher.tsx:242` renders its module links with no `target`):
+               * the tab showing Initiative is the tab that was showing Operon, and it
+               * still holds that origin's profile. The alternative — moving the
+               * non-secret profile into a cookie readable across the sibling hosts —
+               * widens a surface AuthContext deliberately narrowed, to buy what one
+               * attribute buys. GitHub and Gitea point at third-party hosts with no
+               * Operon session to keep, so they keep the new tab; `rel` stays on every
+               * link, because it is `noreferrer` as much as `noopener`.
+               */
+              target={isTelegraphLink(link) ? undefined : "_blank"}
               rel="noopener noreferrer"
               className="group flex items-center gap-3 py-2 px-3 rounded-md hover:bg-accent/50 transition-colors"
             >
