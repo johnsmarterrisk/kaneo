@@ -1,0 +1,48 @@
+-- Operon fork addition (round-1 finding 1, task T14).
+--
+-- WHAT THIS FORBIDS
+-- Two `workspace_member` rows carrying the same `(workspace_id, user_id)` pair — one
+-- person holding two memberships of one workspace. Upstream's table has an index on each
+-- column and no unique key across the pair, so nothing prevented it.
+--
+-- WHY IT HAS TO BE THE DATABASE
+-- The pair has three writers on an Operon instance: Better Auth's own `addMember` (which
+-- `joinOperonWorkspace` calls on the login path), the login path's own reconciliation, and
+-- `POST /internal/operon/user`, which puts a provisioned person into the workspace before
+-- they have ever signed in. Every one of them did check-then-insert, and check-then-insert
+-- between two connections is not serialisable: both readers see no membership and both
+-- insert. A second row is not a cosmetic duplicate, because role reconciliation UPDATES THE
+-- ROW IT READ — so a later demotion from `admin` to `member` moves one row and leaves the
+-- other still saying `admin`, and `hasWorkspacePermission` is satisfied by whichever row it
+-- finds first. The demotion reports success and does not happen. A unique-insert claim is
+-- the coordination point the three writers share: the loser gets a violation, re-reads the
+-- winner's row and reconciles its role, which is exactly what migration 0045 does for
+-- `external_link` and 0046 for `account`.
+--
+-- IT IS NOT ASSUMED TO APPLY, AND FAILING IS THE INTENDED OUTCOME
+-- A database that ALREADY holds a duplicate `(workspace_id, user_id)` pair will refuse this
+-- migration, loudly, at startup, with `could not create unique index`. That is correct and
+-- deliberate: the duplicate is exactly the state the constraint exists to prevent, and
+-- silently keeping it — by deleting a row here, or by adding the constraint NOT VALID —
+-- would leave the constraint's whole purpose unmet while reporting success.
+--
+-- HOW TO DEDUPE IF THIS MIGRATION REFUSES TO APPLY
+-- Deciding which row survives is an operator's call, because the rows can disagree about
+-- the role and one of them is the row the permission checks have been answering from. List
+-- them first:
+--
+--   SELECT workspace_id, user_id, count(*), array_agg(id), array_agg(role)
+--     FROM workspace_member GROUP BY 1, 2 HAVING count(*) > 1;
+--
+-- Then keep ONE row per pair. Keeping the highest-privileged role is the conservative
+-- choice for a workspace that must not lose its owner; keeping the earliest `joined_at` is
+-- the conservative choice for seat billing. Whichever rule you pick, apply it explicitly —
+-- for example, keep the earliest row per pair and delete the rest:
+--
+--   DELETE FROM workspace_member m USING workspace_member keep
+--    WHERE m.workspace_id = keep.workspace_id
+--      AND m.user_id = keep.user_id
+--      AND (keep.joined_at, keep.id) < (m.joined_at, m.id);
+--
+-- and re-run the migration. Check `workspace_billing` seat counts afterwards.
+ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_workspace_user_unique" UNIQUE("workspace_id","user_id");

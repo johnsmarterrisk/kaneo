@@ -150,6 +150,27 @@ export function hasOperonOidcClaims(
   return pendingClaims.has(claimsKey(email));
 }
 
+/**
+ * The claims recorded for an email, WITHOUT consuming them — the whole entry, not just
+ * whether one exists.
+ *
+ * {@link hasOperonOidcClaims} answers the registration gate's question ("is this address
+ * inside the OIDC flow right now"). This answers the one round-1 finding 2 asks in the
+ * adapter's conflict recovery: WHICH SUBJECT is this in-flight sign-in for, so the
+ * recovery can insist that the user who already holds the address carries that exact
+ * subject before it hands them back. Non-consuming for the same reason
+ * {@link hasOperonOidcClaims} is: the entry still has to be there for
+ * `databaseHooks.session.create.after` to collect at the end of the same sign-in.
+ */
+export function peekOperonOidcClaims(
+  email: string | null | undefined,
+  now: number = Date.now(),
+): OperonOidcClaims | null {
+  if (!email) return null;
+  prune(now);
+  return pendingClaims.get(claimsKey(email))?.claims ?? null;
+}
+
 /** Test seam: drop every captured profile. Never called in production. */
 export function __resetOperonOidcClaims() {
   pendingClaims.clear();

@@ -35,7 +35,7 @@ import {
 import type { AccessControl } from "better-auth/plugins/access";
 import type { UserWithAnonymous } from "better-auth/plugins/anonymous";
 import { config } from "dotenv-mono";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   findBillableWorkspaces,
   formatBillableWorkspacesMessage,
@@ -49,6 +49,7 @@ import { checkWorkspaceName } from "./utils/check-workspace-name";
 import {
   hasOperonOidcClaims,
   mapCustomOAuthProfileToUser,
+  peekOperonOidcClaims,
   takeOperonOidcClaims,
 } from "./utils/custom-oauth-profile";
 import { generateDemoName } from "./utils/generate-demo-name";
@@ -389,6 +390,64 @@ export async function upgradeOperonMemberRolePayload(
   return "upgraded";
 }
 
+/** The provider id Better Auth stores an Operon OIDC subject under (decision 43). */
+export const OPERON_PROVIDER_ID = "custom";
+
+/** Postgres' unique-violation SQLSTATE. */
+export const UNIQUE_VIOLATION = "23505";
+
+/**
+ * Three more reads, 500 ms apart — decision 122's frozen literals, exported because
+ * BOTH conflict recoveries wait on the same seam.
+ *
+ * Better Auth's `createOAuthUser` commits the `user` and THEN the `account` as two
+ * separate statements (the Drizzle adapter is built below with no `transaction` option
+ * and `@better-auth/drizzle-adapter` defaults it to `false`). So the loser of a race
+ * against an OIDC first login can find the email committed with the account row still
+ * milliseconds away, and a terminal verdict there would call a succeeding sign-in an
+ * identity mismatch. `operon-account/index.ts` waits this window out on the
+ * provisioning route, and {@link recoverOperonOidcUser} waits it out on the OIDC path.
+ */
+export const OPERON_ACCOUNT_RECOVERY_ATTEMPTS = 3;
+export const OPERON_ACCOUNT_RECOVERY_DELAY_MS = 500;
+
+export type PostgresFailure = {
+  code?: string;
+  constraint?: string;
+  detail?: string;
+  cause?: unknown;
+};
+
+/**
+ * The pg error under a drizzle one.
+ *
+ * `drizzle-orm@0.45` wraps every driver error in a `DrizzleQueryError` whose `cause` is
+ * the `pg` error carrying `code` and `constraint`, and a transaction adds another layer;
+ * Better Auth's adapter factory can add a third. Reading `error.code` directly finds
+ * nothing, which would send a unique violation down the failure path instead of the
+ * recovery.
+ */
+export function postgresFailure(error: unknown): PostgresFailure | null {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    const candidate = current as PostgresFailure;
+    if (typeof candidate.code === "string") return candidate;
+    current = candidate.cause;
+  }
+  return null;
+}
+
+/** Was this a unique violation, and was it the index whose name matches `named`? */
+function isUniqueViolationOn(error: unknown, named: RegExp): boolean {
+  const failure = postgresFailure(error);
+  if (failure?.code !== UNIQUE_VIOLATION) return false;
+  return named.test(`${failure.constraint ?? ""} ${failure.detail ?? ""}`);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** The id of the single workspace, or null when none exists yet. */
 async function findOperonWorkspaceId(): Promise<string | null> {
   const [row] = await db
@@ -467,6 +526,96 @@ async function createOperonWorkspace(
 }
 
 /**
+ * Move ONE workspace membership to `role` — atomically, and never off `owner`.
+ *
+ * ── WHY THE OWNER RULE IS IN THE UPDATE'S PREDICATE (round-1 finding 3) ──────────────
+ *
+ * The previous shape was SELECT the row, decide from the role it carried, then UPDATE it
+ * BY ITS ID. Those are two statements on two snapshots, so an ownership transfer landing
+ * between them was silently overwritten: this call read `admin`, an operator (or Better
+ * Auth's own `organization.updateMemberRole`) made that same row the `owner`, and the
+ * UPDATE — which only ever said `WHERE id = …` — wrote `member` over `owner` and left the
+ * workspace with nobody who owns it. Decision 115 says `owner` is a fixed point, and a
+ * fixed point that is only checked in application memory is not one.
+ *
+ * So the protection is now IN the write. Both halves of it are:
+ *
+ *   * `role = <the role this call actually read>` — a compare-and-set. Anything that
+ *     changed the row since the read makes this update match zero rows instead of
+ *     clobbering the change.
+ *   * `role <> 'owner'` — the rule itself, stated where the database can enforce it, so
+ *     it holds even against a row whose role changed to `owner` and back.
+ *
+ * ZERO ROWS IS NOT A FAILURE, IT IS THE RE-READ SIGNAL. The loop re-reads and decides
+ * again on the fresh row; the second pass sees the `owner` the transfer wrote and returns
+ * without demoting it. Two passes are enough because the only outcomes are "still the role
+ * we read" (impossible — the first update would have matched), "owner" (terminal) and
+ * "already the role we want" (terminal); a third pass would only cover a caller racing
+ * itself, which logs rather than loops forever.
+ *
+ * It is exported because it has three callers: {@link joinOperonWorkspace}'s reconcile,
+ * that function's concurrent-writer recovery, and `POST /internal/operon/user`'s
+ * `reconcileMembership` in `operon-account/index.ts`. All three had the same bug.
+ */
+export async function reconcileWorkspaceMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: "admin" | "member",
+): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const [existing] = await db
+      .select({
+        id: schema.workspaceUserTable.id,
+        role: schema.workspaceUserTable.role,
+      })
+      .from(schema.workspaceUserTable)
+      .where(
+        and(
+          eq(schema.workspaceUserTable.workspaceId, workspaceId),
+          eq(schema.workspaceUserTable.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    // Nothing to reconcile. The caller is responsible for creating the membership;
+    // inventing one here would join somebody a deletion just removed.
+    if (!existing) return;
+
+    if (existing.role === "owner") {
+      console.warn(
+        `[operon] workspace membership for kaneo user ${userId} is "owner" but the oidc claim says "${role}"; owner is never demoted by reconciliation`,
+      );
+      return;
+    }
+
+    if (existing.role === role) return;
+
+    const updated = await db
+      .update(schema.workspaceUserTable)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.workspaceUserTable.id, existing.id),
+          eq(schema.workspaceUserTable.role, existing.role),
+          ne(schema.workspaceUserTable.role, "owner"),
+        ),
+      )
+      .returning({ id: schema.workspaceUserTable.id });
+
+    if (updated.length > 0) {
+      console.log(
+        `[operon] workspace role for kaneo user ${userId} set from the oidc claim: ${role} (was ${existing.role})`,
+      );
+      return;
+    }
+  }
+
+  console.warn(
+    `[operon] workspace role for kaneo user ${userId} was changed by a concurrent writer twice while reconciling to "${role}"; leaving it as it stands`,
+  );
+}
+
+/**
  * Add a later user to the single workspace, at the role Operon says they hold —
  * and RECONCILE that role on every subsequent login. Idempotent.
  *
@@ -493,10 +642,7 @@ async function joinOperonWorkspace(
   role: "admin" | "member",
 ) {
   const [existing] = await db
-    .select({
-      id: schema.workspaceUserTable.id,
-      role: schema.workspaceUserTable.role,
-    })
+    .select({ id: schema.workspaceUserTable.id })
     .from(schema.workspaceUserTable)
     .where(
       and(
@@ -506,22 +652,12 @@ async function joinOperonWorkspace(
     )
     .limit(1);
 
+  // The role decision belongs to `reconcileWorkspaceMemberRole` and not to the row this
+  // read returned: an ownership transfer between the read and the write is exactly what
+  // round-1 finding 3 was about, so this read answers only "is there a membership at
+  // all" and the reconcile re-reads the role inside its own compare-and-set.
   if (existing) {
-    if (existing.role === "owner") {
-      console.warn(
-        `[operon] workspace membership for kaneo user ${userId} is "owner" but the oidc claim says "${role}"; owner is never demoted by reconciliation`,
-      );
-      return;
-    }
-    if (existing.role === role) return;
-
-    await db
-      .update(schema.workspaceUserTable)
-      .set({ role })
-      .where(eq(schema.workspaceUserTable.id, existing.id));
-    console.log(
-      `[operon] workspace role for kaneo user ${userId} set from the oidc claim: ${role} (was ${existing.role})`,
-    );
+    await reconcileWorkspaceMemberRole(workspaceId, userId, role);
     return;
   }
 
@@ -544,16 +680,16 @@ async function joinOperonWorkspace(
     //
     // `workspace_member` has a SECOND writer now: `POST /internal/operon/user` puts a
     // provisioned person into the workspace before they have ever signed in. So a login
-    // can read "no membership", the other writer can insert one, and `addMember` — which
-    // re-checks and throws `User is already a member of this organization` — then fails
+    // can read "no membership", the other writer can insert one, and `addMember` fails
     // the WHOLE sign-in over a row that says exactly what this call was about to write.
+    // It can fail in either of two ways now, and both land here: its own re-check
+    // (`User is already a member of this organization`), or — since migration 0047 —
+    // the `workspace_member_workspace_user_unique` violation underneath it, which is the
+    // one that fires when the two writers interleave too closely for any check to see.
     // Re-read: if the row is there, the other writer won a race whose outcome we wanted,
-    // and all that is left is to reconcile its role under the same owner rule above.
+    // and all that is left is to reconcile its role under the same owner rule.
     const [raced] = await db
-      .select({
-        id: schema.workspaceUserTable.id,
-        role: schema.workspaceUserTable.role,
-      })
+      .select({ id: schema.workspaceUserTable.id })
       .from(schema.workspaceUserTable)
       .where(
         and(
@@ -565,12 +701,7 @@ async function joinOperonWorkspace(
 
     if (!raced) throw error;
 
-    if (raced.role !== "owner" && raced.role !== role) {
-      await db
-        .update(schema.workspaceUserTable)
-        .set({ role })
-        .where(eq(schema.workspaceUserTable.id, raced.id));
-    }
+    await reconcileWorkspaceMemberRole(workspaceId, userId, role);
 
     console.warn(
       `[operon] workspace membership for kaneo user ${userId} was created by a concurrent writer; reconciled to "${role}"`,
@@ -1392,29 +1523,234 @@ export async function reconcileOperonSession(userId: string) {
   await provisionOperonUser(user);
 }
 
+const kaneoDrizzleAdapter = drizzleAdapter(db, {
+  provider: "pg",
+  schema: {
+    ...schema,
+    user: schema.userTable,
+    account: schema.accountTable,
+    session: schema.sessionTable,
+    verification: schema.verificationTable,
+    workspace: schema.workspaceTable,
+    workspace_member: schema.workspaceUserTable,
+    invitation: schema.invitationTable,
+    workspace_role: schema.workspaceRoleTable,
+    team: schema.teamTable,
+    teamMember: schema.teamMemberTable,
+    apikey: schema.apikeyTable,
+    deviceCode: schema.deviceCodeTable,
+  },
+});
+
+type KaneoAdapter = ReturnType<typeof kaneoDrizzleAdapter>;
+
+/**
+ * The winner of a `user.email` race, IF it is the same person.
+ *
+ * Never on the email alone (decision 122). An email is an attribute an admin retypes; a
+ * subject is not. The row is returned only when the user who now holds this address
+ * carries a `custom` account whose `accountId` is the very subject Operon's userinfo
+ * document produced for it moments ago — the live capture in
+ * `custom-oauth-profile.ts`, the same evidence `databaseHooks.user.create.before` already
+ * trusts to wave this address past `DISABLE_REGISTRATION`. A different subject on that
+ * address, or no captured profile at all, returns `null` and the sign-in fails exactly as
+ * it did before.
+ *
+ * The wait is decision 122's, for decision 122's reason: a concurrent OIDC first login
+ * commits the `user` and the `account` separately, so a committed email with no account
+ * row yet is a sign-in caught mid-write rather than a mismatch.
+ */
+async function recoverOperonOidcUser(
+  base: KaneoAdapter,
+  data: Record<string, unknown>,
+  error: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (!isUniqueViolationOn(error, /email/i)) return null;
+
+  const email = typeof data.email === "string" ? data.email : "";
+  if (!email) return null;
+
+  const claims = peekOperonOidcClaims(email);
+  if (!claims) return null;
+
+  for (
+    let attempt = 0;
+    attempt <= OPERON_ACCOUNT_RECOVERY_ATTEMPTS;
+    attempt += 1
+  ) {
+    if (attempt > 0) await sleep(OPERON_ACCOUNT_RECOVERY_DELAY_MS);
+
+    const claimant = await base.findOne<{ id: string }>({
+      model: "user",
+      where: [{ field: "email", value: email }],
+    });
+    // The email was claimed and released again. There is no winner to hand back.
+    if (!claimant) return null;
+
+    const account = await base.findOne<{ userId: string }>({
+      model: "account",
+      where: [
+        { field: "providerId", value: OPERON_PROVIDER_ID },
+        { field: "accountId", value: claims.sub },
+      ],
+    });
+
+    if (!account) continue;
+
+    if (account.userId !== claimant.id) {
+      // The subject exists and belongs to somebody else, so this address and this
+      // identity have come apart. Terminal at once: the window buys time for a row to
+      // appear, never permission to skip the check.
+      console.warn(
+        `[operon] operon.identity_mismatch: oidc login for ${email} lost the user race, but subject ${claims.sub} belongs to kaneo user ${account.userId} and that email is held by ${claimant.id}`,
+      );
+      return null;
+    }
+
+    console.warn(
+      `[operon] oidc first login lost the user race for ${email}; recovered kaneo user ${claimant.id}, whose custom account already carries this subject`,
+    );
+    return claimant as unknown as Record<string, unknown>;
+  }
+
+  console.warn(
+    `[operon] oidc first login lost the user race for ${email} and no custom account carrying subject ${claims.sub} arrived within ${OPERON_ACCOUNT_RECOVERY_ATTEMPTS * OPERON_ACCOUNT_RECOVERY_DELAY_MS}ms; refusing to merge on the email alone`,
+  );
+  return null;
+}
+
+/**
+ * The winner of an `account (provider_id, account_id)` race, IF it is the same row.
+ *
+ * Reached only after {@link recoverOperonOidcUser} handed `createOAuthUser` a user that
+ * already exists, because the writer that created that user created this account row in
+ * the same transaction. The row is returned only when it hangs off the very user this
+ * call was about to attach it to; a subject that belongs to a different user is the
+ * collision migration 0046 exists to surface, not something to adopt.
+ */
+async function recoverOperonOidcAccount(
+  base: KaneoAdapter,
+  data: Record<string, unknown>,
+  error: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (!isUniqueViolationOn(error, /account_provider_account_unique/)) {
+    return null;
+  }
+
+  const { providerId, accountId, userId } = data;
+  if (
+    providerId !== OPERON_PROVIDER_ID ||
+    typeof accountId !== "string" ||
+    typeof userId !== "string"
+  ) {
+    return null;
+  }
+
+  const existing = await base.findOne<{ userId: string }>({
+    model: "account",
+    where: [
+      { field: "providerId", value: providerId },
+      { field: "accountId", value: accountId },
+    ],
+  });
+
+  if (!existing || existing.userId !== userId) return null;
+
+  console.warn(
+    `[operon] oidc first login found subject ${accountId} already linked to kaneo user ${userId}; reusing that account row`,
+  );
+  return existing as unknown as Record<string, unknown>;
+}
+
+/**
+ * Identity-verified conflict recovery INSIDE Better Auth's OIDC first-login path
+ * (round-1 finding 2). Operon mode only.
+ *
+ * ── THE FAILURE ──────────────────────────────────────────────────────────────────────
+ *
+ * `handleOAuthUserInfo` (`better-auth/dist/oauth2/link-account.mjs`) looks the person up
+ * with `findOAuthUser` and, finding nobody, calls `createOAuthUser`. Between those two
+ * statements `POST /internal/operon/user` can commit a user carrying the same address —
+ * which is the whole point of that route, since an admin provisions people who have not
+ * signed in yet. The `user.email` unique key then rejects the insert, and the installed
+ * Better Auth does NOT re-read: the catch returns `unable to create user` and the
+ * callback redirects to `…/error?error=unable_to_create_user`. The person cannot sign in
+ * to the account that was just created for them, and retrying only helps because the
+ * NEXT attempt's lookup finds the committed row — which is luck, not a recovery.
+ *
+ * ── WHY IT IS THE ADAPTER AND NOT A `databaseHooks` SEAM ──────────────────────────────
+ *
+ * `databaseHooks.user.create.before` runs inside this very insert, but its contract is
+ * "modify the data, or return `false` to abort" — it has no way to say "this person
+ * already exists, use them", and `false` makes `createWithHooks` return `null`, which
+ * `createOAuthUser` immediately dereferences. `hooks.before` on the callback path runs
+ * before the lookup, not between the lookup and the insert. The one seam Better Auth
+ * documents that sits exactly where the write happens is the ADAPTER — `database` takes
+ * any adapter object — so the recovery is a wrapper over the drizzle adapter's `create`,
+ * and the real callback reaches it without knowing anything changed.
+ *
+ * ── WHY `transaction` IS OVERRIDDEN, AND WHY THAT CHANGES NOTHING ─────────────────────
+ *
+ * `createOAuthUser` runs its two writes inside `runWithTransaction(adapter, …)`, which
+ * calls `adapter.transaction(cb)` and re-binds the current adapter to whatever that hands
+ * `cb`. The drizzle adapter is built with no `transaction` option and defaults it to
+ * `false`, so upstream's implementation is `createAsIsTransaction` — literally
+ * `(fn) => fn(adapter)`, a pass-through with no BEGIN at all. Left alone it would hand
+ * back the UNWRAPPED adapter and every write inside `createOAuthUser` would bypass this
+ * recovery. The override is the same pass-through handing back the wrapper, so it opens
+ * no transaction upstream did not open and closes none it did.
+ *
+ * ── AND NOTHING OUTSIDE OPERON MODE IS TOUCHED ────────────────────────────────────────
+ *
+ * A non-Operon instance gets `kaneoDrizzleAdapter(options)` itself, the same object
+ * upstream passes. Inside Operon mode the recovery still cannot fire without a live
+ * Operon userinfo capture for the address, so `create` is upstream's `create` plus a
+ * catch that re-throws for every other error.
+ */
+const operonDatabaseAdapter: typeof kaneoDrizzleAdapter = (options) => {
+  const base = kaneoDrizzleAdapter(options);
+  if (!isOperonOidcOnly) return base;
+
+  // Cast because `DBAdapter["create"]` is generic in both its input and its output row
+  // type, and a wrapper that re-reads the winner cannot prove to TypeScript that the row
+  // it read is the same shape the caller asked to write. It is: both come from the same
+  // adapter, through the same model, with the same output transform.
+  const create = (async (params: {
+    model: string;
+    data: Record<string, unknown>;
+    select?: string[];
+    forceAllowId?: boolean;
+  }) => {
+    try {
+      return await base.create(params);
+    } catch (error) {
+      const recovered =
+        params.model === "user"
+          ? await recoverOperonOidcUser(base, params.data, error)
+          : params.model === "account"
+            ? await recoverOperonOidcAccount(base, params.data, error)
+            : null;
+
+      if (!recovered) throw error;
+      return recovered;
+    }
+  }) as KaneoAdapter["create"];
+
+  const wrapped: KaneoAdapter = {
+    ...base,
+    create,
+    transaction: async (callback) => callback(wrapped),
+  };
+
+  return wrapped;
+};
+
 export const auth = betterAuth({
   baseURL: baseURLWithoutPath,
   trustedOrigins,
   secret: process.env.AUTH_SECRET || "",
   basePath: "/api/auth",
-  database: drizzleAdapter(db, {
-    provider: "pg",
-    schema: {
-      ...schema,
-      user: schema.userTable,
-      account: schema.accountTable,
-      session: schema.sessionTable,
-      verification: schema.verificationTable,
-      workspace: schema.workspaceTable,
-      workspace_member: schema.workspaceUserTable,
-      invitation: schema.invitationTable,
-      workspace_role: schema.workspaceRoleTable,
-      team: schema.teamTable,
-      teamMember: schema.teamMemberTable,
-      apikey: schema.apikeyTable,
-      deviceCode: schema.deviceCodeTable,
-    },
-  }),
+  database: operonDatabaseAdapter,
   user: {
     additionalFields: {
       locale: {

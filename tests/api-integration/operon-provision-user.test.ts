@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { and, eq, sql } from "drizzle-orm";
+import { Client } from "pg";
 import {
   afterAll,
   afterEach,
@@ -33,15 +34,21 @@ import {
  *
  * ── HOW AN "OIDC FIRST LOGIN" IS MODELLED HERE ───────────────────────────────────
  *
- * Better Auth's `createOAuthUser` writes the `user` and THEN the `account` as two
- * SEPARATELY COMMITTED statements — the Drizzle adapter is built in `auth.ts` with no
- * `transaction` option and the installed adapter defaults it to `false`. That seam is
- * the whole reason decision 122 waits instead of ruling, so the helpers below reproduce
- * it literally: {@link oidcCreateUser} is the first commit, {@link oidcCreateAccount} is
- * the second, and {@link oidcSignIn} is the `databaseHooks.session.create.after`
- * reconciliation that follows. Driving the real OAuth callback would need an identity
- * provider on the wire; reproducing its two commits needs only the two statements it
- * actually issues.
+ * TWO WAYS, and the difference between them matters (round-1 finding 2).
+ *
+ * {@link oidcCallbackLogin} drives the REAL endpoint: `auth.api.signInWithOAuth2` stores
+ * the state, `auth.api.oAuth2Callback` runs `mapCustomOAuthProfileToUser`,
+ * `handleOAuthUserInfo`, `createOAuthUser` and the session hooks, and the identity
+ * provider on the wire is the stubbed `fetch` in `beforeEach`. Every claim about what the
+ * callback does when a write conflicts is made through it, because an imitation of that
+ * path recovered from an email collision in a way the installed Better Auth does not —
+ * which is precisely what finding 2 was.
+ *
+ * {@link oidcCreateUser} and {@link oidcCreateAccount} remain, but only to SEED a state.
+ * They write the `user` and THEN the `account` as two separately committed statements,
+ * which is what `createOAuthUser` does — the Drizzle adapter is built in `auth.ts` with no
+ * `transaction` option and the installed adapter defaults it to `false` — so they can
+ * stage a sign-in caught mid-write, which is the seam decision 122 waits on.
  *
  * See `docs/fork-discipline.md` §3 in the Operon repository.
  */
@@ -61,14 +68,32 @@ setEnv(OIDC_ONLY, "true");
 setEnv("OPERON_INTERNAL_API_URL", "http://platform-service.test:3001");
 setEnv("OPERON_KANEO_S2S_SECRET", "an-s2s-secret-for-the-suite");
 
+/**
+ * The `custom` provider Better Auth's generic-OAuth plugin is configured from, pointed at
+ * endpoints the stubbed `fetch` below answers. Set here, before `auth.ts` is imported, for
+ * the same module-scope reason `OPERON_OIDC_ONLY` is: the plugin reads them once.
+ *
+ * With these, {@link oidcCallbackLogin} drives the REAL callback — `oAuth2Callback` →
+ * `mapCustomOAuthProfileToUser` → `handleOAuthUserInfo` → `createOAuthUser` — instead of
+ * a hand-rolled imitation of it. Round-1 finding 2 was that the imitation recovered from
+ * an email collision in ways the real path did not, so the imitation is gone.
+ */
+const OIDC_TOKEN_URL = "https://operon.test/oauth/token";
+const OIDC_USER_INFO_URL = "https://operon.test/oauth/userinfo";
+setEnv("CUSTOM_OAUTH_CLIENT_ID", "operon-initiative");
+setEnv("CUSTOM_OAUTH_CLIENT_SECRET", "operon-initiative-secret");
+setEnv("CUSTOM_OAUTH_AUTHORIZATION_URL", "https://operon.test/oauth/authorize");
+setEnv("CUSTOM_OAUTH_TOKEN_URL", OIDC_TOKEN_URL);
+setEnv("CUSTOM_OAUTH_USER_INFO_URL", OIDC_USER_INFO_URL);
+
 const dbModule = await import("../../apps/api/src/database");
 const db = dbModule.default;
 const { schema } = dbModule;
-const { auth, reconcileOperonSession } = await import(
+const { auth, reconcileWorkspaceMemberRole } = await import(
   "../../apps/api/src/auth"
 );
 const { createApp } = await import("../../apps/api/src/index");
-const { rememberOperonOidcClaims, __resetOperonOidcClaims } = await import(
+const { __resetOperonOidcClaims } = await import(
   "../../apps/api/src/utils/custom-oauth-profile"
 );
 const { default: getWorkspaceMembers } = await import(
@@ -82,12 +107,22 @@ const ROUTE = "/api/internal/operon/user";
 /** The constraint migration 0046 adds, named so the drop-and-restore case can restore it. */
 const ACCOUNT_UNIQUE = "account_provider_account_unique";
 
-const migrationSql = readFileSync(
-  resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../apps/api/drizzle/0046_operon_account_provider_unique.sql",
-  ),
-  "utf8",
+/** The constraint migration 0047 adds, same reason. */
+const MEMBERSHIP_UNIQUE = "workspace_member_workspace_user_unique";
+
+function readMigration(file: string) {
+  return readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      `../../apps/api/drizzle/${file}`,
+    ),
+    "utf8",
+  );
+}
+
+const migrationSql = readMigration("0046_operon_account_provider_unique.sql");
+const membershipMigrationSql = readMigration(
+  "0047_workspace_member_unique.sql",
 );
 
 function subject(seed: string) {
@@ -99,6 +134,14 @@ const SUB_B = subject("b");
 
 let holder: Awaited<ReturnType<typeof createWorkspaceMember>>;
 let serviceKey: string;
+
+/** The userinfo document the stubbed provider will serve on the next callback. */
+let oidcProfile: {
+  sub: string;
+  email: string;
+  name: string;
+  role: "admin" | "member";
+} | null = null;
 
 async function mintServiceKey(userId: string) {
   const created = await auth.api.createApiKey({
@@ -165,52 +208,67 @@ async function oidcCreateAccount(userId: string, sub: string) {
   });
 }
 
-/** `databaseHooks.session.create.after` — the reconciliation every sign-in runs. */
-async function oidcSignIn(
-  user: { id: string; email: string },
-  sub: string,
-  role: "admin" | "member" = "member",
-) {
-  rememberOperonOidcClaims({
-    sub,
-    email: user.email,
-    name: user.email,
-    role,
-  });
-  await reconcileOperonSession(user.id);
-}
-
 /**
- * A whole OIDC first login, INCLUDING the branch Better Auth takes when the email is
- * already taken: it finds that user and links the account rather than creating a second.
+ * A whole OIDC first login, THROUGH THE REAL CALLBACK.
+ *
+ * `auth.api.signInWithOAuth2` mints and stores the state exactly as a browser sign-in
+ * does; `auth.api.oAuth2Callback` then runs the endpoint Better Auth actually serves at
+ * `/api/auth/oauth2/callback/custom`, so `mapCustomOAuthProfileToUser` captures the
+ * claims, `handleOAuthUserInfo` does its `findOAuthUser` lookup, `createOAuthUser` writes
+ * (or recovers), and `databaseHooks.session.create.after` reconciles — none of it
+ * modelled here.
+ *
+ * The previous version of this helper wrote the two rows itself and caught the email
+ * collision by re-reading the user, which is a recovery the installed Better Auth does
+ * NOT have: its `createOAuthUser` catch returns `unable to create user` and the callback
+ * redirects to the error page. That imitation was round-1 finding 2, and this is its
+ * replacement — the recovery now lives in `auth.ts`'s adapter wrapper, where the real
+ * callback reaches it.
+ *
+ * Returns the callback's redirect target, so a test can tell a completed sign-in from
+ * `…/error?error=unable_to_create_user`.
  */
-async function oidcFirstLogin(
+async function oidcCallbackLogin(
   email: string,
   sub: string,
   role: "admin" | "member" = "member",
+  name = "Oidc Person",
 ) {
-  let user: { id: string; email: string };
-  try {
-    user = await oidcCreateUser(email);
-  } catch {
-    const [existing] = await db
-      .select({ id: schema.userTable.id, email: schema.userTable.email })
-      .from(schema.userTable)
-      .where(eq(schema.userTable.email, email))
-      .limit(1);
-    if (!existing) throw new Error("the email was claimed and then released");
-    user = existing;
-  }
+  oidcProfile = { sub, email, name, role };
 
-  try {
-    await oidcCreateAccount(user.id, sub);
-  } catch {
-    // The pair is already there — this login is the loser of the race, which is exactly
-    // what migration 0046 makes it rather than the author of a second user.
-  }
+  const started = await auth.api.signInWithOAuth2({
+    body: { providerId: "custom", callbackURL: "/", disableRedirect: true },
+    asResponse: true,
+  });
 
-  await oidcSignIn(user, sub, role);
-  return user;
+  // The callback verifies the state against a SIGNED COOKIE as well as the verification
+  // row, so the browser's half of the round trip has to be carried across too. This is
+  // the cookie jar, and it is the whole of it.
+  const cookies = started.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+
+  const { url } = (await started.json()) as { url: string };
+  const state = new URL(url).searchParams.get("state");
+  if (!state) throw new Error("the authorization URL carried no state");
+
+  const response = await auth.api.oAuth2Callback({
+    params: { providerId: "custom" },
+    query: { code: "an-authorization-code", state },
+    headers: new Headers({ cookie: cookies }),
+    asResponse: true,
+  });
+
+  return {
+    status: response.status,
+    location: response.headers.get("location") ?? "",
+  };
+}
+
+/** Did the real callback finish a sign-in, or bounce to Better Auth's error page? */
+function signedIn(outcome: { location: string }) {
+  return !outcome.location.includes("error");
 }
 
 async function usersWithEmail(email: string) {
@@ -258,12 +316,51 @@ beforeEach(async () => {
   await resetTestDatabase();
   __resetOperonOidcClaims();
 
-  // Every sign-in reconciliation posts a signed callback at platform-service, which is
-  // not running here. The stub answers the shape the receiver answers, so the login path
-  // under test finishes instead of failing on a network error.
+  oidcProfile = null;
+
+  // Two networks are stubbed here, and they answer differently.
+  //
+  //   * Operon's OIDC endpoints, so `oidcCallbackLogin` can drive the real callback:
+  //     these must be genuine `Response` objects, because `betterFetch` reads the
+  //     content type off the headers before it will parse a body.
+  //   * platform-service, which every sign-in reconciliation posts a signed callback at
+  //     and which is not running here. The stub answers the shape the receiver answers,
+  //     so the login path under test finishes instead of failing on a network error.
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => {
+    vi.fn(async (input: unknown) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : String((input as { url?: string })?.url ?? "");
+
+      if (url.startsWith(OIDC_TOKEN_URL)) {
+        return new Response(
+          JSON.stringify({
+            access_token: "an-access-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.startsWith(OIDC_USER_INFO_URL)) {
+        if (!oidcProfile) throw new Error("no oidc profile was staged");
+        return new Response(
+          JSON.stringify({
+            sub: oidcProfile.sub,
+            email: oidcProfile.email,
+            email_verified: true,
+            name: oidcProfile.name,
+            role: oidcProfile.role,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
       return {
         ok: true,
         status: 200,
@@ -409,12 +506,13 @@ describe("idempotency and concurrency belong to the database", () => {
   });
 
   it("leaves one user when a provision and an OIDC first login race", async () => {
-    const [response] = await Promise.all([
+    const [response, login] = await Promise.all([
       provision(personBody()),
-      oidcFirstLogin("provisioned@operon.local", SUB_A),
+      oidcCallbackLogin("provisioned@operon.local", SUB_A),
     ]);
 
     expect(response.status).toBe(200);
+    expect(signedIn(login)).toBe(true);
     const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
 
     const users = await usersWithEmail("provisioned@operon.local");
@@ -428,12 +526,106 @@ describe("idempotency and concurrency belong to the database", () => {
     const response = await provision(personBody());
     const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
 
-    await oidcFirstLogin("provisioned@operon.local", SUB_A);
+    const login = await oidcCallbackLogin("provisioned@operon.local", SUB_A);
+    expect(signedIn(login)).toBe(true);
 
     const users = await usersWithEmail("provisioned@operon.local");
     expect(users).toEqual([{ id: kaneoUserId }]);
     expect(await accountsForSubject(SUB_A)).toEqual([{ userId: kaneoUserId }]);
     expect(await membershipsOf(kaneoUserId)).toHaveLength(1);
+  });
+});
+
+/**
+ * Round-1 finding 2 — the ONE ordering that used to break the real callback.
+ *
+ * `handleOAuthUserInfo` looks the person up and, finding nobody, calls `createOAuthUser`.
+ * Provisioning committing BETWEEN those two statements is not a hypothetical: it is what
+ * `POST /internal/operon/user` exists to do, and the installed Better Auth answers it with
+ * `unable to create user` and no re-read at all. These tests force that exact interleaving
+ * by making the lookup itself the trigger — a spy that calls through, runs the provision to
+ * completion, and then returns the (empty) result the real lookup produced. Nothing about
+ * the write path is stubbed: the recovery under test is the adapter wrapper in `auth.ts`.
+ */
+describe("the real OIDC callback survives provisioning winning the user-creation race", () => {
+  async function provisionInsideTheLookup(body: Record<string, unknown>) {
+    const context = await auth.$context;
+    const findOAuthUser = context.internalAdapter.findOAuthUser.bind(
+      context.internalAdapter,
+    );
+    let fired = false;
+
+    const spy = vi
+      .spyOn(context.internalAdapter, "findOAuthUser")
+      .mockImplementation(async (...args) => {
+        const found = await findOAuthUser(
+          ...(args as Parameters<typeof findOAuthUser>),
+        );
+        if (!fired) {
+          fired = true;
+          const response = await provision(body);
+          if (response.status !== 200) {
+            throw new Error(
+              `the staged provision failed with ${response.status}`,
+            );
+          }
+        }
+        return found;
+      });
+
+    return () => {
+      spy.mockRestore();
+      return fired;
+    };
+  }
+
+  it("recovers the provisioned user and signs them in", async () => {
+    const done = await provisionInsideTheLookup(personBody());
+
+    const login = await oidcCallbackLogin("provisioned@operon.local", SUB_A);
+
+    expect(done()).toBe(true);
+    // Before the fix this was `…/error?error=unable_to_create_user`.
+    expect(signedIn(login)).toBe(true);
+    expect(login.location).not.toContain("unable_to_create_user");
+
+    const users = await usersWithEmail("provisioned@operon.local");
+    expect(users).toHaveLength(1);
+    expect(await accountsForSubject(SUB_A)).toEqual([
+      { userId: users[0]?.id as string },
+    ]);
+    expect(await membershipsOf(users[0]?.id as string)).toEqual([
+      { workspaceId: holder.workspace.id, role: "member" },
+    ]);
+
+    // The session is the proof the callback finished rather than merely not erroring.
+    const sessions = await db
+      .select({ id: schema.sessionTable.id })
+      .from(schema.sessionTable)
+      .where(eq(schema.sessionTable.userId, users[0]?.id as string));
+    expect(sessions.length).toBeGreaterThan(0);
+  });
+
+  it("refuses when the address is held by a DIFFERENT subject, and never merges on the email", async () => {
+    // Same interleaving, but the row that wins carries somebody else's identity. The
+    // recovery verifies the subject, so this is a failed sign-in, not a hijacked account.
+    const done = await provisionInsideTheLookup(
+      personBody({ sub: SUB_B, email: "provisioned@operon.local" }),
+    );
+
+    const login = await oidcCallbackLogin("provisioned@operon.local", SUB_A);
+
+    expect(done()).toBe(true);
+    expect(signedIn(login)).toBe(false);
+    expect(login.location).toContain("unable_to_create_user");
+
+    const users = await usersWithEmail("provisioned@operon.local");
+    expect(users).toHaveLength(1);
+    // The winner keeps their own subject and SUB_A was never attached to anybody.
+    expect(await accountsForSubject(SUB_B)).toEqual([
+      { userId: users[0]?.id as string },
+    ]);
+    expect(await accountsForSubject(SUB_A)).toHaveLength(0);
   });
 });
 
@@ -543,6 +735,198 @@ describe("the three writes are one transaction", () => {
 
     expect(await usersWithEmail("provisioned@operon.local")).toHaveLength(0);
     expect(await accountsForSubject(SUB_A)).toHaveLength(0);
+  });
+});
+
+describe("migration 0047's constraint on workspace_member", () => {
+  it("rejects a second membership row for the same person and workspace", async () => {
+    const response = await provision(personBody());
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+
+    await expect(
+      db.insert(schema.workspaceUserTable).values({
+        workspaceId: holder.workspace.id,
+        userId: kaneoUserId,
+        role: "admin",
+        joinedAt: new Date(),
+      }),
+    ).rejects.toThrow();
+
+    expect(await membershipsOf(kaneoUserId)).toHaveLength(1);
+  });
+
+  it("refuses to apply, loudly, on a database that already holds a duplicate", async () => {
+    // Same shape as 0046's proof: applying the file to a database seeded with the state
+    // it forbids is the only way to show the header's claim that a duplicate makes it
+    // FAIL rather than be skipped.
+    const response = await provision(personBody());
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+
+    await db.execute(
+      sql.raw(
+        `ALTER TABLE "workspace_member" DROP CONSTRAINT "${MEMBERSHIP_UNIQUE}"`,
+      ),
+    );
+
+    try {
+      await db.insert(schema.workspaceUserTable).values({
+        workspaceId: holder.workspace.id,
+        userId: kaneoUserId,
+        role: "admin",
+        joinedAt: new Date(),
+      });
+      expect(await membershipsOf(kaneoUserId)).toHaveLength(2);
+
+      let thrown: unknown = null;
+      try {
+        await db.execute(sql.raw(membershipMigrationSql));
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).not.toBeNull();
+      const cause = (thrown as { cause?: { code?: string; message?: string } })
+        .cause;
+      expect(cause?.code).toBe("23505");
+      expect(cause?.message).toMatch(/could not create unique index/i);
+    } finally {
+      await db.execute(
+        sql.raw(`
+          DELETE FROM workspace_member m USING workspace_member keep
+           WHERE m.workspace_id = keep.workspace_id
+             AND m.user_id = keep.user_id
+             AND (keep.joined_at, keep.id) < (m.joined_at, m.id);
+        `),
+      );
+      await db.execute(
+        sql.raw(
+          `ALTER TABLE "workspace_member" ADD CONSTRAINT "${MEMBERSHIP_UNIQUE}" UNIQUE("workspace_id","user_id")`,
+        ),
+      );
+    }
+  });
+
+  it("leaves ONE membership when both writers create it, and a later demotion moves it", async () => {
+    // Round-1 finding 1, end to end. `POST /internal/operon/user` and the login path both
+    // create the membership; before 0047 both could insert, and the demotion below then
+    // updated ONE of the two rows and reported success while an `admin` row survived.
+    const [created, login] = await Promise.all([
+      provision(personBody({ role: "admin" })),
+      oidcCallbackLogin("provisioned@operon.local", SUB_A, "admin"),
+    ]);
+
+    expect(created.status).toBe(200);
+    expect(signedIn(login)).toBe(true);
+
+    const users = await usersWithEmail("provisioned@operon.local");
+    expect(users).toHaveLength(1);
+    const kaneoUserId = users[0]?.id as string;
+    expect(await membershipsOf(kaneoUserId)).toEqual([
+      { workspaceId: holder.workspace.id, role: "admin" },
+    ]);
+
+    // And FORCED, not merely raced: the second writer's insert, issued with no read in
+    // front of it, is the exact statement a lost check-then-insert used to land. 0047
+    // refuses it, which is what keeps the demotion below addressing one row.
+    await expect(
+      db.insert(schema.workspaceUserTable).values({
+        workspaceId: holder.workspace.id,
+        userId: kaneoUserId,
+        role: "admin",
+        joinedAt: new Date(),
+      }),
+    ).rejects.toThrow();
+
+    // The demotion, through both writers again. Exactly one row exists, so there is
+    // nothing left behind still saying `admin`.
+    const demoted = await provision(personBody({ role: "member" }));
+    expect(demoted.status).toBe(200);
+    const secondLogin = await oidcCallbackLogin(
+      "provisioned@operon.local",
+      SUB_A,
+      "member",
+    );
+    expect(signedIn(secondLogin)).toBe(true);
+
+    expect(await membershipsOf(kaneoUserId)).toEqual([
+      { workspaceId: holder.workspace.id, role: "member" },
+    ]);
+  });
+});
+
+describe("owner preservation is atomic (round-1 finding 3)", () => {
+  it("does not overwrite an ownership transfer that lands between the read and the write", async () => {
+    // The interleaving, made real rather than described. A second connection opens a
+    // transaction, makes the row the `owner` and HOLDS the row lock:
+    //
+    //   * the reconcile's SELECT runs against the committed snapshot and reads `member`;
+    //   * its UPDATE blocks on that row lock;
+    //   * the transfer commits;
+    //   * Postgres re-evaluates the UPDATE's WHERE against the new row version.
+    //
+    // With the fix the predicate carries `role = <the role we read>` and `role <> 'owner'`,
+    // so it matches nothing, the loop re-reads and finds the `owner` it must not demote.
+    // With the previous `WHERE id = …` it matched, and `member` was written over `owner`.
+    const response = await provision(personBody({ role: "admin" }));
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+
+    const [membership] = await db
+      .select({ id: schema.workspaceUserTable.id })
+      .from(schema.workspaceUserTable)
+      .where(eq(schema.workspaceUserTable.userId, kaneoUserId))
+      .limit(1);
+    const membershipId = membership?.id as string;
+
+    // Make the row disagree with the claim, so the reconcile below intends to write.
+    await db
+      .update(schema.workspaceUserTable)
+      .set({ role: "admin" })
+      .where(eq(schema.workspaceUserTable.id, membershipId));
+
+    const transfer = new Client({ connectionString: process.env.DATABASE_URL });
+    await transfer.connect();
+
+    try {
+      await transfer.query("BEGIN");
+      await transfer.query(
+        `UPDATE workspace_member SET role = 'owner' WHERE id = $1`,
+        [membershipId],
+      );
+
+      const pending = reconcileWorkspaceMemberRole(
+        holder.workspace.id,
+        kaneoUserId,
+        "member",
+      );
+
+      // Long enough for the reconcile to read `admin` and block on the row lock.
+      await sleep(750);
+      await transfer.query("COMMIT");
+
+      await pending;
+    } finally {
+      await transfer.end();
+    }
+
+    expect(await membershipsOf(kaneoUserId)).toEqual([
+      { workspaceId: holder.workspace.id, role: "owner" },
+    ]);
+  });
+
+  it("still demotes an ordinary member when nothing interleaves", async () => {
+    // The control: the compare-and-set is a guard, not a refusal to write.
+    const response = await provision(personBody({ role: "admin" }));
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+
+    await reconcileWorkspaceMemberRole(
+      holder.workspace.id,
+      kaneoUserId,
+      "member",
+    );
+
+    expect(await membershipsOf(kaneoUserId)).toEqual([
+      { workspaceId: holder.workspace.id, role: "member" },
+    ]);
   });
 });
 

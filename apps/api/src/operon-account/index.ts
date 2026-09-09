@@ -1,6 +1,15 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import {
+  OPERON_ACCOUNT_RECOVERY_ATTEMPTS,
+  OPERON_ACCOUNT_RECOVERY_DELAY_MS,
+  OPERON_PROVIDER_ID,
+  type PostgresFailure,
+  postgresFailure,
+  reconcileWorkspaceMemberRole,
+  UNIQUE_VIOLATION,
+} from "../auth";
 import db from "../database";
 import {
   accountTable,
@@ -350,24 +359,14 @@ operonAccount.patch("/account-id", async (c) => {
  * separate statements. So a committed email with no account row is not a mismatch — it is
  * a live OIDC first login caught mid-write, and a terminal 409 there would call a
  * succeeding sign-in an identity theft. The recovery therefore re-reads that user's
- * account rows {@link ACCOUNT_RECOVERY_ATTEMPTS} more times,
- * {@link ACCOUNT_RECOVERY_DELAY_MS} apart, and succeeds the moment the matching row
+ * account rows {@link OPERON_ACCOUNT_RECOVERY_ATTEMPTS} more times,
+ * {@link OPERON_ACCOUNT_RECOVERY_DELAY_MS} apart, and succeeds the moment the matching row
  * appears — under the SAME provider-and-subject verification, never on the email. A row
  * that arrives carrying a different subject is the 409 immediately. Only an expired window
  * is a terminal 409, and that answer carries `waitedMs` so the window is visible in the
  * log rather than inferred. The wait holds no transaction, no row lock and no advisory
  * lock: this transaction's `user` insert is already rolled back before the first re-read.
  */
-
-/** Three more reads, 500 ms apart — decision 122's frozen literals. */
-const ACCOUNT_RECOVERY_ATTEMPTS = 3;
-const ACCOUNT_RECOVERY_DELAY_MS = 500;
-
-/** Postgres' unique-violation SQLSTATE. */
-const UNIQUE_VIOLATION = "23505";
-
-/** The provider id Better Auth stores an Operon OIDC subject under. */
-const OPERON_PROVIDER_ID = "custom";
 
 type OperonRole = "admin" | "member";
 
@@ -377,31 +376,6 @@ type OperonRole = "admin" | "member";
  * caller made is rolled back before the winner is re-read.
  */
 class AccountClaimLost extends Error {}
-
-type PostgresFailure = {
-  code?: string;
-  constraint?: string;
-  detail?: string;
-  cause?: unknown;
-};
-
-/**
- * The pg error under a drizzle one.
- *
- * `drizzle-orm@0.45` wraps every driver error in a `DrizzleQueryError` whose `cause` is
- * the `pg` error carrying `code` and `constraint`, and a transaction adds another layer.
- * Reading `error.code` directly finds nothing, which would send a unique violation down
- * the 500 path instead of the recovery.
- */
-function postgresFailure(error: unknown): PostgresFailure | null {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current; depth += 1) {
-    const candidate = current as PostgresFailure;
-    if (typeof candidate.code === "string") return candidate;
-    current = candidate.cause;
-  }
-  return null;
-}
 
 /** Was this violation the `user.email` key rather than some other unique index? */
 function isEmailViolation(failure: PostgresFailure): boolean {
@@ -454,42 +428,46 @@ async function userIdForSubject(sub: string): Promise<string | null> {
  * (decision 115): an `owner` row is never demoted, because `createOrganization` makes the
  * bootstrap admin the OWNER and Operon's `role` claim is two-valued, so reconciling it
  * would leave the workspace with nobody who owns it.
+ *
+ * ── THERE IS NO "DOES A MEMBERSHIP EXIST" CHECK HERE ANY MORE (round-1 finding 1) ────
+ *
+ * There was, and it was the same read-then-insert `createOperonWorkspace` already refuses
+ * to make for the workspace slug and this route already refuses to make for the account
+ * subject. Two writers — this one and Better Auth's `addMember` on the login path — both
+ * read "no membership" and both inserted, and NOTHING in upstream's schema forbade the
+ * second row. The damage is not the duplicate itself but what it does to the reconcile
+ * below: it updates the row it read, so a later demotion from `admin` to `member` moved
+ * one row and left the other still saying `admin`, and the demotion reported success
+ * without happening.
+ *
+ * Migration `0047` makes `(workspace_id, user_id)` unique, and the insert claims it
+ * through `ON CONFLICT DO NOTHING` rather than a `try/catch` on SQLSTATE 23505 — the
+ * conflict is then resolved by Postgres inside the statement, so it can never abort an
+ * enclosing transaction the way a raised unique violation would. Either way the loser
+ * falls through to the same reconcile, which is the recovery: re-read the winner's row
+ * and put the role right.
  */
 async function reconcileMembership(
   workspaceId: string,
   userId: string,
   role: OperonRole,
 ): Promise<void> {
-  const [existing] = await db
-    .select({
-      id: workspaceUserTable.id,
-      role: workspaceUserTable.role,
-    })
-    .from(workspaceUserTable)
-    .where(
-      and(
-        eq(workspaceUserTable.workspaceId, workspaceId),
-        eq(workspaceUserTable.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  if (!existing) {
-    await db.insert(workspaceUserTable).values({
+  const inserted = await db
+    .insert(workspaceUserTable)
+    .values({
       workspaceId,
       userId,
       role,
       joinedAt: new Date(),
-    });
-    return;
-  }
+    })
+    .onConflictDoNothing({
+      target: [workspaceUserTable.workspaceId, workspaceUserTable.userId],
+    })
+    .returning({ id: workspaceUserTable.id });
 
-  if (existing.role === "owner" || existing.role === role) return;
+  if (inserted.length > 0) return;
 
-  await db
-    .update(workspaceUserTable)
-    .set({ role })
-    .where(eq(workspaceUserTable.id, existing.id));
+  await reconcileWorkspaceMemberRole(workspaceId, userId, role);
 }
 
 operonAccount.post("/user", async (c) => {
@@ -616,10 +594,14 @@ operonAccount.post("/user", async (c) => {
     }
 
     let waitedMs = 0;
-    for (let attempt = 0; attempt <= ACCOUNT_RECOVERY_ATTEMPTS; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt <= OPERON_ACCOUNT_RECOVERY_ATTEMPTS;
+      attempt += 1
+    ) {
       if (attempt > 0) {
-        await sleep(ACCOUNT_RECOVERY_DELAY_MS);
-        waitedMs += ACCOUNT_RECOVERY_DELAY_MS;
+        await sleep(OPERON_ACCOUNT_RECOVERY_DELAY_MS);
+        waitedMs += OPERON_ACCOUNT_RECOVERY_DELAY_MS;
       }
 
       const accounts = await db

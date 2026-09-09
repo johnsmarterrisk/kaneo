@@ -183,9 +183,23 @@ export const workspaceUserTable = pgTable(
     role: text("role").default("member").notNull(),
     joinedAt: timestamp("joined_at", { mode: "date" }).notNull(),
   },
+  // Operon fork addition (round-1 finding 1, task T14) — one membership row per person
+  // per workspace, enforced by the database rather than by each writer checking first.
+  // `workspace_member` has three writers on this instance: Better Auth's own
+  // `addMember`, `joinOperonWorkspace` on the login path, and
+  // `POST /internal/operon/user`'s reconcile. Every one of them did check-then-insert,
+  // which is not serialisable — two readers both see nothing and both insert — and a
+  // SECOND row is not a cosmetic duplicate: role reconciliation addresses the row it
+  // read, so a later demotion moves one row and leaves the other still carrying the
+  // higher role. See `apps/api/drizzle/0047_workspace_member_unique.sql` and
+  // `docs/fork-discipline.md` §3 in the Operon repository.
   (table) => [
     index("workspace_member_workspaceId_idx").on(table.workspaceId),
     index("workspace_member_userId_idx").on(table.userId),
+    unique("workspace_member_workspace_user_unique").on(
+      table.workspaceId,
+      table.userId,
+    ),
   ],
 );
 

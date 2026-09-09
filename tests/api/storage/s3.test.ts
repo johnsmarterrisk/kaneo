@@ -26,6 +26,7 @@ describe("S3 helpers", () => {
   const originalPathStyle = process.env.S3_FORCE_PATH_STYLE;
   const originalKeyPrefix = process.env.S3_KEY_PREFIX;
   const originalPublicBaseUrl = process.env.S3_PUBLIC_BASE_URL;
+  const originalUploadProxyBaseUrl = process.env.S3_UPLOAD_PROXY_BASE_URL;
 
   beforeEach(() => {
     delete process.env.S3_MAX_IMAGE_UPLOAD_BYTES;
@@ -80,6 +81,12 @@ describe("S3 helpers", () => {
       delete process.env.S3_PUBLIC_BASE_URL;
     } else {
       process.env.S3_PUBLIC_BASE_URL = originalPublicBaseUrl;
+    }
+
+    if (originalUploadProxyBaseUrl === undefined) {
+      delete process.env.S3_UPLOAD_PROXY_BASE_URL;
+    } else {
+      process.env.S3_UPLOAD_PROXY_BASE_URL = originalUploadProxyBaseUrl;
     }
 
     if (originalKeyPrefix === undefined) {
@@ -288,7 +295,7 @@ describe("S3 helpers", () => {
     );
   });
 
-  it("toPublicUploadUrl returns the signed URL untouched without a usable public base", () => {
+  it("toPublicUploadUrl returns the signed URL untouched without a usable proxy base", () => {
     const signed = "http://minio:9000/bucket/key.png?X-Amz-Signature=abc";
 
     expect(toPublicUploadUrl(signed, undefined)).toBe(signed);
@@ -296,14 +303,16 @@ describe("S3 helpers", () => {
     expect(toPublicUploadUrl(signed, "not a url")).toBe(signed);
   });
 
-  it("createTaskImageUploadUrl returns the URL on the public origin and path", async () => {
+  it("createTaskImageUploadUrl returns the URL on the upload proxy's origin and path", async () => {
     process.env.S3_ENDPOINT = "http://minio:9000";
     process.env.S3_BUCKET = "operon-initiative";
     process.env.S3_ACCESS_KEY_ID = "test-access-key";
     process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
     process.env.S3_REGION = "us-east-1";
     process.env.S3_FORCE_PATH_STYLE = "true";
-    process.env.S3_PUBLIC_BASE_URL = "https://initiative.operon.lvh.me:8443/s3";
+    process.env.S3_UPLOAD_PROXY_BASE_URL =
+      "https://initiative.operon.lvh.me:8443/s3";
+    delete process.env.S3_PUBLIC_BASE_URL;
     delete process.env.S3_KEY_PREFIX;
 
     const upload = await createTaskImageUploadUrl({
@@ -322,6 +331,39 @@ describe("S3 helpers", () => {
     expect(url.pathname).toBe(`/s3/operon-initiative/${upload.key}`);
     expect(url.searchParams.has("X-Amz-Signature")).toBe(true);
     expect(url.searchParams.get("X-Amz-SignedHeaders")).toContain("host");
+  });
+
+  it("createTaskImageUploadUrl leaves the signed URL alone when S3_PUBLIC_BASE_URL is set but the proxy opt-in is not", async () => {
+    // Round-1 finding 4. `S3_PUBLIC_BASE_URL` is upstream's OPTIONAL PUBLIC ASSET BASE —
+    // the origin objects are served from — and upstream reads it into the storage config
+    // without ever changing an upload with it. An instance that had set it must keep
+    // uploading to `S3_ENDPOINT` byte for byte after taking this build; the rewrite is
+    // reached only through the explicit `S3_UPLOAD_PROXY_BASE_URL` opt-in Operon's compose
+    // sets, because a presigned PUT carries a SigV4 signature over the host and the
+    // canonical URI and only a forwarding PROXY can answer it.
+    process.env.S3_ENDPOINT = "https://storage.example.test";
+    process.env.S3_BUCKET = "kaneo";
+    process.env.S3_ACCESS_KEY_ID = "test-access-key";
+    process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
+    process.env.S3_REGION = "us-east-1";
+    process.env.S3_FORCE_PATH_STYLE = "true";
+    process.env.S3_PUBLIC_BASE_URL = "https://cdn.example.test/assets";
+    delete process.env.S3_UPLOAD_PROXY_BASE_URL;
+    delete process.env.S3_KEY_PREFIX;
+
+    const upload = await createTaskImageUploadUrl({
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      surface: "description",
+      filename: "report.png",
+      contentType: "image/png",
+    });
+
+    const url = new URL(upload.uploadUrl);
+    expect(url.origin).toBe("https://storage.example.test");
+    expect(url.pathname).toBe(`/kaneo/${upload.key}`);
+    expect(upload.uploadUrl.startsWith("https://cdn.example.test")).toBe(false);
   });
 
   it("creates presigned upload URLs without hoisted checksum query params", async () => {

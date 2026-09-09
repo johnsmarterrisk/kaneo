@@ -40,6 +40,12 @@ type StorageConfig = {
   accessKeyId: string;
   secretAccessKey: string;
   publicBaseUrl?: string;
+  /**
+   * Operon fork addition (task T13, round-1 finding 4). The OPT-IN that moves a presigned
+   * PUT onto a reachable origin — deliberately not `publicBaseUrl`. See
+   * {@link toPublicUploadUrl}.
+   */
+  uploadProxyBaseUrl?: string;
   keyPrefix: string;
   forcePathStyle: boolean;
   maxImageUploadBytes: number;
@@ -146,6 +152,7 @@ function getStorageConfig(): StorageConfig {
     accessKeyId,
     secretAccessKey,
     publicBaseUrl: env("S3_PUBLIC_BASE_URL") || undefined,
+    uploadProxyBaseUrl: env("S3_UPLOAD_PROXY_BASE_URL") || undefined,
     keyPrefix: env("S3_KEY_PREFIX"),
     forcePathStyle: parseBoolean(process.env.S3_FORCE_PATH_STYLE, true),
     maxImageUploadBytes: parsePositiveInt(
@@ -293,8 +300,22 @@ export function validateTaskAssetUploadInput(
  * `S3_ENDPOINT` has to stay the in-network storage origin, because the same client also
  * performs server-side GET and DELETE (`getPrivateObject`, `deleteS3Object`) from inside
  * the private network where the public hostname does not resolve. So the presigned PUT
- * comes back addressed to a host the browser cannot reach, and `S3_PUBLIC_BASE_URL` is
- * how a deployment says where that request should really go.
+ * comes back addressed to a host the browser cannot reach, and
+ * `S3_UPLOAD_PROXY_BASE_URL` is how a deployment says where that request should really go.
+ *
+ * ── WHY A NEW VARIABLE AND NOT `S3_PUBLIC_BASE_URL` (round-1 finding 4) ──────────────
+ *
+ * The first revision of this rewrite read `S3_PUBLIC_BASE_URL`, which upstream already
+ * reads into its storage config as an OPTIONAL PUBLIC ASSET BASE — the origin objects are
+ * SERVED from. Repurposing it made every upstream deployment that had set it start
+ * uploading somewhere else the moment it took this build, and a presigned PUT is not a
+ * public asset URL: SigV4 signs the host and the canonical URI, so an origin that merely
+ * serves objects will answer `SignatureDoesNotMatch` unless it also forwards the request
+ * to the host the signature was computed against. That is a property of a PROXY, and it
+ * has to be opted into rather than inferred. `S3_UPLOAD_PROXY_BASE_URL` is that opt-in;
+ * Operon's compose sets it, upstream's does not, and with it unset this function returns
+ * the signed URL untouched, which is upstream's behaviour byte for byte.
+ * `S3_PUBLIC_BASE_URL` keeps upstream's meaning and is not read here at all.
  *
  * BOTH HALVES OF THE BASE MOVE, the origin and the path. When the public base is a
  * gateway PREFIX rather than a bare origin — `https://app.example/s3` in front of a
@@ -310,16 +331,19 @@ export function validateTaskAssetUploadInput(
  * gateway is then responsible for stripping its own prefix back off and forwarding the
  * host the signature was computed against.
  *
- * An unset or unparseable public base returns the signed URL untouched, which is the
+ * An unset or unparseable proxy base returns the signed URL untouched, which is the
  * upstream behaviour for a deployment whose storage endpoint is already public.
  */
-export function toPublicUploadUrl(signedUrl: string, publicBaseUrl?: string) {
-  if (!publicBaseUrl) return signedUrl;
+export function toPublicUploadUrl(
+  signedUrl: string,
+  uploadProxyBaseUrl?: string,
+) {
+  if (!uploadProxyBaseUrl) return signedUrl;
 
   let base: URL;
   let signed: URL;
   try {
-    base = new URL(publicBaseUrl);
+    base = new URL(uploadProxyBaseUrl);
     signed = new URL(signedUrl);
   } catch {
     return signedUrl;
@@ -352,7 +376,7 @@ export async function createTaskImageUploadUrl(
 
   return {
     key,
-    uploadUrl: toPublicUploadUrl(signedUrl, config.publicBaseUrl),
+    uploadUrl: toPublicUploadUrl(signedUrl, config.uploadProxyBaseUrl),
     headers: {
       "Content-Type": context.contentType,
     },
