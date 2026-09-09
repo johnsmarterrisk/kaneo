@@ -1378,7 +1378,50 @@ async function provisionOperonUser(user: {
     if (outcome.result) return;
   }
 
-  const ack = await postOperonKaneoUser(identity);
+  // ── THE KEY-LESS SETTLE IS A CROSS-STORE WRITE TOO (R25, decisions 34 and 54) ───────
+  //
+  // Round-1's Important finding on the fork gate. This callback carries no credential, so it
+  // never went near `withOperonServiceKeyLock` and was never counted — but Operon's receiver
+  // settles `identities.kaneo_user_id` on it, and the Kaneo-side membership this function
+  // has already written is the other half of that pair. A sign-in that landed between the
+  // two dumps therefore straddled them while `credentialOpsInFlight` read zero.
+  //
+  // Counted with the SAME pair the lock uses, so the counter accounts for every cross-store
+  // write this fork initiates rather than only the credential ones, and the `finally` is
+  // what keeps a thrown callback from wedging every later acquisition. A timeout still
+  // records the id unresolved, because `postOperonKaneoUser`'s `catch` does that for every
+  // caller — and it must, for the same reason it does on a credential delivery: the abort
+  // tells Operon nothing while its transaction runs on to its own commit.
+  //
+  // The barrier's OTHER half is Operon's: while the flag is held its receiver refuses a
+  // key-less delivery BEFORE writing anything and answers the window instead.
+  beginOperonCredentialOp();
+  let ack: OperonCallbackAck;
+  try {
+    ack = await postOperonKaneoUser(identity);
+  } finally {
+    endOperonCredentialOp();
+  }
+
+  // NOTHING IS ROLLED BACK, exactly as the credential path rolls nothing back. Everything
+  // written before this callback — the instance role and the workspace membership — is
+  // KANEO-LOCAL and idempotent (see this function's header), so a deferred settle leaves a
+  // COMPLETE membership on the fork side and no `kaneo_user_id` on Operon's. That is the
+  // direction a restore heals from: the next sign-in re-reports the same `(sub,
+  // kaneoUserId)` under a fresh delivery id and settles it. The reverse — Operon holding an
+  // id for a Kaneo row its dump never captured — is the pairing that cannot heal, and is
+  // exactly what the receiver's refusal prevents.
+  //
+  // LOGGED AND NOT RETURNED ON: the ack of a refused settle carries neither
+  // `serviceKeyValid` nor `serviceKeyOnFile`, so `operonNeedsServiceKey` is already `false`
+  // below; and an Operon that reports the window while still answering those fields is
+  // caught by the re-mint's own deferral guard, which has the more specific line to log.
+  const settleDeferral = operonMaintenanceDeferral();
+  if (settleDeferral.deferred) {
+    console.warn(
+      `[operon] maintenance window: kaneo_user_id was NOT settled for kaneo user ${user.id}; the next sign-in after the window re-reports it; retry_after_s=${settleDeferral.retryAfterS ?? "unset"}`,
+    );
+  }
 
   if (
     claims.role === "admin" &&

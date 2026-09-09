@@ -30,6 +30,13 @@ import { type Context, Hono } from "hono";
  *     delivery is inside the counted region and not after it. Every early return and every
  *     throw decrements, because a counter that leaks on an error path is a permanent drain
  *     failure — one login that threw would 503 Operon's reissues for ever.
+ *     **AND THE KEY-LESS SETTLE IS COUNTED BY THE SAME PAIR** (round-1 finding on the fork
+ *     gate). The ordinary callback carries no credential and takes no lock, but Operon's
+ *     receiver settles `identities.kaneo_user_id` on it while the fork has already written
+ *     the workspace membership — one row in each store, which is the definition of the
+ *     fifth writer. Counting only the credential ones let a new sign-in straddle the two
+ *     dumps while this number read zero. The name is now narrower than what it counts,
+ *     and it is kept because it is the wire field Operon polls.
  *   * `unresolvedDeliveries` — and this is round 3's blocker.
  *     `postOperonKaneoUser` aborts its own request after `OPERON_S2S_TIMEOUT_MS`
  *     (`auth.ts`, ten seconds) and returns `null` from its `catch`. The abort closes the
@@ -220,17 +227,18 @@ export function recordUnresolvedOperonDelivery(deliveryId: string): void {
   // The id, never the credential (Operon AGENTS.md rule 23). A delivery id is a random
   // UUID this process generated and authenticates as nothing.
   console.warn(
-    `[operon] the credential delivery ${deliveryId} ended without an HTTP status; recorded unresolved until operon reports a verdict`,
+    `[operon] the operon delivery ${deliveryId} ended without an HTTP status; recorded unresolved until operon reports a verdict`,
   );
 }
 
 /**
  * Apply Operon's verdicts. Returns the ids that were actually cleared.
  *
- * `absent` gets a named line because it means this fork minted a credential Operon never
- * received: nothing is broken, but the next sign-in's `serviceKeyValid: false` re-check is
- * what re-delivers it, and an operator reading the log should be able to see that happen
- * rather than infer it.
+ * `absent` gets a named line because it means a delivery this fork sent never landed —
+ * a credential Operon never received, or a `kaneo_user_id` it never settled. Nothing is
+ * broken either way: the next sign-in re-reports the user, and its `serviceKeyValid: false`
+ * re-check re-delivers any key. An operator reading the log should be able to SEE that
+ * happen rather than infer it.
  */
 export function resolveOperonDeliveries(
   verdicts: Array<{ deliveryId: string; verdict: OperonDeliveryVerdict }>,
@@ -241,7 +249,7 @@ export function resolveOperonDeliveries(
     cleared.push(deliveryId);
     if (verdict === "absent") {
       console.warn(
-        `[operon] operon reports delivery ${deliveryId} ABSENT — a service key was minted that operon never received; the next admin sign-in re-delivers it`,
+        `[operon] operon reports delivery ${deliveryId} ABSENT — operon never received it, so it settled no kaneo_user_id and installed no service key; the next sign-in re-reports the user and the admin re-check re-delivers any key`,
       );
     }
   }

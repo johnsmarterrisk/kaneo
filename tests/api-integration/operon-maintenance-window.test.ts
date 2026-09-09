@@ -79,6 +79,19 @@ let ackRetryAfterS: number | undefined;
 /** Operon's side of the credential, modelled exactly as `operon-oidc-only.test.ts` does. */
 let operonHeldKey: string | null;
 let operonInstalledAtMs: number | null;
+/**
+ * Operon's `identities.kaneo_user_id` column, by subject — the OTHER half of the fifth
+ * writer's pair, and the one the round-1 fork finding was about. Modelled here because
+ * "no `kaneo_user_id` was written" is the assertion that case turns on.
+ */
+let operonSettled: Map<string, string>;
+/**
+ * Operon holds its maintenance flag: the receiver refuses a KEY-LESS delivery before it
+ * writes anything and answers the window instead
+ * (`platform-service/src/identity/internal-kaneo.js`). A credential delivery is still
+ * applied — it was admitted before the flag, and the drain waits for it.
+ */
+let operonFlagHeld: boolean;
 /** Run something on the Nth callback from now, before the receiver sees it. */
 let beforeCallback: { countdown: number; run: () => void } | null;
 /** What the stub does INSTEAD of answering: the seams the timeout cases need. */
@@ -93,6 +106,14 @@ let countsDuringDelivery: number[];
 let warnings: string[];
 
 function operonReceive(delivery: Delivery) {
+  // THE RECEIVER'S OWN BARRIER. While the flag is held a key-less delivery writes NOTHING
+  // — no claim row and no `kaneo_user_id` — because it is a cross-store write that has not
+  // been admitted, and unlike a credential delivery it costs nothing to refuse: the next
+  // sign-in re-reports the same pair under a fresh delivery id.
+  if (operonFlagHeld && !delivery.apiKey) return;
+  // Settled on EVERY delivery that is not refused, key-less ones included: that write is
+  // exactly what pairs with the workspace membership the fork made a moment earlier.
+  operonSettled.set(delivery.sub, delivery.kaneoUserId);
   if (!delivery.apiKey) return;
   const enabled = delivery.enabledServiceKeyIds;
   if (
@@ -115,6 +136,16 @@ function operonServiceKeyValid(delivery: Delivery) {
 }
 
 function ackBody(delivery: Delivery) {
+  if (operonFlagHeld && !delivery.apiKey) {
+    // Exactly what the receiver answers when it refuses before writing: the window and its
+    // hint, and NONE of the service-key fields — it returned before it read them, so
+    // reporting them would be reporting a state it never looked at.
+    return {
+      deferred: true,
+      maintenance: true,
+      retry_after_s: ackRetryAfterS ?? 45,
+    };
+  }
   return {
     ok: true,
     serviceKeyOnFile: operonHeldKey !== null,
@@ -133,6 +164,8 @@ beforeEach(async () => {
   ackRetryAfterS = undefined;
   operonHeldKey = null;
   operonInstalledAtMs = null;
+  operonSettled = new Map();
+  operonFlagHeld = false;
   beforeCallback = null;
   respondWith = { kind: "ok" };
   countsDuringDelivery = [];
@@ -480,11 +513,85 @@ describe("(ii) admission accounting — the counter", () => {
       reconcileOperonSession(b.id),
     ]);
 
-    // Only the login that WON the advisory lock is admitted, so no reading ever exceeds
-    // one — the loser skips rather than queueing, and a skip must not be counted.
-    expect(Math.max(0, ...countsDuringDelivery)).toBe(1);
+    // Only the login that WON the advisory lock mints and delivers a key — the loser skips
+    // rather than queueing, and a skip is not counted as a lock admission.
+    //
+    // A reading of TWO is nevertheless legitimate here, and was not before the key-less
+    // settle was counted: the loser falls through to its own key-less callback, which is a
+    // cross-store write in its own right and must be in the counter while it is open. What
+    // this case proves is that the LOCK admitted exactly one, not that the counter is
+    // capped at one.
+    expect(deliveries.filter((d) => d.apiKey)).toHaveLength(1);
     expect(operonMaintenanceState().credentialOpsInFlight).toBe(0);
   });
+});
+
+// ─── (ii) The sign-in that is admitted AFTER the flag is held ────────────────────
+
+describe("(ii) a new sign-in inside the window — the key-less settle", () => {
+  it("is refused before any write, counted while open, and back to zero", async () => {
+    // A workspace and a credential already exist, so this login takes neither the
+    // bootstrap path nor the re-mint path — it is the ORDINARY key-less callback, the one
+    // that used to run entirely outside the barrier (round-1's Important finding).
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    const adminSub = freshSub();
+    await signIn(admin, "admin", adminSub);
+    expect(operonSettled.get(adminSub)).toBe(admin.id);
+
+    // Operon takes its flag. The dumps have NOT begun — this is the phase the drain runs
+    // in, and the phase in which a brand-new OIDC sign-in is still admitted.
+    operonFlagHeld = true;
+    ackRetryAfterS = 45;
+
+    const member = await seedUser(`member-${randomUUID()}@example.com`);
+    const memberSub = freshSub();
+    await signIn(member, "member", memberSub);
+
+    // OPERON WROTE NOTHING. No `kaneo_user_id` for this subject, so the pair of dumps
+    // cannot be straddled by it however they are ordered.
+    expect(operonSettled.has(memberSub)).toBe(false);
+
+    // THE FORK'S OWN WRITE STANDS, and that is deliberate. The membership is kaneo-local
+    // and idempotent, and "Kaneo has the row, Operon has not learned the id yet" is the
+    // direction a restore heals from — the next sign-in re-reports it. The reverse pairing
+    // is the one that cannot heal, and refusing the settle is what prevents it.
+    const memberships = await db.select().from(schema.workspaceUserTable);
+    expect(memberships.filter((m) => m.userId === member.id)).toHaveLength(1);
+
+    // AND IT WAS INSIDE THE COUNTED REGION while it was open — which is what lets the
+    // drain see a sign-in that raced the flag, instead of reading zero over an open write.
+    expect(countsDuringDelivery.at(-1)).toBe(1);
+    expect(operonMaintenanceState().credentialOpsInFlight).toBe(0);
+    expect(operonMaintenanceState().unresolvedDeliveries).toEqual([]);
+    expect(
+      warnedAbout("maintenance window: kaneo_user_id was NOT settled"),
+    ).toBe(true);
+    expect(warnedAbout("retry_after_s=45")).toBe(true);
+
+    // The window closes, and the very next sign-in settles what was deferred.
+    operonFlagHeld = false;
+    await signIn(member, "member", memberSub);
+    expect(operonSettled.get(memberSub)).toBe(member.id);
+  });
+
+  it("records an UNRESOLVED delivery when the key-less settle times out", async () => {
+    const admin = await seedUser(`admin-${randomUUID()}@example.com`);
+    await signIn(admin, "admin");
+
+    // The receiver never answers this one. The abort tells Operon nothing while the write
+    // it opened runs on, so the id must be named rather than decremented into silence —
+    // the same rule the credential path follows, for the same reason.
+    respondWith = { kind: "never" };
+    const member = await seedUser(`member-${randomUUID()}@example.com`);
+    await signIn(member, "member");
+
+    const delivery = deliveries.at(-1);
+    expect(delivery?.apiKey).toBeUndefined();
+    expect(operonMaintenanceState().credentialOpsInFlight).toBe(0);
+    expect(operonMaintenanceState().unresolvedDeliveries).toEqual([
+      delivery?.deliveryId,
+    ]);
+  }, 30_000);
 });
 
 describe("(ii) the timeout cases — a status is an answer, silence is not", () => {
