@@ -85,6 +85,64 @@ function privateDestinationsAllowed(): boolean {
   );
 }
 
+// ── OPERON FORK CHANGE — the private-destination allowlist ───────────────────
+//
+// `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` is a FULL short-circuit: set, it
+// returns from `assertPublicDestination` before a single address is examined,
+// so every private range this file exists to refuse — the bridge gateway, a
+// neighbouring container, `169.254.169.254` — becomes reachable by anyone who
+// can save a generic-webhook or Gitea URL. That is tolerable on a workstation
+// bound to loopback and it is not tolerable on a shared public host.
+//
+// Turning the boolean off alone is not the fix, because Operon's own Telegraph
+// receiver lives at `http://platform-service:3001`, which resolves into
+// `172.16.0.0/12` — the Docker bridge range `isDisallowedIpv4` refuses — so the
+// signal pipeline would go down rather than get harder to abuse.
+//
+// So the deployment names the ONE private destination it means to permit and
+// nothing else. `KANEO_WEBHOOK_DESTINATION_ALLOWLIST` is a comma-separated list
+// of exact `host` or `host:port` values, consulted BEFORE the address rules and
+// AFTER the protocol check, and it is what replaces the boolean in production.
+// The boolean is left exactly as upstream wrote it and still short-circuits
+// where it is set, because the local stack sets it and a fork change must not
+// break the local stack.
+//
+// Matching is EXACT on the host and is never a suffix, a prefix or a range. A
+// suffix rule is how an allowlist becomes an open door — `platform-service` as
+// a suffix would admit `evil-platform-service` — and a range would re-admit the
+// neighbours the address rules exist to keep out. The two spellings differ only
+// in how much of the destination they pin: `host:port` admits that host on that
+// port and no other, while a bare `host` admits that host on ANY port. The bare
+// form has to mean "any port" to mean anything at all, because `URL.host` omits
+// a default port — `platform-service:80` would never match `http://platform-service/`
+// — so a bare entry that pinned the default port would be unwritable in the
+// other form and would leave "this host, any port" inexpressible. Production
+// therefore uses the `host:port` form. Comparison is case-folded, hostnames
+// being case-insensitive.
+
+function destinationAllowlist(): string[] {
+  return String(process.env.KANEO_WEBHOOK_DESTINATION_ALLOWLIST ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== "");
+}
+
+export function isAllowlistedDestination(url: URL): boolean {
+  const entries = destinationAllowlist();
+  if (entries.length === 0) {
+    return false;
+  }
+
+  // `url.host` carries the port only when it is not the scheme's default and
+  // `url.hostname` never carries one. Comparing an entry against BOTH is what
+  // makes `host:port` port-exact and a bare `host` port-agnostic in one pass.
+  // IPv6 literals keep their brackets in both, which is the spelling a URL
+  // uses, so it is the spelling an entry must use too.
+  const candidates = [url.host.toLowerCase(), url.hostname.toLowerCase()];
+
+  return entries.some((entry) => candidates.includes(entry));
+}
+
 export async function assertPublicDestination(
   destinationUrl: string,
   label: string,
@@ -93,6 +151,13 @@ export async function assertPublicDestination(
 
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error(`${label} URL must use http or https`);
+  }
+
+  // Consulted BEFORE the address rules and before the legacy boolean: it is the
+  // production form of the same permission, narrowed to the exact destinations
+  // the deployment names rather than to every private range at once.
+  if (isAllowlistedDestination(url)) {
+    return;
   }
 
   if (privateDestinationsAllowed()) {

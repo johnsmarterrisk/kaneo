@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only four kinds of change are permitted, and every file this
+upstream built it. Only eight kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -37,10 +37,24 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      came from.
   4. Workspace bootstrap — a single shared workspace, created by the first
      admin's login and joined by everyone after.
+  5. Build hygiene — one `.dockerignore` line keeping a build-cache directory
+     out of the image's context.
+  6. Workspace permissions in Operon mode — an added member payload that lets
+     members assign and delete tasks; upstream's own `member` payload is
+     untouched, so an instance that is not Operon's behaves as it always did.
+  7. Object storage — the presigned upload URL is rewritten onto an origin a
+     browser outside the compose network can actually reach, and only when the
+     deployment opts in.
+  8. Egress policy — a private-destination allowlist for outbound webhook and
+     Gitea targets, so a production deployment can permit exactly the internal
+     receiver Operon runs instead of switching every private range back on with
+     upstream's `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` boolean.
 
-Changes landed on this branch so far:
-
-  - NOTICE (this file), added at the fork point.
+That count is RE-DERIVED from this branch's tree whenever it changes, never
+incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
+touch list the eight kinds map onto, path by path, and §7 records which task
+landed each one. An inventory whose number nobody re-checked is what makes a
+fork's provenance untrustworthy.
 
 A fork commit that touches any path not declared in `docs/fork-discipline.md`
 is a defect, not a feature: the touch list is what keeps this fork mergeable
