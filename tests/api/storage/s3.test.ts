@@ -12,6 +12,7 @@ import {
   parsePositiveInt,
   resolveS3Credentials,
   sanitizePathSegment,
+  toPublicUploadUrl,
   validateTaskAssetUploadInput,
 } from "../../../apps/api/src/storage/s3";
 
@@ -24,6 +25,7 @@ describe("S3 helpers", () => {
   const originalRegion = process.env.S3_REGION;
   const originalPathStyle = process.env.S3_FORCE_PATH_STYLE;
   const originalKeyPrefix = process.env.S3_KEY_PREFIX;
+  const originalPublicBaseUrl = process.env.S3_PUBLIC_BASE_URL;
 
   beforeEach(() => {
     delete process.env.S3_MAX_IMAGE_UPLOAD_BYTES;
@@ -72,6 +74,12 @@ describe("S3 helpers", () => {
       delete process.env.S3_FORCE_PATH_STYLE;
     } else {
       process.env.S3_FORCE_PATH_STYLE = originalPathStyle;
+    }
+
+    if (originalPublicBaseUrl === undefined) {
+      delete process.env.S3_PUBLIC_BASE_URL;
+    } else {
+      process.env.S3_PUBLIC_BASE_URL = originalPublicBaseUrl;
     }
 
     if (originalKeyPrefix === undefined) {
@@ -224,6 +232,96 @@ describe("S3 helpers", () => {
       validateTaskAssetUploadInput("image/png", 2 * 1024 * 1024),
     ).toThrow("Upload exceeds the maximum upload size of 1MB.");
     expect(() => validateTaskAssetUploadInput("image/png", 512)).not.toThrow();
+  });
+
+  it("refuses a declared size over the documented default maximum", () => {
+    // No S3_MAX_IMAGE_UPLOAD_BYTES set, so this exercises the DEFAULT — the same
+    // 10485760 bytes an Operon deployment states in .env.example and mirrors as
+    // `client_max_body_size 10m` on its gateway. A declared size one byte over it must
+    // never reach the presigner.
+    delete process.env.S3_MAX_IMAGE_UPLOAD_BYTES;
+
+    expect(() =>
+      validateTaskAssetUploadInput("image/png", 10 * 1024 * 1024),
+    ).not.toThrow();
+    expect(() =>
+      validateTaskAssetUploadInput("image/png", 10 * 1024 * 1024 + 1),
+    ).toThrow("Upload exceeds the maximum upload size of 10MB.");
+  });
+
+  it("toPublicUploadUrl prepends the public base's origin AND path, preserving the signed path and query", () => {
+    const signed =
+      "http://minio:9000/operon-initiative/workspace/ws1/project/p1/task/t1/descriptions/img-1-a.png" +
+      "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=k%2F20260908%2Fus-east-1%2Fs3%2Faws4_request" +
+      "&X-Amz-Date=20260908T000000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=deadbeef";
+
+    const rewritten = toPublicUploadUrl(
+      signed,
+      "https://initiative.operon.lvh.me:8443/s3",
+    );
+
+    // The ORIGIN moved and the base's `/s3` PATH came with it. Swapping only the origin
+    // would produce `https://initiative…:8443/operon-initiative/…`, which matches no
+    // `location /s3/` and is answered by the SPA.
+    expect(rewritten).toBe(
+      "https://initiative.operon.lvh.me:8443/s3/operon-initiative/workspace/ws1/project/p1/task/t1/descriptions/img-1-a.png" +
+        "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=k%2F20260908%2Fus-east-1%2Fs3%2Faws4_request" +
+        "&X-Amz-Date=20260908T000000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=deadbeef",
+    );
+
+    // The signed halves are byte-identical: SigV4 signs the canonical path and query, so
+    // a single re-encoded character here is a SignatureDoesNotMatch at the storage server.
+    const before = new URL(signed);
+    const after = new URL(rewritten);
+    expect(after.pathname).toBe(`/s3${before.pathname}`);
+    expect(after.search).toBe(before.search);
+  });
+
+  it("toPublicUploadUrl tolerates a trailing slash and a bare-origin public base", () => {
+    const signed = "http://minio:9000/bucket/key.png?X-Amz-Signature=abc";
+
+    expect(toPublicUploadUrl(signed, "https://example.test/s3/")).toBe(
+      "https://example.test/s3/bucket/key.png?X-Amz-Signature=abc",
+    );
+    expect(toPublicUploadUrl(signed, "https://example.test")).toBe(
+      "https://example.test/bucket/key.png?X-Amz-Signature=abc",
+    );
+  });
+
+  it("toPublicUploadUrl returns the signed URL untouched without a usable public base", () => {
+    const signed = "http://minio:9000/bucket/key.png?X-Amz-Signature=abc";
+
+    expect(toPublicUploadUrl(signed, undefined)).toBe(signed);
+    expect(toPublicUploadUrl(signed, "")).toBe(signed);
+    expect(toPublicUploadUrl(signed, "not a url")).toBe(signed);
+  });
+
+  it("createTaskImageUploadUrl returns the URL on the public origin and path", async () => {
+    process.env.S3_ENDPOINT = "http://minio:9000";
+    process.env.S3_BUCKET = "operon-initiative";
+    process.env.S3_ACCESS_KEY_ID = "test-access-key";
+    process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
+    process.env.S3_REGION = "us-east-1";
+    process.env.S3_FORCE_PATH_STYLE = "true";
+    process.env.S3_PUBLIC_BASE_URL = "https://initiative.operon.lvh.me:8443/s3";
+    delete process.env.S3_KEY_PREFIX;
+
+    const upload = await createTaskImageUploadUrl({
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      surface: "description",
+      filename: "report.png",
+      contentType: "image/png",
+    });
+
+    const url = new URL(upload.uploadUrl);
+    expect(url.origin).toBe("https://initiative.operon.lvh.me:8443");
+    // The gateway prefix, then the bucket the request was signed against (path style
+    // keeps it in the signed path), then the key.
+    expect(url.pathname).toBe(`/s3/operon-initiative/${upload.key}`);
+    expect(url.searchParams.has("X-Amz-Signature")).toBe(true);
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toContain("host");
   });
 
   it("creates presigned upload URLs without hoisted checksum query params", async () => {

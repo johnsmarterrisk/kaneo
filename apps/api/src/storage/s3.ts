@@ -286,6 +286,52 @@ export function validateTaskAssetUploadInput(
   }
 }
 
+/**
+ * Move a presigned URL from the origin it was SIGNED against onto the origin AND PATH a
+ * browser can actually reach.
+ *
+ * `S3_ENDPOINT` has to stay the in-network storage origin, because the same client also
+ * performs server-side GET and DELETE (`getPrivateObject`, `deleteS3Object`) from inside
+ * the private network where the public hostname does not resolve. So the presigned PUT
+ * comes back addressed to a host the browser cannot reach, and `S3_PUBLIC_BASE_URL` is
+ * how a deployment says where that request should really go.
+ *
+ * BOTH HALVES OF THE BASE MOVE, the origin and the path. When the public base is a
+ * gateway PREFIX rather than a bare origin — `https://app.example/s3` in front of a
+ * storage service — replacing only the origin drops that prefix and produces
+ * `https://app.example/<bucket>/<key>`, which matches no gateway route and is answered
+ * by whatever else serves that host (for an SPA host, the SPA). The prefix is prepended
+ * and the signed remainder is left exactly as signed.
+ *
+ * NOTHING ELSE IS TOUCHED. The path after the prefix and the whole query string are
+ * copied byte for byte, because SigV4 signs the canonical path and the canonical query:
+ * re-encoding either invalidates the signature. Path-style addressing (the default here)
+ * keeps the bucket inside the signed path, so this rewrite never has to move it. The
+ * gateway is then responsible for stripping its own prefix back off and forwarding the
+ * host the signature was computed against.
+ *
+ * An unset or unparseable public base returns the signed URL untouched, which is the
+ * upstream behaviour for a deployment whose storage endpoint is already public.
+ */
+export function toPublicUploadUrl(signedUrl: string, publicBaseUrl?: string) {
+  if (!publicBaseUrl) return signedUrl;
+
+  let base: URL;
+  let signed: URL;
+  try {
+    base = new URL(publicBaseUrl);
+    signed = new URL(signedUrl);
+  } catch {
+    return signedUrl;
+  }
+
+  const basePath = base.pathname.replace(/\/+$/, "");
+
+  // Concatenated as strings rather than assembled through URL setters: the setters
+  // re-serialise the path and query, and a presigned URL cannot survive that.
+  return `${base.origin}${basePath}${signed.pathname}${signed.search}`;
+}
+
 export async function createTaskImageUploadUrl(
   context: TaskImageUploadContext,
 ): Promise<TaskImageUploadUrl> {
@@ -300,13 +346,13 @@ export async function createTaskImageUploadUrl(
     ContentType: context.contentType,
   });
 
-  const uploadUrl = await getSignedUrl(client, command, {
+  const signedUrl = await getSignedUrl(client, command, {
     expiresIn: config.presignTtlSeconds,
   });
 
   return {
     key,
-    uploadUrl,
+    uploadUrl: toPublicUploadUrl(signedUrl, config.publicBaseUrl),
     headers: {
       "Content-Type": context.contentType,
     },
