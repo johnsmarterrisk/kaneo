@@ -46,6 +46,7 @@ import notificationPreferences from "./notification-preferences";
 import oauth from "./oauth";
 import { createRoute, jsonResponse, z } from "./openapi";
 import operonAccount from "./operon-account";
+import operonMaintenanceState from "./operon-maintenance-state";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -583,6 +584,27 @@ export function createApp() {
   });
 
   api.route("/", mcpRoutes);
+
+  // ── Operon fork addition (Operon spec R25, R32, G10a, decisions 34, 50, 54) ────────
+  //
+  // The maintenance barrier's two server-to-server routes:
+  // `GET /api/internal/operon/maintenance-state` and
+  // `POST /api/internal/operon/resolve-deliveries`. Operon polls the first after taking its
+  // maintenance flag and admits its backup only once this fork reports
+  // `credentialOpsInFlight: 0` with an empty `unresolvedDeliveries`; it posts verdicts back
+  // on the second for deliveries that ended without an HTTP status.
+  //
+  // MOUNTED HERE, BEFORE `api.use("*")`, AND THAT IS THE WHOLE REASON IT IS NOT BESIDE
+  // `/internal/operon`'s other router below. Their caller is Operon's platform-service,
+  // which holds an HMAC over `OPERON_KANEO_S2S_SECRET` and NOT a Kaneo API key —
+  // `authenticateApiRequest` would 401 every one of them. This is the same shape as
+  // `POST /github-integration/webhook` above, and `app.route` registers the sub-router's
+  // two concrete paths rather than a catch-all, so `/internal/operon`'s API-key-gated
+  // account route below is completely undisturbed. Verification lives in the handlers, in
+  // `apps/api/src/operon-maintenance-state/index.ts`, and it fails closed on an unset
+  // secret. Deliberately not OpenAPI routes, for A8's reason: `apps/docs/` is off the fork's
+  // touch list. See docs/fork-discipline.md §3 row 9.
+  api.route("/internal/operon", operonMaintenanceState);
 
   api.use("*", async (c, next) => {
     const path = c.req.path;

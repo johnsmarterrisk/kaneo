@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only eight kinds of change are permitted, and every file this
+upstream built it. Only nine kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -49,10 +49,16 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      Gitea targets, so a production deployment can permit exactly the internal
      receiver Operon runs instead of switching every private range back on with
      upstream's `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` boolean.
+  9. Backup quiescing — the sign-in path that mints and delivers Operon's
+     service credential stands down while Operon is taking a consistent backup
+     of its two stores, and reports what it has already admitted on two
+     server-to-server routes so Operon can wait for it to drain. Nothing about
+     Kaneo's own behaviour changes when Operon is not quiescing, and no delete
+     path, board, task or object is gated.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the eight kinds map onto, path by path, and §7 records which task
+touch list the nine kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 

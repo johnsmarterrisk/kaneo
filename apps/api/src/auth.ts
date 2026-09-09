@@ -43,6 +43,13 @@ import {
 import { syncWorkspaceSeats } from "./billing/controllers/sync-seats";
 import db, { schema } from "./database";
 import { publishEvent } from "./events";
+import {
+  beginOperonCredentialOp,
+  endOperonCredentialOp,
+  observeOperonMaintenance,
+  operonMaintenanceDeferral,
+  recordUnresolvedOperonDelivery,
+} from "./operon-maintenance-state";
 import deleteAccountData from "./user/controllers/delete-account-data";
 import { checkRegistrationAllowed } from "./utils/check-registration-allowed";
 import { checkWorkspaceName } from "./utils/check-workspace-name";
@@ -1014,6 +1021,18 @@ type OperonCallbackAck = {
   serviceKeyOnFile?: boolean;
   /** The installed key is one of `enabledServiceKeyIds`. Absent on an older Operon. */
   serviceKeyValid?: boolean;
+  /**
+   * Operon is inside a quiesced maintenance window and is about to dump both stores
+   * (Operon spec R25, decisions 34 and 54).
+   *
+   * While it is `true` the mint / revoke / deliver path below DEFERS: it mints nothing and
+   * REVOKES NOTHING — revoking and then deferring the delivery is strictly worse than doing
+   * nothing, because it leaves Operon with no credential at all until the window closes.
+   * Absent on an older Operon, which is indistinguishable from `false` and is treated as it.
+   */
+  maintenance?: boolean;
+  /** How long the window is expected to last, in seconds. A hint, not a promise. */
+  retry_after_s?: number;
 } | null;
 
 /**
@@ -1055,11 +1074,15 @@ async function postOperonKaneoUser(payload: {
   }
 
   const { enabledServiceKeyIds, ...rest } = payload;
+  // Hoisted out of the body literal because the DRAIN needs it: a delivery that ends
+  // without an HTTP status is recorded `unresolved` BY THIS ID, and Operon reconciles it
+  // against the claim row its own receiver wrote under the same id (decision 54).
+  const deliveryId = randomUUID();
   const body = JSON.stringify({
     ...rest,
     enabledServiceKeyIds:
       enabledServiceKeyIds ?? (await enabledOperonServiceKeyIds()),
-    deliveryId: randomUUID(),
+    deliveryId,
     timestamp: new Date().toISOString(),
   });
   const controller = new AbortController();
@@ -1080,6 +1103,9 @@ async function postOperonKaneoUser(payload: {
       redirect: "manual",
     });
     if (!response.ok) {
+      // A STATUS IS AN ANSWER, and that is why nothing is recorded unresolved here
+      // (decision 54): a 4xx — Operon's replay 409, or a 401 — wrote nothing, and the
+      // caller's `finally` decrement below is the whole truth about this operation.
       console.error(
         `[operon] internal/kaneo/user rejected the callback (${response.status})`,
       );
@@ -1091,11 +1117,26 @@ async function postOperonKaneoUser(payload: {
     );
     // A body that will not parse is not a reason to fail a sign-in: it costs the caller
     // the re-mint signal for this login and nothing else, and the next login asks again.
+    // A 2xx WROTE EVERYTHING, even when its body will not parse, so an unparseable body
+    // is still an answer and still records nothing unresolved.
     const ack = (await Promise.resolve()
       .then(() => response.json())
       .catch(() => null)) as OperonCallbackAck;
-    return ack && typeof ack === "object" ? ack : null;
+    const parsed = ack && typeof ack === "object" ? ack : null;
+    // What Operon just told us about its window, remembered for the two writers below.
+    observeOperonMaintenance(parsed);
+    return parsed;
   } catch (error) {
+    // ── NO STATUS CAME BACK, SO NOTHING HERE KNOWS WHETHER OPERON WROTE ───────────────
+    //
+    // This is round 3's blocker. The abort above fires at OPERON_S2S_TIMEOUT_MS and lands
+    // here; it closes this fork's socket and tells Operon nothing, while the credential
+    // transaction Operon opened on receipt runs on to its own commit. Returning `null` and
+    // letting the counter fall to zero would report a drain that has not happened, and
+    // Operon's acquisition would start dumping over an open cross-store write. So the
+    // delivery is recorded UNRESOLVED and only Operon — the one party that can see its own
+    // store — can clear it, on the resolve route.
+    recordUnresolvedOperonDelivery(deliveryId);
     console.error("[operon] internal/kaneo/user callback failed", error);
     return null;
   } finally {
@@ -1308,7 +1349,22 @@ async function provisionOperonUser(user: {
   // repair takes, so the two sequences cannot interleave at all. Losing the lock is not
   // an error: the login that holds it is either bootstrapping or repairing, and this one
   // falls through to the key-less callback below.
-  if (bootstrapped && workspaceId) {
+  //
+  // ── AND IT STANDS DOWN INSIDE OPERON'S MAINTENANCE WINDOW (R25, decision 54) ────────
+  //
+  // The bootstrap mint precedes its own first callback, so it cannot be told about the
+  // window by the ack it is about to receive — decisions 52 and 56 cover the genuinely
+  // first login by ORDERING (the first Initiative sign-in happens before the `backup`
+  // profile is ever enabled). What this guard covers is every bootstrap AFTER a window has
+  // been observed on some earlier callback in this process: minting there would deliver a
+  // credential into a store that is being dumped. The observation expires, so a killed
+  // Operon cannot leave this fork deferring for ever.
+  const bootstrapDeferral = operonMaintenanceDeferral();
+  if (bootstrapped && workspaceId && bootstrapDeferral.deferred) {
+    console.warn(
+      `[operon] maintenance window: the bootstrap service key was NOT minted or delivered; retry_after_s=${bootstrapDeferral.retryAfterS ?? "unset"}`,
+    );
+  } else if (bootstrapped && workspaceId) {
     const outcome = await withOperonServiceKeyLock(() =>
       mintAndDeliverBootstrapServiceKey(identity),
     );
@@ -1330,6 +1386,18 @@ async function provisionOperonUser(user: {
     workspaceId &&
     operonNeedsServiceKey(ack)
   ) {
+    // The ack that got us here may itself have said `maintenance: true` — Operon reports
+    // BOTH fields, because a key that is invalid stays invalid whether or not a backup is
+    // running. Deferring here is what stops the re-mint from being ADMITTED at all; the
+    // second check, inside the lock and after the re-check, is what stops one that WAS
+    // admitted a moment before the flag was taken from revoking anything.
+    const deferral = operonMaintenanceDeferral();
+    if (deferral.deferred) {
+      console.warn(
+        `[operon] maintenance window: the service key was NOT re-minted and nothing was revoked; retry_after_s=${deferral.retryAfterS ?? "unset"}`,
+      );
+      return;
+    }
     await remintAndDeliverOperonServiceKey({
       sub: claims.sub,
       user,
@@ -1383,7 +1451,26 @@ async function withOperonServiceKeyLock<T>(
     );
     const locked = claim.rows[0]?.locked;
     if (locked !== true && locked !== "t") return { locked: false };
-    return { locked: true, result: await work() };
+    // ── ADMISSION ACCOUNTING (Operon spec R25, decisions 34, 50 and 54) ──────────────
+    //
+    // THE LOCK IS THE ADMISSION POINT. Operon's maintenance flag stops the NEXT credential
+    // operation; a sign-in that read `serviceKeyValid: false` from an ack sent before the
+    // flag was taken is already past it and will revoke, mint and deliver regardless. So
+    // the fork counts what it has admitted, and Operon's acquisition waits for that count
+    // to reach zero before it dumps.
+    //
+    // The increment is here — after the lock is GRANTED, so a login that skipped is not
+    // counted — and the decrement is in a `finally`, so the count is right on the success
+    // path, on every early return inside `work`, and on a throw. `work()` spans
+    // `postOperonKaneoUser`, which is what puts the DELIVERY inside the counted region
+    // rather than after it. A counter that leaked on one error path would 503 Operon's
+    // reissues for ever, which is why it is one `finally` and not a decrement per return.
+    beginOperonCredentialOp();
+    try {
+      return { locked: true, result: await work() };
+    } finally {
+      endOperonCredentialOp();
+    }
   });
 }
 
@@ -1496,6 +1583,21 @@ async function remintAndDeliverOperonServiceKey(args: {
     if (!recheck) {
       console.warn(
         "[operon] operon did not answer the re-mint re-check; nothing was revoked",
+      );
+      return;
+    }
+    // ── THE WINDOW IS RE-ASKED HERE TOO, AND IT IS ASKED BEFORE THE REVOKE ──────────
+    //
+    // This is the check that makes the barrier's flag half correct rather than nearly
+    // correct (R25, decision 54). The `serviceKeyValid: false` that admitted this login was
+    // read OUTSIDE the lock; Operon may have taken its maintenance flag in the meantime,
+    // and this re-check is the first message that can say so. Revoking and THEN deferring
+    // the delivery is strictly worse than doing nothing — it would leave Operon with no
+    // credential at all for the length of the backup — so nothing is revoked, and the next
+    // sign-in after the window does the work.
+    if (recheck.maintenance === true) {
+      console.warn(
+        `[operon] maintenance window: operon is quiescing, so nothing was revoked, minted or delivered; retry_after_s=${recheck.retry_after_s ?? "unset"}`,
       );
       return;
     }
