@@ -49,7 +49,6 @@ import { checkWorkspaceName } from "./utils/check-workspace-name";
 import {
   hasOperonOidcClaims,
   mapCustomOAuthProfileToUser,
-  peekOperonOidcClaims,
   takeOperonOidcClaims,
 } from "./utils/custom-oauth-profile";
 import { generateDemoName } from "./utils/generate-demo-name";
@@ -1105,6 +1104,38 @@ async function postOperonKaneoUser(payload: {
 }
 
 /**
+ * The claims of the sign-in that is happening now, found by the identity the DATABASE
+ * says this user holds — never by the address they happen to carry (round-2 finding 1).
+ *
+ * `account` is the authority: an Operon user has exactly one `custom` row and its
+ * `accountId` is the subject Operon authenticated. Reading the claims under that subject
+ * makes it impossible for this reconciliation to report a login to Operon under an
+ * identity the login was not for, however many callbacks are in flight for the address.
+ *
+ * The loop, rather than a single row, is for the one moment a user legitimately carries
+ * two: a rekey (`operon-account/index.ts`) moves the subject, and a login that raced it
+ * must still find its own entry. Only the subject with a live capture answers, and the
+ * capture is consumed, so at most one can.
+ */
+async function takeOperonClaimsForUser(userId: string) {
+  const subjects = await db
+    .select({ accountId: schema.accountTable.accountId })
+    .from(schema.accountTable)
+    .where(
+      and(
+        eq(schema.accountTable.userId, userId),
+        eq(schema.accountTable.providerId, OPERON_PROVIDER_ID),
+      ),
+    );
+
+  for (const { accountId } of subjects) {
+    const claims = takeOperonOidcClaims(accountId);
+    if (claims) return claims;
+  }
+  return null;
+}
+
+/**
  * Instance-admin follows Operon's verified `role` claim, and nothing else
  * (decision 49).
  *
@@ -1158,9 +1189,19 @@ async function syncOperonInstanceRole(
  * dangerous.
  *
  * A no-op for every user who did not arrive through Operon's OIDC flow, because
- * `takeOperonOidcClaims` only has an entry for one that did — and
+ * `takeOperonClaimsForUser` only finds an entry for one that did — and
  * `mapCustomOAuthProfileToUser` refills that entry on EVERY OIDC callback, which is
  * what makes the retry possible at all.
+ *
+ * ── THE CLAIMS ARE FOUND BY THE SUBJECT THIS USER HOLDS, NOT BY THEIR EMAIL ──────
+ *
+ * Round-2 finding 1. This used to be `takeOperonOidcClaims(user.email)` against a map
+ * keyed by email, so a second callback for the same address — a different Operon
+ * identity, a rekey in flight — could have overwritten the entry and this session would
+ * have been reported to Operon under SOMEBODY ELSE'S subject, permanently binding
+ * `identities.kaneo_user_id` to the wrong person. The subject is now read from the
+ * `account` table, which is the authority for who this Kaneo user actually is, and the
+ * claims are collected under it. An address is an attribute; the subject is the identity.
  *
  * ── AND A NO-OP ON EVERY INSTANCE THAT IS NOT AN OPERON INSTANCE ─────────────────
  *
@@ -1209,7 +1250,7 @@ async function provisionOperonUser(user: {
 }) {
   if (!isOperonOidcOnly) return;
 
-  const claims = takeOperonOidcClaims(user.email);
+  const claims = await takeOperonClaimsForUser(user.id);
   if (!claims) return;
 
   await syncOperonInstanceRole(user.id, claims.role);
@@ -1545,23 +1586,58 @@ const kaneoDrizzleAdapter = drizzleAdapter(db, {
 type KaneoAdapter = ReturnType<typeof kaneoDrizzleAdapter>;
 
 /**
- * The winner of a `user.email` race, IF it is the same person.
+ * A user this OIDC first login collided with on `user.email`, held back until the
+ * subject proves they are the same person.
  *
- * Never on the email alone (decision 122). An email is an attribute an admin retypes; a
- * subject is not. The row is returned only when the user who now holds this address
- * carries a `custom` account whose `accountId` is the very subject Operon's userinfo
- * document produced for it moments ago — the live capture in
- * `custom-oauth-profile.ts`, the same evidence `databaseHooks.user.create.before` already
- * trusts to wave this address past `DISABLE_REGISTRATION`. A different subject on that
- * address, or no captured profile at all, returns `null` and the sign-in fails exactly as
- * it did before.
+ * `proved` is not bookkeeping. `recoverOperonOidcUser` hands the row back BEFORE anything
+ * has established that the address and this callback's identity belong together, because
+ * at that moment nothing can: the insert that failed carried a name, an email and a
+ * verification flag, and no subject at all. The proof arrives one statement later, when
+ * `createOAuthUser` writes the `account` row and finally names the subject Operon
+ * verified — and the flag is what makes the whole call fail if it somehow never does.
+ */
+type OperonRecovery = {
+  /** The user who already holds the address this callback tried to create. */
+  userId: string;
+  email: string;
+  /** Has the CURRENT callback's provider and subject been proved to be theirs? */
+  proved: boolean;
+};
+
+/**
+ * One `createOAuthUser` call's worth of state, and not one byte more.
  *
- * The wait is decision 122's, for decision 122's reason: a concurrent OIDC first login
- * commits the `user` and the `account` separately, so a committed email with no account
- * row yet is a sign-in caught mid-write rather than a mismatch.
+ * Built fresh inside the `transaction` override below, so it is per-call rather than
+ * per-process: two callbacks racing each other get two scopes and cannot see each
+ * other's. That is the difference between this and the module-level, email-keyed cache
+ * round-2 finding 1 was about.
+ */
+type OperonCreateScope = { recovery: OperonRecovery | null };
+
+/** A sign-in whose address and subject came apart. Never adopted, always refused. */
+class OperonIdentityMismatch extends Error {}
+
+/**
+ * The winner of a `user.email` race — HELD, not handed over (round-2 finding 1).
+ *
+ * The previous revision decided the whole question here, by peeking at the claims
+ * `custom-oauth-profile.ts` had captured for this ADDRESS. That was the defect: the
+ * capture was keyed by email, so a second callback for the same address overwrote the
+ * first, and this function could verify one person's subject while serving the other
+ * person's callback — returning user B to callback A, after which Better Auth attached
+ * A's own distinct account to B and issued A a session for B.
+ *
+ * So this function no longer decides anything. It re-reads the user who now holds the
+ * address, records them on the scope, and hands them back provisionally; the identity
+ * check moves to {@link adoptOperonOidcAccount}, which runs on the very next statement
+ * and has the one thing missing here — the subject this callback actually authenticated,
+ * as Better Auth itself resolved it from the userinfo document. A recovery that never
+ * reaches that check fails the whole call (see `operonDatabaseAdapter`), so "held" is
+ * enforced rather than intended.
  */
 async function recoverOperonOidcUser(
   base: KaneoAdapter,
+  scope: OperonCreateScope,
   data: Record<string, unknown>,
   error: unknown,
 ): Promise<Record<string, unknown> | null> {
@@ -1570,8 +1646,64 @@ async function recoverOperonOidcUser(
   const email = typeof data.email === "string" ? data.email : "";
   if (!email) return null;
 
-  const claims = peekOperonOidcClaims(email);
-  if (!claims) return null;
+  const claimant = await base.findOne<{ id: string }>({
+    model: "user",
+    where: [{ field: "email", value: email }],
+  });
+  // The email was claimed and released again. There is no winner to hand back.
+  if (!claimant) return null;
+
+  scope.recovery = { userId: claimant.id, email, proved: false };
+  return claimant as unknown as Record<string, unknown>;
+}
+
+/**
+ * The account write that follows a recovery — and the check that makes the recovery safe.
+ *
+ * This is where the sign-in's own identity finally arrives: `data` is the account
+ * `createOAuthUser` is about to write, so `providerId` and `accountId` are Better Auth's
+ * resolution of THIS callback's provider and subject, not a cache lookup that another
+ * request could have moved. Three things must hold before the recovered user is allowed
+ * to stand:
+ *
+ *   1. **The provider is Operon's.** A recovered user is never handed to a different
+ *      configured provider — that is how a GitHub or Google callback would otherwise
+ *      inherit a Kaneo account it never authenticated.
+ *   2. **The account being written is for the recovered user.** Anything else means the
+ *      two statements are not about the same call.
+ *   3. **That user ALREADY carries this exact subject.** Not "shares the address": the
+ *      row `(provider_id, account_id)` has to be theirs. If it is somebody else's, or if
+ *      it never appears, the sign-in fails rather than merging two people.
+ *
+ * ── AND IT REPLACES THE INSERT RATHER THAN FOLLOWING IT ──────────────────────────────
+ *
+ * Deliberately. The `transaction` override opens no transaction — the Drizzle adapter is
+ * built with no `transaction` option and the installed adapter defaults it to `false`, so
+ * upstream's own implementation is a pass-through — which means a write made here and
+ * then rejected would STAY written. Checking first is the only order in which a refusal
+ * leaves nothing behind.
+ *
+ * The wait is decision 122's, for decision 122's reason: `createOAuthUser` commits the
+ * `user` and the `account` as two separate statements, so the winner's account row can
+ * still be milliseconds away. A window buys time for a row to appear; it never buys
+ * permission to skip the check.
+ */
+async function adoptOperonOidcAccount(
+  base: KaneoAdapter,
+  recovery: OperonRecovery,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { providerId, accountId, userId } = data;
+
+  if (
+    providerId !== OPERON_PROVIDER_ID ||
+    typeof accountId !== "string" ||
+    userId !== recovery.userId
+  ) {
+    throw new OperonIdentityMismatch(
+      `[operon] operon.identity_mismatch: a login that recovered kaneo user ${recovery.userId} from the address ${recovery.email} then tried to attach a ${String(providerId)} account to ${String(userId)}; refusing`,
+    );
+  }
 
   for (
     let attempt = 0;
@@ -1580,53 +1712,46 @@ async function recoverOperonOidcUser(
   ) {
     if (attempt > 0) await sleep(OPERON_ACCOUNT_RECOVERY_DELAY_MS);
 
-    const claimant = await base.findOne<{ id: string }>({
-      model: "user",
-      where: [{ field: "email", value: email }],
-    });
-    // The email was claimed and released again. There is no winner to hand back.
-    if (!claimant) return null;
-
-    const account = await base.findOne<{ userId: string }>({
+    const existing = await base.findOne<{ userId: string }>({
       model: "account",
       where: [
         { field: "providerId", value: OPERON_PROVIDER_ID },
-        { field: "accountId", value: claims.sub },
+        { field: "accountId", value: accountId },
       ],
     });
 
-    if (!account) continue;
+    if (!existing) continue;
 
-    if (account.userId !== claimant.id) {
+    if (existing.userId !== recovery.userId) {
       // The subject exists and belongs to somebody else, so this address and this
-      // identity have come apart. Terminal at once: the window buys time for a row to
-      // appear, never permission to skip the check.
-      console.warn(
-        `[operon] operon.identity_mismatch: oidc login for ${email} lost the user race, but subject ${claims.sub} belongs to kaneo user ${account.userId} and that email is held by ${claimant.id}`,
+      // identity have come apart. Terminal at once.
+      throw new OperonIdentityMismatch(
+        `[operon] operon.identity_mismatch: oidc login for ${recovery.email} lost the user race, but subject ${accountId} belongs to kaneo user ${existing.userId} and that email is held by ${recovery.userId}`,
       );
-      return null;
     }
 
+    recovery.proved = true;
     console.warn(
-      `[operon] oidc first login lost the user race for ${email}; recovered kaneo user ${claimant.id}, whose custom account already carries this subject`,
+      `[operon] oidc first login lost the user race for ${recovery.email}; recovered kaneo user ${recovery.userId}, whose custom account already carries subject ${accountId}`,
     );
-    return claimant as unknown as Record<string, unknown>;
+    return existing as unknown as Record<string, unknown>;
   }
 
-  console.warn(
-    `[operon] oidc first login lost the user race for ${email} and no custom account carrying subject ${claims.sub} arrived within ${OPERON_ACCOUNT_RECOVERY_ATTEMPTS * OPERON_ACCOUNT_RECOVERY_DELAY_MS}ms; refusing to merge on the email alone`,
+  throw new OperonIdentityMismatch(
+    `[operon] operon.identity_mismatch: oidc login for ${recovery.email} lost the user race and no custom account carrying subject ${accountId} arrived within ${OPERON_ACCOUNT_RECOVERY_ATTEMPTS * OPERON_ACCOUNT_RECOVERY_DELAY_MS}ms; refusing to merge on the email alone`,
   );
-  return null;
 }
 
 /**
  * The winner of an `account (provider_id, account_id)` race, IF it is the same row.
  *
- * Reached only after {@link recoverOperonOidcUser} handed `createOAuthUser` a user that
- * already exists, because the writer that created that user created this account row in
- * the same transaction. The row is returned only when it hangs off the very user this
- * call was about to attach it to; a subject that belongs to a different user is the
- * collision migration 0046 exists to surface, not something to adopt.
+ * NOT the first-login recovery path any more — that one never reaches an insert at all,
+ * because {@link adoptOperonOidcAccount} answers before `base.create` is called. What is
+ * left is every OTHER `custom` account write (Better Auth's own `createAccount` and
+ * `linkAccount`) meeting migration 0046's key: a repeat of a write that already
+ * succeeded. The row is returned only when it hangs off the very user this call was
+ * about to attach it to; a subject that belongs to a different user is the collision
+ * migration 0046 exists to surface, not something to adopt.
  */
 async function recoverOperonOidcAccount(
   base: KaneoAdapter,
@@ -1657,14 +1782,14 @@ async function recoverOperonOidcAccount(
   if (!existing || existing.userId !== userId) return null;
 
   console.warn(
-    `[operon] oidc first login found subject ${accountId} already linked to kaneo user ${userId}; reusing that account row`,
+    `[operon] custom account write found subject ${accountId} already linked to kaneo user ${userId}; reusing that account row`,
   );
   return existing as unknown as Record<string, unknown>;
 }
 
 /**
  * Identity-verified conflict recovery INSIDE Better Auth's OIDC first-login path
- * (round-1 finding 2). Operon mode only.
+ * (round-1 finding 2, corrected by round-2 finding 1). Operon mode only.
  *
  * ── THE FAILURE ──────────────────────────────────────────────────────────────────────
  *
@@ -1700,49 +1825,84 @@ async function recoverOperonOidcAccount(
  * recovery. The override is the same pass-through handing back the wrapper, so it opens
  * no transaction upstream did not open and closes none it did.
  *
+ * ── AND IT IS WHERE THE PER-CALL SCOPE COMES FROM (round-2 finding 1) ─────────────────
+ *
+ * That override is also the only per-`createOAuthUser` boundary in the whole path, which
+ * is exactly what the corrected recovery needs. The scope built here binds the user
+ * recovery to the account write of the SAME call — two concurrent callbacks get two
+ * scopes — and the check after `callback` is the enforcement: a recovery that was handed
+ * out and never proved against a real `(provider, subject)` row fails the sign-in
+ * instead of quietly issuing a session for somebody else's account. There is no
+ * remaining path on which a recovered user reaches `createSession` unproven.
+ *
+ * The top-level adapter is built with NO scope, so nothing outside `createOAuthUser`
+ * recovers from an email collision at all — narrower than the previous revision, and
+ * narrow on purpose: an email collision only ever means "the same person, written by the
+ * other writer" on the first-login path.
+ *
  * ── AND NOTHING OUTSIDE OPERON MODE IS TOUCHED ────────────────────────────────────────
  *
  * A non-Operon instance gets `kaneoDrizzleAdapter(options)` itself, the same object
- * upstream passes. Inside Operon mode the recovery still cannot fire without a live
- * Operon userinfo capture for the address, so `create` is upstream's `create` plus a
- * catch that re-throws for every other error.
+ * upstream passes.
  */
 const operonDatabaseAdapter: typeof kaneoDrizzleAdapter = (options) => {
   const base = kaneoDrizzleAdapter(options);
   if (!isOperonOidcOnly) return base;
 
-  // Cast because `DBAdapter["create"]` is generic in both its input and its output row
-  // type, and a wrapper that re-reads the winner cannot prove to TypeScript that the row
-  // it read is the same shape the caller asked to write. It is: both come from the same
-  // adapter, through the same model, with the same output transform.
-  const create = (async (params: {
-    model: string;
-    data: Record<string, unknown>;
-    select?: string[];
-    forceAllowId?: boolean;
-  }) => {
-    try {
-      return await base.create(params);
-    } catch (error) {
-      const recovered =
-        params.model === "user"
-          ? await recoverOperonOidcUser(base, params.data, error)
-          : params.model === "account"
-            ? await recoverOperonOidcAccount(base, params.data, error)
-            : null;
+  const build = (scope: OperonCreateScope | null): KaneoAdapter => {
+    // Cast because `DBAdapter["create"]` is generic in both its input and its output row
+    // type, and a wrapper that re-reads the winner cannot prove to TypeScript that the
+    // row it read is the same shape the caller asked to write. It is: both come from the
+    // same adapter, through the same model, with the same output transform.
+    const create = (async (params: {
+      model: string;
+      data: Record<string, unknown>;
+      select?: string[];
+      forceAllowId?: boolean;
+    }) => {
+      // Before the insert, never after it: this pass-through "transaction" opens no
+      // transaction, so a row written here and then refused would stay written.
+      if (params.model === "account" && scope?.recovery) {
+        return await adoptOperonOidcAccount(base, scope.recovery, params.data);
+      }
 
-      if (!recovered) throw error;
-      return recovered;
-    }
-  }) as KaneoAdapter["create"];
+      try {
+        return await base.create(params);
+      } catch (error) {
+        const recovered =
+          params.model === "user" && scope
+            ? await recoverOperonOidcUser(base, scope, params.data, error)
+            : params.model === "account"
+              ? await recoverOperonOidcAccount(base, params.data, error)
+              : null;
 
-  const wrapped: KaneoAdapter = {
-    ...base,
-    create,
-    transaction: async (callback) => callback(wrapped),
+        if (!recovered) throw error;
+        return recovered;
+      }
+    }) as KaneoAdapter["create"];
+
+    return {
+      ...base,
+      create,
+      transaction: async (callback) => {
+        const inner: OperonCreateScope = { recovery: null };
+        const result = await callback(build(inner));
+
+        // The enforcement half of "held, not handed over". Unreachable while
+        // `createOAuthUser` writes the account immediately after the user, and that is
+        // the point: if a future Better Auth stops doing so, this sign-in fails loudly
+        // rather than silently returning an unverified account.
+        if (inner.recovery && !inner.recovery.proved) {
+          throw new OperonIdentityMismatch(
+            `[operon] operon.identity_mismatch: recovered kaneo user ${inner.recovery.userId} for the address ${inner.recovery.email} but no account write ever proved the subject; refusing the sign-in`,
+          );
+        }
+        return result;
+      },
+    };
   };
 
-  return wrapped;
+  return build(null);
 };
 
 export const auth = betterAuth({
@@ -1778,6 +1938,33 @@ export const auth = betterAuth({
       // email with a password account and retain access after the victim signs
       // in through a trusted OAuth/OIDC provider.
       requireLocalEmailVerified: true,
+      // ── OPERON MODE: AN ADDRESS DOES NOT IDENTIFY A PERSON (round-2 finding 2) ────
+      //
+      // Upstream's implicit linking is the OTHER door into the defect the adapter
+      // recovery above closes, and it opens EARLIER — before any write conflicts.
+      // `handleOAuthUserInfo` falls back to a lookup by email when no account carries
+      // the callback's subject, and with `custom` trusted and the provisioned user's
+      // email verified by construction (decision 110), it attached the incoming subject
+      // to whoever already held the address and issued THEIR session. Subject B is
+      // provisioned at an address, subject A signs in with the same address, and A gets
+      // B's account: no conflict, no recovery, no trace.
+      //
+      // Removing `custom` from `trustedProviders` would NOT have closed it: the trust
+      // flag only gates the `!userInfo.emailVerified` half of that test, and Operon's
+      // userinfo document sets `email_verified`. `disableImplicitLinking` is the switch
+      // that actually refuses the fallback, so a callback whose subject no account
+      // carries is `account_not_linked` — a failed sign-in, not a silent adoption.
+      //
+      // The provisioned-then-first-login path is untouched, because it never used this
+      // fallback: `POST /internal/operon/user` writes the `custom` account in the same
+      // transaction as the user, so `findOAuthUser` matches on
+      // `(provider_id, account_id)` and never reaches the email branch. Changing an
+      // identity remains the explicit re-key route's job (`operon-account/index.ts`),
+      // which is server-to-server, credentialled and checks the outgoing subject.
+      //
+      // Operon mode only: on an ordinary self-hosted Kaneo, upstream's linking is
+      // upstream's behaviour (R35).
+      disableImplicitLinking: isOperonOidcOnly,
     },
   },
   emailAndPassword: {

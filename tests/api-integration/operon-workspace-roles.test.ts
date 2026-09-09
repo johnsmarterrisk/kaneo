@@ -159,13 +159,34 @@ async function seedUser(email: string) {
   return user;
 }
 
-/** One Operon sign-in: the OIDC profile capture, then the session reconciliation. */
+/**
+ * One Operon sign-in: the `custom` account row the callback writes for the subject, the
+ * OIDC profile capture, then the session reconciliation.
+ *
+ * The account row is what makes the reconciliation reachable at all: since round-2
+ * finding 1 it collects its claims by the subject this user actually holds, never by
+ * their email address.
+ */
 async function signIn(
   user: { id: string; email: string },
   role: "admin" | "member",
 ) {
+  const sub = randomUUID().replace(/-/g, "").padEnd(64, "0").slice(0, 64);
+
+  await db
+    .insert(schema.accountTable)
+    .values({
+      id: `account-${randomUUID()}`,
+      accountId: sub,
+      providerId: "custom",
+      userId: user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
   rememberOperonOidcClaims({
-    sub: randomUUID().replace(/-/g, "").padEnd(64, "0").slice(0, 64),
+    sub,
     email: user.email,
     name: user.email,
     role,

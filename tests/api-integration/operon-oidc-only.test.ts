@@ -196,21 +196,47 @@ async function seedUser(email: string) {
 }
 
 /**
- * One Operon sign-in for an existing Kaneo user: the profile capture
- * `mapCustomOAuthProfileToUser` makes on every OIDC callback, then the reconciliation
- * `databaseHooks.session.create.after` runs.
+ * Everything an OIDC callback leaves behind before the reconciliation runs: the `custom`
+ * account row Better Auth writes for the subject, and the profile capture
+ * `mapCustomOAuthProfileToUser` makes.
+ *
+ * The account row is not decoration. Since round-2 finding 1 the reconciliation collects
+ * its claims by the SUBJECT THE DATABASE SAYS THIS USER HOLDS rather than by their email
+ * address, so a user with no `custom` account is a user no login can be reconciled for —
+ * which is exactly right, and exactly what a real sign-in never is.
+ */
+async function stageOidcLogin(
+  user: { id: string; email: string },
+  role: "admin" | "member",
+  sub: string,
+  name = user.email,
+) {
+  await db
+    .insert(schema.accountTable)
+    .values({
+      id: `account-${randomUUID()}`,
+      accountId: sub,
+      providerId: "custom",
+      userId: user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  rememberOperonOidcClaims({ sub, email: user.email, name, role });
+  return sub;
+}
+
+/**
+ * One Operon sign-in for an existing Kaneo user: the state the OIDC callback leaves,
+ * then the reconciliation `databaseHooks.session.create.after` runs.
  */
 async function signIn(
   user: { id: string; email: string },
   role: "admin" | "member",
   sub = randomUUID().replace(/-/g, "").padEnd(64, "0").slice(0, 64),
 ) {
-  rememberOperonOidcClaims({
-    sub,
-    email: user.email,
-    name: user.email,
-    role,
-  });
+  await stageOidcLogin(user, role, sub);
   await reconcileOperonSession(user.id);
   return sub;
 }
@@ -474,18 +500,8 @@ describe("Operon mode: two concurrent first-admin logins", () => {
     const first = await seedUser(`admin-a-${randomUUID()}@example.com`);
     const second = await seedUser(`admin-b-${randomUUID()}@example.com`);
 
-    rememberOperonOidcClaims({
-      sub: "a".repeat(64),
-      email: first.email,
-      name: "Admin A",
-      role: "admin",
-    });
-    rememberOperonOidcClaims({
-      sub: "b".repeat(64),
-      email: second.email,
-      name: "Admin B",
-      role: "admin",
-    });
+    await stageOidcLogin(first, "admin", "a".repeat(64), "Admin A");
+    await stageOidcLogin(second, "admin", "b".repeat(64), "Admin B");
 
     await Promise.all([
       reconcileOperonSession(first.id),
@@ -835,12 +851,7 @@ describe("Operon mode: a bootstrap that races a repair (round-3 blocker)", () =>
       );
     });
 
-    rememberOperonOidcClaims({
-      sub: "a".repeat(64),
-      email: first.email,
-      name: "Admin A",
-      role: "admin",
-    });
+    await stageOidcLogin(first, "admin", "a".repeat(64), "Admin A");
     const bootstrap = reconcileOperonSession(first.id);
     await bootstrapReachedTheMint;
 
@@ -903,12 +914,7 @@ describe("Operon mode: provisioning is wired to session creation", () => {
       updatedAt: new Date(),
     });
 
-    rememberOperonOidcClaims({
-      sub: "f".repeat(64),
-      email,
-      name: "An Operon Admin",
-      role: "admin",
-    });
+    await stageOidcLogin(user, "admin", "f".repeat(64), "An Operon Admin");
 
     const { app } = createApp();
     const response = await app.request("/api/auth/sign-in/email", {

@@ -62,6 +62,7 @@ setEnv("OPERON_OIDC_ONLY", "true");
 
 const {
   __resetOperonOidcClaims,
+  hasOperonOidcClaims,
   mapCustomOAuthProfileToUser,
   rememberOperonOidcClaims,
   takeOperonOidcClaims,
@@ -170,9 +171,8 @@ describe("mapCustomOAuthProfileToUser", () => {
 
     expect(mapped).toEqual({ name: "Workspace Admin" });
 
-    // Email-insensitive lookup: Better Auth lowercases the address on the user
-    // row, so a capture keyed on the raw claim would never be collected.
-    const claims = takeOperonOidcClaims("admin@operon.local");
+    // Collected by the SUBJECT, which is the only thing the capture is keyed by.
+    const claims = takeOperonOidcClaims("a".repeat(64));
     expect(claims).toEqual({
       sub: "a".repeat(64),
       email: "Admin@Operon.local",
@@ -188,8 +188,8 @@ describe("mapCustomOAuthProfileToUser", () => {
       name: "A Member",
     });
 
-    expect(takeOperonOidcClaims("member@operon.local")).not.toBeNull();
-    expect(takeOperonOidcClaims("member@operon.local")).toBeNull();
+    expect(takeOperonOidcClaims("b".repeat(64))).not.toBeNull();
+    expect(takeOperonOidcClaims("b".repeat(64))).toBeNull();
   });
 
   it("narrows an unexpected role to member, so it cannot bootstrap", () => {
@@ -200,7 +200,7 @@ describe("mapCustomOAuthProfileToUser", () => {
       role: "superuser",
     });
 
-    expect(takeOperonOidcClaims("guest@operon.local")?.role).toBe("member");
+    expect(takeOperonOidcClaims("c".repeat(64))?.role).toBe("member");
   });
 
   it("captures nothing without a subject", () => {
@@ -211,7 +211,7 @@ describe("mapCustomOAuthProfileToUser", () => {
       name: "Nobody",
     });
 
-    expect(takeOperonOidcClaims("nobody@operon.local")).toBeNull();
+    expect(takeOperonOidcClaims("e".repeat(64))).toBeNull();
   });
 
   it("expires a capture that was never collected", () => {
@@ -228,9 +228,7 @@ describe("mapCustomOAuthProfileToUser", () => {
       t0,
     );
 
-    expect(takeOperonOidcClaims("stale@operon.local", t0 + 60_000)).not.toBe(
-      null,
-    );
+    expect(takeOperonOidcClaims("d".repeat(64), t0 + 60_000)).not.toBe(null);
 
     rememberOperonOidcClaims(
       {
@@ -245,9 +243,46 @@ describe("mapCustomOAuthProfileToUser", () => {
     // `mapProfileToUser` runs on EVERY callback while `user.create.after` runs
     // only on the first, so uncollected entries are the normal case and the TTL
     // is what stops the map growing without bound.
-    expect(
-      takeOperonOidcClaims("stale@operon.local", t0 + 6 * 60 * 1000),
-    ).toBeNull();
+    expect(takeOperonOidcClaims("d".repeat(64), t0 + 6 * 60 * 1000)).toBeNull();
+  });
+
+  it("keeps two subjects that share one address apart (round-2 finding 1)", () => {
+    /**
+     * The defect this file's key change exists for. Keyed by email, the second
+     * capture below REPLACED the first, and `auth.ts`'s conflict recovery then read
+     * the survivor's subject while serving the other callback — which is how one
+     * person's session was issued to another. Keyed by subject, two concurrent
+     * callbacks are two entries and neither can reach the other's.
+     */
+    const shared = "shared@operon.local";
+
+    mapCustomOAuthProfileToUser({
+      sub: "1".repeat(64),
+      email: shared,
+      name: "Person A",
+      role: "member",
+    });
+    mapCustomOAuthProfileToUser({
+      sub: "2".repeat(64),
+      email: shared,
+      name: "Person B",
+      role: "admin",
+    });
+
+    // The registration gate still recognises the ADDRESS — that is the one question
+    // it is allowed to ask, and its answer decides an invitation, not an identity.
+    expect(hasOperonOidcClaims(shared)).toBe(true);
+
+    const a = takeOperonOidcClaims("1".repeat(64));
+    const b = takeOperonOidcClaims("2".repeat(64));
+
+    expect(a?.name).toBe("Person A");
+    expect(a?.role).toBe("member");
+    expect(b?.name).toBe("Person B");
+    expect(b?.role).toBe("admin");
+
+    // Both consumed, so the address no longer looks like a sign-in in flight.
+    expect(hasOperonOidcClaims(shared)).toBe(false);
   });
 
   it("still maps a name for a profile it does not capture", () => {

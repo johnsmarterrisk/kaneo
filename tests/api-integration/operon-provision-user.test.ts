@@ -93,7 +93,7 @@ const { auth, reconcileWorkspaceMemberRole } = await import(
   "../../apps/api/src/auth"
 );
 const { createApp } = await import("../../apps/api/src/index");
-const { __resetOperonOidcClaims } = await import(
+const { __resetOperonOidcClaims, rememberOperonOidcClaims } = await import(
   "../../apps/api/src/utils/custom-oauth-profile"
 );
 const { default: getWorkspaceMembers } = await import(
@@ -548,7 +548,10 @@ describe("idempotency and concurrency belong to the database", () => {
  * the write path is stubbed: the recovery under test is the adapter wrapper in `auth.ts`.
  */
 describe("the real OIDC callback survives provisioning winning the user-creation race", () => {
-  async function provisionInsideTheLookup(body: Record<string, unknown>) {
+  async function provisionInsideTheLookup(
+    body: Record<string, unknown>,
+    alsoInsideTheWindow?: () => void,
+  ) {
     const context = await auth.$context;
     const findOAuthUser = context.internalAdapter.findOAuthUser.bind(
       context.internalAdapter,
@@ -569,6 +572,7 @@ describe("the real OIDC callback survives provisioning winning the user-creation
               `the staged provision failed with ${response.status}`,
             );
           }
+          alsoInsideTheWindow?.();
         }
         return found;
       });
@@ -626,6 +630,104 @@ describe("the real OIDC callback survives provisioning winning the user-creation
       { userId: users[0]?.id as string },
     ]);
     expect(await accountsForSubject(SUB_A)).toHaveLength(0);
+  });
+
+  it("never hands callback A the account another callback's claims point at", async () => {
+    /**
+     * Round-2 finding 1, staged exactly as the reviewer reproduced it.
+     *
+     * Callback A (subject SUB_A) reads "no user". Inside that window provisioning
+     * commits subject SUB_B at the SAME address, and a concurrent callback for B
+     * captures B's claims — which, while the capture was keyed by email, REPLACED A's.
+     * A's insert then failed on `user.email`, and the recovery read the surviving
+     * capture, found that B's user really did carry B's subject, and handed B's user
+     * back to A. Better Auth then attached A's own distinct account to B and issued A a
+     * session for B's Kaneo account.
+     *
+     * B's concurrent capture is staged through `rememberOperonOidcClaims` rather than a
+     * second live callback because the whole defect is an ORDERING between two captures,
+     * and a second real callback cannot be made to land in that window deterministically.
+     * It is the same call `mapCustomOAuthProfileToUser` makes, with the same arguments.
+     *
+     * The fix removes both halves: the capture is keyed by subject, so B's no longer
+     * displaces A's, and the recovery no longer consults a capture at all — it verifies
+     * against the `(provider_id, account_id)` row of the account this very callback is
+     * about to write.
+     */
+    const done = await provisionInsideTheLookup(
+      personBody({ sub: SUB_B, email: "provisioned@operon.local" }),
+      () =>
+        rememberOperonOidcClaims({
+          sub: SUB_B,
+          email: "provisioned@operon.local",
+          name: "Person B",
+          role: "member",
+        }),
+    );
+
+    const login = await oidcCallbackLogin("provisioned@operon.local", SUB_A);
+
+    expect(done()).toBe(true);
+    expect(signedIn(login)).toBe(false);
+    expect(login.location).toContain("unable_to_create_user");
+
+    const users = await usersWithEmail("provisioned@operon.local");
+    expect(users).toHaveLength(1);
+    const holderOfTheAddress = users[0]?.id as string;
+
+    // B keeps their own subject, A's was never attached to anybody, and — the claim
+    // that actually matters — no session exists for the account A nearly received.
+    expect(await accountsForSubject(SUB_B)).toEqual([
+      { userId: holderOfTheAddress },
+    ]);
+    expect(await accountsForSubject(SUB_A)).toHaveLength(0);
+
+    const sessions = await db
+      .select({ id: schema.sessionTable.id })
+      .from(schema.sessionTable)
+      .where(eq(schema.sessionTable.userId, holderOfTheAddress));
+    expect(sessions).toHaveLength(0);
+  });
+});
+
+/**
+ * Round-2 finding 2 — the OTHER door, and it opens before any write conflicts.
+ *
+ * The recovery above only runs when an insert collides. `handleOAuthUserInfo` never gets
+ * that far when provisioning has ALREADY committed: `findOAuthUser` finds no account for
+ * the callback's subject, falls back to a lookup by email, finds the provisioned user —
+ * and, with `custom` trusted and that user's email verified by construction, upstream
+ * linked the incoming subject to them and issued their session. No conflict, no recovery,
+ * no trace. `accountLinking.disableImplicitLinking` in Operon mode is the refusal.
+ *
+ * The path that legitimately uses the same window — a provisioned person signing in on
+ * THEIR OWN subject — is asserted above ("a provisioned person's first real sign-in
+ * creates no second user"): it matches on `(provider_id, account_id)` and never reaches
+ * the email fallback at all.
+ */
+describe("an address somebody else holds is not a way into their account", () => {
+  it("refuses a real callback whose subject no account carries", async () => {
+    const response = await provision(personBody({ sub: SUB_B }));
+    expect(response.status).toBe(200);
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+
+    const login = await oidcCallbackLogin("provisioned@operon.local", SUB_A);
+
+    expect(signedIn(login)).toBe(false);
+    expect(login.location).toContain("account_not_linked");
+
+    // B is untouched: same single user, still carrying only their own subject.
+    expect(await usersWithEmail("provisioned@operon.local")).toEqual([
+      { id: kaneoUserId },
+    ]);
+    expect(await accountsForSubject(SUB_B)).toEqual([{ userId: kaneoUserId }]);
+    expect(await accountsForSubject(SUB_A)).toHaveLength(0);
+
+    const sessions = await db
+      .select({ id: schema.sessionTable.id })
+      .from(schema.sessionTable)
+      .where(eq(schema.sessionTable.userId, kaneoUserId));
+    expect(sessions).toHaveLength(0);
   });
 });
 
