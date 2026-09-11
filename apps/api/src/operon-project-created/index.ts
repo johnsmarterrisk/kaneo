@@ -128,12 +128,17 @@ export function buildOperonProjectCreatedPayload(
 }
 
 /**
- * Deliver one project creation, or say why it was not delivered.
+ * Deliver one project creation, or say why it was not delivered. ONE attempt.
  *
- * Never throws. Its caller is the event bus, whose subscriber wrapper only console-logs a
- * rejection — and a project creation that already COMMITTED must not surface as a failure to
- * the person who made it. The failure is logged with the destination host and never the
- * secret, and the platform's reconciliation sweep is the second layer that recovers it.
+ * Never throws. A project creation that already COMMITTED must not surface as a failure to
+ * the person who made it. The failure is logged with the project and never the secret; what
+ * recovers it is `startOperonProjectCreatedDelivery`'s background retries and, behind those,
+ * the platform's five-minute reconciliation sweep.
+ *
+ * **A 2xx is delivered, and that includes 202.** `postToGenericWebhook` resolves on
+ * `response.ok`, so Operon's "accepted, provisioning still pending" answer is a DELIVERY and
+ * is never retried — the platform owns the retry of its own provisioning from that point on.
+ * Only a non-2xx, a redirect or a timeout rejects, and only those are retried here.
  */
 export async function deliverOperonProjectCreated(
   event: OperonProjectCreatedEvent,
@@ -173,11 +178,159 @@ export async function deliverOperonProjectCreated(
   }
 }
 
+/**
+ * ── WHY THE CONTROLLER AWAITS THIS AND NOT THE BUS (code gate round 1, finding 1) ──────
+ *
+ * `publishEvent` is `EventEmitter.emit`, and `emit` does NOT await an async listener: it
+ * calls it, gets a promise back and drops it on the floor. So publishing alone let
+ * `createProject()` answer while this delivery — and, on Operon's side, the provisioning it
+ * triggers — were still in flight, and a task created immediately afterwards could still
+ * reach a project with no integration row. That is the very window the event exists to
+ * close, reopened one frame narrower.
+ *
+ * The fix is to make the delivery AWAITABLE and await it in the controller, under a bound:
+ *
+ *   BOUNDED   `OPERON_PROJECT_CREATED_TIMEOUT_MS` (4 s) is the longest a person waits for
+ *             their project. The generic-webhook client's own timeout is 10 s, which is a
+ *             fine ceiling for a background task and far too long for an interactive create,
+ *             so the wait is cut short here rather than there.
+ *   NOT LOST   A timed-out or refused first attempt is NOT abandoned — the same call keeps
+ *             retrying in the background on `OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS`, which
+ *             the controller does not wait for. Operon answers 202 while ITS provisioning is
+ *             pending, and 202 is a 2xx, so the two retry ladders never run at once.
+ *   DEDUPED   Keyed on the project id. The controller and the bus subscription both land
+ *             here for the same creation; the second one JOINS the first's promise rather
+ *             than sending a second delivery, which is what lets the bus publish survive for
+ *             any other consumer without the receiver seeing the event twice.
+ */
+export const OPERON_PROJECT_CREATED_TIMEOUT_MS = 4_000;
+
+/**
+ * The background ladder after the first attempt: three retries, ~21 s of wall clock. It stops
+ * well inside Operon's five-minute reconciliation sweep, which is the durable backstop and the
+ * only layer that survives a restart of this process.
+ */
+export const OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS = [
+  1_000, 5_000, 15_000,
+] as const;
+
+export type OperonProjectCreatedDelivery = {
+  delivered: boolean;
+  skipped: string | null;
+};
+
+/**
+ * In-flight deliveries by project id — the dedupe described above. An entry is removed when
+ * the whole ladder has settled, so a later re-publication of the same project (a redelivery,
+ * a retried create) is delivered again rather than silently swallowed.
+ */
+const inFlight = new Map<string, Promise<OperonProjectCreatedDelivery>>();
+
+/** A timer that never keeps the process alive; `unref` is absent under some fake clocks. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    (timer as unknown as { unref?: () => void }).unref?.();
+  });
+}
+
+async function deliverWithRetries(
+  event: OperonProjectCreatedEvent,
+): Promise<OperonProjectCreatedDelivery> {
+  let result = await deliverOperonProjectCreated(event);
+
+  // `not_configured` and `incomplete_event` are decisions, not failures: retrying either
+  // would log the same refusal four times and change nothing.
+  if (result.delivered || result.skipped !== "delivery_failed") return result;
+
+  for (const [
+    index,
+    backoffMs,
+  ] of OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS.entries()) {
+    await sleep(backoffMs);
+    console.warn("operon project.created delivery retry", {
+      projectId: event.projectId,
+      attempt: index + 1,
+      of: OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS.length,
+    });
+    result = await deliverOperonProjectCreated(event);
+    if (result.delivered) return result;
+  }
+
+  console.error("operon project.created delivery gave up", {
+    projectId: event.projectId,
+    workspaceId: event.workspaceId,
+    attempts: OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS.length + 1,
+    detail:
+      "Operon's five-minute provisioning sweep is the remaining layer for this project",
+  });
+  return result;
+}
+
+/**
+ * Start the delivery for one creation, or join the one already running for that project.
+ *
+ * Never rejects. The returned promise settles when the whole retry ladder has, which is NOT
+ * what the controller waits for — see `deliverOperonProjectCreatedBounded`.
+ */
+export function startOperonProjectCreatedDelivery(
+  event: OperonProjectCreatedEvent,
+): Promise<OperonProjectCreatedDelivery> {
+  const key = event?.projectId;
+  if (!key) return deliverOperonProjectCreated(event);
+
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  const started = deliverWithRetries(event).finally(() => {
+    if (inFlight.get(key) === started) inFlight.delete(key);
+  });
+  inFlight.set(key, started);
+  return started;
+}
+
+/**
+ * What `createProject()` awaits: the delivery, bounded.
+ *
+ * Resolves as soon as the delivery settles, or after `timeoutMs` — whichever is first. The
+ * delivery itself is NOT cancelled by the timeout; it keeps retrying in the background.
+ */
+export async function deliverOperonProjectCreatedBounded(
+  event: OperonProjectCreatedEvent,
+  timeoutMs: number = OPERON_PROJECT_CREATED_TIMEOUT_MS,
+): Promise<OperonProjectCreatedDelivery> {
+  const delivery = startOperonProjectCreatedDelivery(event);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bound = new Promise<OperonProjectCreatedDelivery>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn("operon project.created delivery still pending", {
+        projectId: event?.projectId ?? null,
+        timeoutMs,
+        detail:
+          "create answered without waiting; delivery continues in the background",
+      });
+      resolve({ delivered: false, skipped: "timeout" });
+    }, timeoutMs);
+    (timer as unknown as { unref?: () => void }).unref?.();
+  });
+
+  try {
+    return await Promise.race([delivery, bound]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 let subscribed = false;
 
 /**
  * Subscribe once. Idempotent for the same reason `initializeEventSubscriptions` is: a second
  * call would register a second listener and deliver every project twice.
+ *
+ * The subscription is no longer the controller's delivery path — it is the path for a
+ * `project.created` published by anything ELSE. It shares the dedupe above, so when the
+ * controller is the publisher the two land on one delivery.
  */
 export function initOperonProjectCreatedDelivery(): void {
   if (subscribed) return;
@@ -186,7 +339,7 @@ export function initOperonProjectCreatedDelivery(): void {
   void subscribeToEvent<OperonProjectCreatedEvent>(
     OPERON_PROJECT_CREATED_EVENT,
     async (data) => {
-      await deliverOperonProjectCreated(data);
+      await startOperonProjectCreatedDelivery(data);
     },
   );
 }

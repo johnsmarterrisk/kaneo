@@ -3,6 +3,9 @@ import {
   buildOperonProjectCreatedPayload,
   deliverOperonProjectCreated,
   initOperonProjectCreatedDelivery,
+  OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS,
+  OPERON_PROJECT_CREATED_TIMEOUT_MS,
+  startOperonProjectCreatedDelivery,
 } from "../../../apps/api/src/operon-project-created";
 import { postToGenericWebhook } from "../../../apps/api/src/plugins/generic-webhook/client";
 
@@ -25,6 +28,15 @@ import { postToGenericWebhook } from "../../../apps/api/src/plugins/generic-webh
  *                resolved — and with NO `task` key, because there is no task.
  *   INERT        both configuration values absent — every deployment that is not Operon's —
  *                delivers nothing and raises nothing.
+ *   AWAITED      `createProject()` does not resolve until the delivery has settled. Code gate
+ *                round 1, finding 1: `publishEvent` is `EventEmitter.emit`, which does not
+ *                await an async listener, so publishing alone reopened the very window this
+ *                event closes — one frame narrower.
+ *   BOUNDED      …but a delivery that never answers does not hold the project hostage: the
+ *                create resolves after `OPERON_PROJECT_CREATED_TIMEOUT_MS` and the delivery
+ *                keeps retrying behind it.
+ *   RETRIED      a refused delivery (Operon down, 503) is retried on the backoff ladder and
+ *                stops the moment a 2xx — Operon's 202 included — comes back.
  *
  * Upstream's own suites are not edited, the standing choice of rows 8, 10 and 11.
  */
@@ -86,9 +98,13 @@ describe("project.created — publication and workspace-level delivery", () => {
   const savedEnv = { ...process.env };
 
   beforeEach(() => {
-    vi.mocked(postToGenericWebhook).mockClear();
+    vi.mocked(postToGenericWebhook).mockReset();
     vi.mocked(postToGenericWebhook).mockResolvedValue(undefined);
     selectMock.mockReset();
+    // `resolveActor`'s lookup, for every case that does not override it with `…Once`.
+    selectMock.mockImplementation(() =>
+      selectChain([{ id: "user-a", name: "Ada" }]),
+    );
     txMock.mockReset();
     process.env.OPERON_INTERNAL_API_URL = DESTINATION;
     process.env.KANEO_WEBHOOK_SECRET = SECRET;
@@ -185,6 +201,124 @@ describe("project.created — publication and workspace-level delivery", () => {
       delivered: false,
       skipped: "delivery_failed",
     });
+  });
+
+  it("does not answer the create until the delivery has SETTLED", async () => {
+    const createProject = (
+      await import("../../../apps/api/src/project/controllers/create-project")
+    ).default;
+
+    txMock.mockImplementation(async () => ({
+      id: "project-awaited",
+      workspaceId: "workspace-1",
+      name: "Roadmap",
+      slug: "ROAD",
+      icon: "Layers",
+    }));
+
+    // The delivery is held open. `EventEmitter.emit` would have let the create sail past it.
+    let release = () => {};
+    vi.mocked(postToGenericWebhook).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => resolve();
+        }),
+    );
+
+    let resolved = false;
+    const create = createProject(
+      "workspace-1",
+      "Roadmap",
+      "Layers",
+      "ROAD",
+      "user-a",
+    ).then((value) => {
+      resolved = true;
+      return value;
+    });
+
+    // Several turns of the loop — far more than an un-awaited publish would need.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(postToGenericWebhook).toHaveBeenCalledTimes(1);
+    expect(resolved).toBe(false);
+
+    release();
+    await create;
+    expect(resolved).toBe(true);
+  });
+
+  it("answers the create anyway when the delivery never comes back", async () => {
+    vi.useFakeTimers();
+    try {
+      const createProject = (
+        await import("../../../apps/api/src/project/controllers/create-project")
+      ).default;
+
+      txMock.mockImplementation(async () => ({
+        id: "project-timeout",
+        workspaceId: "workspace-1",
+        name: "Roadmap",
+        slug: "ROAD",
+        icon: "Layers",
+      }));
+
+      // An Operon that accepts the connection and never answers. Unbounded, this would hang
+      // project creation for the whole 10 s client timeout and then some.
+      vi.mocked(postToGenericWebhook).mockImplementation(
+        () => new Promise<void>(() => {}),
+      );
+
+      const create = createProject(
+        "workspace-1",
+        "Roadmap",
+        "Layers",
+        "ROAD",
+        "user-a",
+      );
+
+      await vi.advanceTimersByTimeAsync(OPERON_PROJECT_CREATED_TIMEOUT_MS + 1);
+
+      await expect(create).resolves.toMatchObject({ id: "project-timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a refused delivery in the background, and stops on a 2xx", async () => {
+    vi.useFakeTimers();
+    try {
+      // What `postToGenericWebhook` throws for a 503 — the shape Operon returns when its
+      // signal writer is not running. The third attempt is Operon's 202/200: `response.ok`,
+      // so the client resolves and the ladder stops.
+      vi.mocked(postToGenericWebhook)
+        .mockRejectedValueOnce(
+          new Error("Generic webhook request failed (503): unavailable"),
+        )
+        .mockRejectedValueOnce(
+          new Error("Generic webhook request failed (503): unavailable"),
+        )
+        .mockResolvedValueOnce(undefined);
+
+      const delivery = startOperonProjectCreatedDelivery({
+        ...EVENT,
+        projectId: "project-retried",
+      });
+
+      await vi.advanceTimersByTimeAsync(
+        OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS[0] +
+          OPERON_PROJECT_CREATED_RETRY_BACKOFF_MS[1] +
+          10,
+      );
+
+      await expect(delivery).resolves.toEqual({
+        delivered: true,
+        skipped: null,
+      });
+      // Three attempts, not four: a delivered 2xx ends the ladder.
+      expect(postToGenericWebhook).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("wires the published event to the delivery", async () => {

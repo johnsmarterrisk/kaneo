@@ -2,6 +2,10 @@ import { eq, max, sql } from "drizzle-orm";
 import db from "../../database";
 import { columnTable, projectTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import {
+  deliverOperonProjectCreatedBounded,
+  OPERON_PROJECT_CREATED_EVENT,
+} from "../../operon-project-created";
 
 export const DEFAULT_PROJECT_COLUMNS = [
   { name: "To Do", slug: "to-do", position: 0, isFinal: false },
@@ -66,16 +70,28 @@ async function createProject(
   // consumer could not know a project existed until something happened inside it. It is
   // published AFTER the transaction commits, never inside it, because a subscriber that
   // called back into the API would be reading a project the open transaction still hides.
+  //
+  // The DELIVERY is awaited separately and not through the bus: `publishEvent` is
+  // `EventEmitter.emit`, which does not await an async listener, so publishing alone let this
+  // function answer while the delivery and Operon's provisioning were still in flight — and a
+  // task created a moment later could still find a project with no integration row, which is
+  // the exact window the event exists to close. The wait is bounded at four seconds and the
+  // delivery keeps retrying in the background past it, so a slow or unreachable Operon costs
+  // the person a short pause and never their project. The publish stays for any other
+  // consumer; the two share one deduped delivery.
   // See `operon-project-created/index.ts` for why the delivery cannot be a plugin handler.
   if (createdProject) {
-    await publishEvent("project.created", {
+    const created = {
       projectId: createdProject.id,
       workspaceId: createdProject.workspaceId,
       name: createdProject.name,
       slug: createdProject.slug,
       icon: createdProject.icon ?? null,
       currentUserId: currentUserId ?? null,
-    });
+    };
+
+    await publishEvent(OPERON_PROJECT_CREATED_EVENT, created);
+    await deliverOperonProjectCreatedBounded(created);
   }
 
   return createdProject;
