@@ -3,9 +3,9 @@ import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Operon fork check (spec R14, task B11).
+ * Operon fork check (spec R14, task B11; extended by task G11).
  *
- * Three claims, one test each, and each one can fail:
+ * Five claims, one test each, and each one can fail:
  *
  *  1. The injected switcher renders all four Operon modules, in `branding.ts`'s order,
  *     with Initiative marked as the module the user is already inside.
@@ -19,6 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  3. `WorkspaceSwitcher` is not rendered by `AppSidebar`. The real module is replaced by a
  *     marker component, so re-adding it anywhere in that tree turns this test red rather
  *     than passing quietly.
+ *  4. **G11:** Activity resolves to `${apex}/#/activity` and every other apex module still
+ *     resolves to the apex root — both halves, since asserting only the first would pass a
+ *     version that sent every module to `#/activity`.
+ *  5. **G11:** the third module reads *Activity ⚡* while its KEY stays `signals`, which is
+ *     what both switchers dispatch on.
  *
  * See `docs/fork-discipline.md` in the Operon repository for why this check lives in the
  * fork rather than in Operon.
@@ -95,6 +100,43 @@ describe("OperonSwitcher", () => {
     expect(telegraph.getAttribute("href")).toBe("https://apex.b11.test:9443/");
     // The dev fallback must not have been used while a value was configured.
     expect(telegraph.getAttribute("href")).not.toContain("lvh.me");
+  });
+
+  it("sends Activity to its own address and every other module to the apex root", () => {
+    // The whole of task G11: before it, `moduleHref` ignored the key, so a member clicking
+    // Activity inside Initiative landed on whatever the apex root opens. Both halves are
+    // asserted, because a version that sent EVERY module to `#/activity` would pass an
+    // assertion about Activity alone.
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.g11.test:9443/");
+
+    render(<OperonSwitcher />);
+
+    expect(screen.getByTestId("module-signals").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/activity",
+    );
+
+    for (const key of ["telegraph", "settings"]) {
+      expect(screen.getByTestId(`module-${key}`).getAttribute("href")).toBe(
+        "https://apex.g11.test:9443/",
+      );
+    }
+
+    // Initiative is the current module: a span, so it carries no href at all.
+    expect(
+      screen.getByTestId("module-initiative").getAttribute("href"),
+    ).toBeNull();
+  });
+
+  it("labels the third module Activity, keeping `signals` as its key", () => {
+    // `app/src/shell/branding.ts` says Activity ⚡ since G10, and this list is a hand copy
+    // of that one. The KEY is the cross-repository contract and must not follow the label.
+    render(<OperonSwitcher />);
+
+    const activity = screen.getByTestId("module-signals");
+    expect(activity.dataset.module).toBe("signals");
+    expect(activity.textContent).toContain("Activity");
+    expect(activity.textContent).toContain("⚡");
+    expect(activity.textContent).not.toContain("Signals");
   });
 });
 

@@ -64,7 +64,13 @@ export type OperonModule = {
 export const OPERON_MODULES: readonly OperonModule[] = [
   { key: "telegraph", label: "Telegraph", icon: "💬" },
   { key: "initiative", label: "Initiative", icon: "📋" },
-  { key: "signals", label: "Signals", icon: "📡" },
+  // THE KEY STAYS `signals` AND MUST NOT BE RENAMED — only the label and icon moved
+  // (Operon spec R20, D7; task G10 relabelled `MODULES` in `app/src/shell/branding.ts`,
+  // G11 mirrors it here). The key is what BOTH switchers dispatch on and what the e2e page
+  // objects read as `data-testid="module-signals"`, so renaming it would be a
+  // cross-repository breaking change bought for nothing: the reader only ever sees the
+  // label, and Activity is a relabel rather than a fifth module.
+  { key: "signals", label: "Activity", icon: "⚡" },
   { key: "settings", label: "Settings", icon: "⚙️" },
 ] as const;
 
@@ -154,15 +160,22 @@ export function __resetApexUrlWarning() {
 /**
  * The apex target for a module.
  *
- * The Operon shell keeps the active module in SPA state rather than in the URL — verified
- * in `app/src/shell/AppShell.tsx`, whose only hash routes are `#/login` and
- * `#/telegraph/msg/<event id>` — so there is no per-module address to link to and every
- * apex module resolves to the apex root, which opens on Telegraph. That is honest for
- * Telegraph, which is what R14 requires and what the walk proves; Signals and Settings are
- * one click further once the shell gains addresses for them, and this function is the
- * single place that changes when it does.
+ * The Operon shell keeps the active module in SPA state rather than in the URL, so a module
+ * is only addressable once the shell registers a hash route for it. **Activity is the first
+ * one that has** — `#/activity` (Operon spec R20/R21/R22, task G10's `app/src/feed/routes.ts`
+ * and its narrow `#/activity/...` fallback) — so it is the one case here, and this function
+ * stays the single place that changes when the next module gains an address.
+ *
+ * Every other module still resolves to the apex root, because the shell recognises no
+ * `#/telegraph`, `#/settings` or `#/login` hash: the root is the only address they have, and
+ * inventing one here would link to a route that does not exist. What the root opens is the
+ * shell's own landing decision (G10 makes that Activity), which is deliberately not
+ * second-guessed from inside the fork.
  */
-function moduleHref(apex: string, _key: OperonModuleKey): string {
+function moduleHref(apex: string, key: OperonModuleKey): string {
+  if (key === "signals") {
+    return `${apex}/#/activity`;
+  }
   return `${apex}/`;
 }
 
