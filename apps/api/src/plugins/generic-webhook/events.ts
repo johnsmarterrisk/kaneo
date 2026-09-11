@@ -8,6 +8,7 @@ import {
   userTable,
   workspaceTable,
 } from "../../database/schema";
+import { resolveColumnFinality } from "../../operon-column-finality";
 import type {
   PluginContext,
   TaskAssigneeChangedEvent,
@@ -295,6 +296,18 @@ export async function handleTaskStatusChanged(
   );
   if (!isEnabled(config, "taskStatusChanged")) return;
 
+  // Operon fork addition: both slugs belong to this task's own project, so both are resolved
+  // against it. A field is OMITTED rather than sent as `false` when the column cannot be read —
+  // absence degrades to the historical payload a consumer already handles, `false` would lie.
+  const oldStatusIsFinal = await resolveColumnFinality(
+    event.projectId,
+    event.oldStatus,
+  );
+  const newStatusIsFinal = await resolveColumnFinality(
+    event.projectId,
+    event.newStatus,
+  );
+
   await sendEvent(
     config,
     "task.status_changed",
@@ -305,6 +318,8 @@ export async function handleTaskStatusChanged(
       title: event.title,
       oldStatus: event.oldStatus,
       newStatus: event.newStatus,
+      ...(oldStatusIsFinal === undefined ? {} : { oldStatusIsFinal }),
+      ...(newStatusIsFinal === undefined ? {} : { newStatusIsFinal }),
     },
   );
 }
@@ -462,6 +477,20 @@ export async function handleTaskMoved(
   );
   if (!isEnabled(config, "taskMoved")) return;
 
+  // Operon fork addition: a move crosses projects, and finality is a per-project column
+  // setting — so the OLD slug is resolved against the source project and the NEW slug against
+  // the destination. Resolving both against one project would report the finality of a
+  // same-named column in the wrong board. Either field is omitted, never `false`, when its
+  // column cannot be read.
+  const oldStatusIsFinal = await resolveColumnFinality(
+    event.fromProjectId,
+    event.oldStatus,
+  );
+  const newStatusIsFinal = await resolveColumnFinality(
+    event.toProjectId,
+    event.newStatus,
+  );
+
   await sendEvent(
     config,
     "task.moved",
@@ -475,6 +504,8 @@ export async function handleTaskMoved(
       toProjectName: event.toProjectName,
       oldStatus: event.oldStatus,
       newStatus: event.newStatus,
+      ...(oldStatusIsFinal === undefined ? {} : { oldStatusIsFinal }),
+      ...(newStatusIsFinal === undefined ? {} : { newStatusIsFinal }),
     },
   );
 }
