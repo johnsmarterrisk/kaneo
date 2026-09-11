@@ -271,12 +271,17 @@ export async function handleTaskCreated(
   );
   if (!isEnabled(config, "taskCreated")) return;
 
+  // Operon fork addition: the actor is the person who CREATED the task. `event.userId` is
+  // this event's ASSIGNEE (upstream notifies it unless it equals `currentUserId`), so reading
+  // it here named the wrong person on an assigned task and nobody at all on an unassigned
+  // one. There is deliberately NO fallback to the assignee: an emitter with no Kaneo actor
+  // (the gitea webhooks) yields a null actor, which is true, where the assignee would lie.
   await sendEvent(
     config,
     "task.created",
     event.taskId,
     event.projectId,
-    event.userId,
+    event.currentUserId ?? null,
     {
       title: event.title,
       description: event.description,

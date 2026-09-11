@@ -37,6 +37,7 @@ export function initializeEventSubscriptions(): void {
   subscribeToEvent<{
     taskId: string;
     userId: string;
+    currentUserId?: string | null;
     title: string;
     description: string;
     priority: string;
@@ -48,6 +49,10 @@ export function initializeEventSubscriptions(): void {
       taskId: data.taskId,
       projectId: data.projectId,
       userId: data.userId,
+      // Operon fork addition: the emitters already publish `currentUserId`, and this
+      // rebuild dropped it — so no plugin could tell who created the task, only who it was
+      // assigned to. `userId` keeps upstream's meaning (the assignee) and is untouched.
+      currentUserId: data.currentUserId,
       title: data.title,
       description: data.description,
       priority: data.priority,

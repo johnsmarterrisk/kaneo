@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only ten kinds of change are permitted, and every file this
+upstream built it. Only eleven kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -62,10 +62,19 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      consumer matching on the word would be wrong in both directions. A lookup
      that cannot be read omits the field rather than reporting `false`, so no
      other payload, event or Kaneo behaviour changes.
+ 11. Actor attribution on the outbound task-created webhook — the
+     generic-webhook payload for a task creation names the person who CREATED
+     the task. Kaneo's `task.created` event carries two people and names only
+     the assignee `userId`, so the handler reporting it as the actor named the
+     wrong person on an assigned task and nobody at all on an unassigned one.
+     Upstream's meaning of `userId` is untouched, because Kaneo's own
+     notification of the assignee depends on it; the creator travels beside it
+     in a field the event bus previously dropped. An emitter that names no
+     creator reports no actor rather than falling back to the assignee.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the ten kinds map onto, path by path, and §7 records which task
+touch list the eleven kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 

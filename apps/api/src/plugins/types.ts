@@ -7,7 +7,11 @@ export type PluginContext = {
 export type TaskCreatedEvent = {
   taskId: string;
   projectId: string;
+  // `userId` is the ASSIGNEE on this event, not the actor — `notification/index.ts` notifies
+  // it unless it equals `currentUserId`. Operon fork addition: `currentUserId` is the person
+  // who created the task, optional because the gitea webhook emitters have no Kaneo actor.
   userId: string;
+  currentUserId?: string | null;
   title: string;
   description: string | null;
   priority: string | null;
