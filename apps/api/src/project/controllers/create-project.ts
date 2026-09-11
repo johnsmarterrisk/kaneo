@@ -1,6 +1,7 @@
 import { eq, max, sql } from "drizzle-orm";
 import db from "../../database";
 import { columnTable, projectTable } from "../../database/schema";
+import { publishEvent } from "../../events";
 
 export const DEFAULT_PROJECT_COLUMNS = [
   { name: "To Do", slug: "to-do", position: 0, isFinal: false },
@@ -14,8 +15,12 @@ async function createProject(
   name: string,
   icon: string,
   slug: string,
+  // Operon fork addition: the creator, optional and TRAILING so every existing caller and
+  // the `DEFAULT_PROJECT_COLUMNS` importers are unaffected. Same current-user rule as
+  // `task.created` — the route reads `c.get("userId")`.
+  currentUserId?: string | null,
 ) {
-  return db.transaction(async (tx) => {
+  const createdProject = await db.transaction(async (tx) => {
     // Serialize ordering writes per workspace: without this, two concurrent
     // creates can read the same max(position) and land on the same slot, and a
     // create can interleave with a reorder's renumber. `reorderProjects` takes
@@ -55,6 +60,25 @@ async function createProject(
 
     return createdProject;
   });
+
+  // Operon fork addition: a project created here announced itself to NOBODY at the fork
+  // point — this was the only lifecycle event in the codebase with no `publishEvent` — so a
+  // consumer could not know a project existed until something happened inside it. It is
+  // published AFTER the transaction commits, never inside it, because a subscriber that
+  // called back into the API would be reading a project the open transaction still hides.
+  // See `operon-project-created/index.ts` for why the delivery cannot be a plugin handler.
+  if (createdProject) {
+    await publishEvent("project.created", {
+      projectId: createdProject.id,
+      workspaceId: createdProject.workspaceId,
+      name: createdProject.name,
+      slug: createdProject.slug,
+      icon: createdProject.icon ?? null,
+      currentUserId: currentUserId ?? null,
+    });
+  }
+
+  return createdProject;
 }
 
 export default createProject;

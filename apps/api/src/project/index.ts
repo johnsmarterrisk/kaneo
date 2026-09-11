@@ -232,7 +232,15 @@ const project = apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(createProjectRoute, async (c) => {
     const { name, icon, slug } = c.req.valid("json");
     const workspaceId = c.get("workspaceId");
-    const newProject = await createProjectCtrl(workspaceId, name, icon, slug);
+    // Operon fork addition: the creator, read the same way every task route reads it, so
+    // the `project.created` event the controller publishes can name an actor.
+    const newProject = await createProjectCtrl(
+      workspaceId,
+      name,
+      icon,
+      slug,
+      c.get("userId"),
+    );
     return c.json(newProject, 200);
   })
   .openapi(getProjectRoute, async (c) => {

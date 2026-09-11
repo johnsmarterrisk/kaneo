@@ -47,6 +47,7 @@ import oauth from "./oauth";
 import { createRoute, jsonResponse, z } from "./openapi";
 import operonAccount from "./operon-account";
 import operonMaintenanceState from "./operon-maintenance-state";
+import { initOperonProjectCreatedDelivery } from "./operon-project-created";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -896,6 +897,11 @@ export async function runStartupTasks() {
   await seedDefaultWorkspaceRoles();
 
   initializePlugins();
+  // Operon fork addition (docs/fork-discipline.md §3 row 12): `project.created` has no
+  // per-project integration to be routed through — the project is a millisecond old — so its
+  // delivery is subscribed here rather than registered as a plugin. Inert unless both
+  // OPERON_INTERNAL_API_URL and KANEO_WEBHOOK_SECRET are set.
+  initOperonProjectCreatedDelivery();
   initializeScheduler();
   await initializeWebSocketAdapter();
 }
