@@ -62,15 +62,19 @@ export type OperonModule = {
  * must offer the same four things in the same sequence, or the shell reads as two products.
  */
 export const OPERON_MODULES: readonly OperonModule[] = [
+  // STREAM IS FIRST, AND THE POSITION IS THE CONTRACT. Operator decision 2026-09-11 made the
+  // activity feed the leading tab; both switchers render their module array in order, so slot
+  // one here is the whole of the mirror for `MODULES` in Operon's `app/src/shell/branding.ts`.
+  //
+  // THE KEY STAYS `signals` AND MUST NOT BE RENAMED — only the label moved (Operon spec R20,
+  // D7; task G10 relabelled `MODULES` in `app/src/shell/branding.ts`, G11 mirrors it here).
+  // The key is what BOTH switchers dispatch on and what the e2e page objects read as
+  // `data-testid="module-signals"`, and the hash route stays `#/activity`, so renaming either
+  // would be a cross-repository breaking change bought for nothing: the reader only ever sees
+  // the label, and Stream is a relabel rather than a fifth module.
+  { key: "signals", label: "Stream", icon: "⚡" },
   { key: "telegraph", label: "Telegraph", icon: "💬" },
   { key: "initiative", label: "Initiative", icon: "📋" },
-  // THE KEY STAYS `signals` AND MUST NOT BE RENAMED — only the label and icon moved
-  // (Operon spec R20, D7; task G10 relabelled `MODULES` in `app/src/shell/branding.ts`,
-  // G11 mirrors it here). The key is what BOTH switchers dispatch on and what the e2e page
-  // objects read as `data-testid="module-signals"`, so renaming it would be a
-  // cross-repository breaking change bought for nothing: the reader only ever sees the
-  // label, and Activity is a relabel rather than a fifth module.
-  { key: "signals", label: "Activity", icon: "⚡" },
   { key: "settings", label: "Settings", icon: "⚙️" },
 ] as const;
 
@@ -161,7 +165,7 @@ export function __resetApexUrlWarning() {
  * The apex target for a module.
  *
  * The Operon shell keeps the active module in SPA state rather than in the URL, so a module
- * is only addressable once the shell registers a hash route for it. **Activity is the first
+ * is only addressable once the shell registers a hash route for it. **Stream is the first
  * one that has** — `#/activity` (Operon spec R20/R21/R22, task G10's `app/src/feed/routes.ts`
  * and its narrow `#/activity/...` fallback) — so it is the one case here, and this function
  * stays the single place that changes when the next module gains an address.
@@ -169,7 +173,7 @@ export function __resetApexUrlWarning() {
  * Every other module still resolves to the apex root, because the shell recognises no
  * `#/telegraph`, `#/settings` or `#/login` hash: the root is the only address they have, and
  * inventing one here would link to a route that does not exist. What the root opens is the
- * shell's own landing decision (G10 makes that Activity), which is deliberately not
+ * shell's own landing decision (G10 makes that Stream), which is deliberately not
  * second-guessed from inside the fork.
  */
 function moduleHref(apex: string, key: OperonModuleKey): string {
