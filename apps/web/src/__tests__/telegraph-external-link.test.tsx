@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExternalLink } from "@/types/external-link";
 
@@ -110,5 +110,123 @@ describe("ExternalLinksAccordion — telegraph links", () => {
     const github = screen.getByText("Upstream issue").closest("a");
     expect(github?.getAttribute("target")).toBe("_blank");
     expect(github?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+});
+
+/**
+ * S10/S11: a `file` resourceType takes the Stash route, and the target is
+ * resolved through `GET /files/:id/meta` on the apex so a deleted pointer names
+ * what used to be there and an unavailable service never reads as "deleted".
+ */
+const FILE_ID = "11111111-1111-4111-8111-111111111111";
+
+const fileLink: ExternalLink = {
+  id: "link-file",
+  taskId: "task-1",
+  integrationId: "integration-telegraph",
+  resourceType: "file",
+  externalId: FILE_ID,
+  // A decoy: the apex route is configured, never the stored url.
+  url: "https://stale-host.invalid/files/whatever",
+  title: "Quarterly brief",
+  metadata: null,
+  integration: { id: "integration-telegraph", type: "telegraph" },
+};
+
+function stubMeta(responder: () => Response) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes(`/api/files/${FILE_ID}/meta`))
+        return responder();
+      throw new TypeError("Failed to fetch");
+    }),
+  );
+}
+
+function jsonResponse(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as unknown as Response;
+}
+
+describe("ExternalLinksAccordion — Stash file links", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("routes a file link to the apex #/files/<id> and a message link to #/telegraph/msg/<id>", async () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.s11.test:9443/");
+    stubMeta(() =>
+      jsonResponse(200, {
+        id: FILE_ID,
+        name: "Quarterly brief",
+        size: 10,
+        mime: "application/pdf",
+        parentId: null,
+        deletedAt: null,
+      }),
+    );
+
+    render(
+      <ExternalLinksAccordion externalLinks={[fileLink, telegraphLink]} />,
+    );
+
+    const file = await screen.findByTestId("file-external-link");
+    expect(file.getAttribute("href")).toBe(
+      `https://apex.s11.test:9443/#/files/${FILE_ID}`,
+    );
+    expect(file.getAttribute("href")).not.toContain("stale-host.invalid");
+
+    const message = screen.getByTestId("telegraph-external-link");
+    expect(message.getAttribute("href")).toBe(
+      `https://apex.s11.test:9443/#/telegraph/msg/${EVENT_ID}`,
+    );
+  });
+
+  it("renders a tombstone as a NAMED dead reference, not a broken link", async () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.s11.test:9443/");
+    stubMeta(() =>
+      jsonResponse(200, {
+        id: FILE_ID,
+        name: "Quarterly brief",
+        deletedAt: "2026-09-13T10:00:00.000Z",
+        tombstone: true,
+      }),
+    );
+
+    render(<ExternalLinksAccordion externalLinks={[fileLink]} />);
+
+    const dead = await screen.findByTestId("file-external-link-deleted");
+    expect(dead.textContent).toContain("Quarterly brief");
+    expect(dead.textContent).toContain("deleted");
+    expect(screen.queryByTestId("file-external-link")).toBeNull();
+  });
+
+  it("renders a 5xx as temporarily unavailable, never as deleted", async () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.s11.test:9443/");
+    stubMeta(() => jsonResponse(500, { error: "internal_error" }));
+
+    render(<ExternalLinksAccordion externalLinks={[fileLink]} />);
+
+    const unavailable = await screen.findByTestId(
+      "file-external-link-unavailable",
+    );
+    expect(unavailable.textContent).toContain("temporarily unavailable");
+    expect(screen.queryByText(/deleted/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("renders a 404 as a broken link", async () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.s11.test:9443/");
+    stubMeta(() => jsonResponse(404, { error: "not_found" }));
+
+    render(<ExternalLinksAccordion externalLinks={[fileLink]} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("file-external-link-not-found")).toBeTruthy(),
+    );
   });
 });

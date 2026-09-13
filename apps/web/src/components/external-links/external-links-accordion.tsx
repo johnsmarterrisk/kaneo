@@ -6,7 +6,7 @@ import {
   GitPullRequest,
   MessageSquare,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GithubIcon } from "@/components/icons/github-icon";
 import { apexUrl } from "@/components/operon-switcher";
@@ -47,6 +47,135 @@ export function isTelegraphLink(link: ExternalLink) {
 
 export function telegraphLinkHref(link: ExternalLink) {
   return `${apexUrl()}/#/telegraph/msg/${encodeURIComponent(link.externalId)}`;
+}
+
+/**
+ * Operon fork addition (spec S10/S11): a Stash file link.
+ *
+ * `resourceType` selects the route on the apex; the stored `url` is ignored for
+ * the same reason it is ignored for a message link — the apex is a runtime value.
+ * The link still points at the FILE ID, and the target may have been deleted, so
+ * the row resolves through `GET /files/:id/meta` and renders one of S10's three
+ * states rather than claiming success.
+ */
+export function isFileLink(link: ExternalLink) {
+  return isTelegraphLink(link) && link.resourceType === "file";
+}
+
+export function fileLinkHref(link: ExternalLink) {
+  return `${apexUrl()}/#/files/${encodeURIComponent(link.externalId)}`;
+}
+
+type FileLinkPhase =
+  | { phase: "loading" }
+  | { phase: "live"; name: string }
+  | { phase: "deleted"; name: string }
+  | { phase: "unavailable" }
+  | { phase: "not-found" };
+
+function FileLinkRow({ link }: { link: ExternalLink }) {
+  const [state, setState] = useState<FileLinkPhase>({ phase: "loading" });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    // `attempt` is the retry token: the Retry button bumps it and this effect
+    // re-asks with a fresh request.
+    void attempt;
+    setState({ phase: "loading" });
+    void (async () => {
+      try {
+        const url = `${apexUrl()}/api/files/${encodeURIComponent(link.externalId)}/meta`;
+        const res = await fetch(url, { credentials: "include" });
+        if (res.status === 404)
+          throw Object.assign(new Error("not_found"), { code: "not_found" });
+        if (!res.ok)
+          throw Object.assign(new Error("unavailable"), {
+            code: "unavailable",
+          });
+        const body = (await res.json()) as {
+          name?: string;
+          tombstone?: boolean;
+        };
+        if (!live) return;
+        setState(
+          body.tombstone
+            ? { phase: "deleted", name: body.name ?? link.externalId }
+            : {
+                phase: "live",
+                name: body.name ?? link.title ?? link.externalId,
+              },
+        );
+      } catch (err) {
+        if (!live) return;
+        const code = (err as { code?: string }).code;
+        setState(
+          code === "not_found"
+            ? { phase: "not-found" }
+            : { phase: "unavailable" },
+        );
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [link.externalId, link.title, attempt]);
+
+  if (state.phase === "loading") {
+    return (
+      <div className="py-2 px-3 text-sm text-muted-foreground">Opening…</div>
+    );
+  }
+  if (state.phase === "deleted") {
+    return (
+      <div
+        data-testid="file-external-link-deleted"
+        className="py-2 px-3 text-sm text-muted-foreground"
+      >
+        “{state.name}” was deleted
+      </div>
+    );
+  }
+  if (state.phase === "unavailable") {
+    return (
+      <div
+        data-testid="file-external-link-unavailable"
+        className="py-2 px-3 text-sm text-muted-foreground flex items-center gap-2"
+      >
+        That file is temporarily unavailable.
+        <button
+          type="button"
+          className="text-xs underline"
+          onClick={() => setAttempt((n) => n + 1)}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (state.phase === "not-found") {
+    return (
+      <div
+        data-testid="file-external-link-not-found"
+        className="py-2 px-3 text-sm text-muted-foreground"
+      >
+        That link does not point to a file.
+      </div>
+    );
+  }
+
+  return (
+    <a
+      data-testid="file-external-link"
+      href={fileLinkHref(link)}
+      rel="noopener noreferrer"
+      className="group flex items-center gap-3 py-2 px-3 rounded-md hover:bg-accent/50 transition-colors"
+    >
+      <span className="text-sm truncate flex-1 text-foreground/90 group-hover:text-foreground">
+        {state.name}
+      </span>
+    </a>
+  );
 }
 
 interface ExternalLinksAccordionProps {
@@ -154,61 +283,67 @@ export function ExternalLinksAccordion({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="flex flex-col gap-2 mt-2">
-          {linksWithoutRedundantBranches.map((link) => (
-            <a
-              key={link.id}
-              data-testid={
-                isTelegraphLink(link) ? "telegraph-external-link" : undefined
-              }
-              href={isTelegraphLink(link) ? telegraphLinkHref(link) : link.url}
-              /*
-               * A TELEGRAPH LINK NAVIGATES THIS TAB; EVERY OTHER PROVIDER STILL OPENS
-               * A NEW ONE (Operon spec R12, decision 108).
-               *
-               * Operon's session-restore profile is `sessionStorage`
-               * (`app/src/auth/AuthContext.tsx:99,122` in the Operon repository), so it
-               * is scoped to the tab, and the restore returns early when it is absent
-               * (`AuthContext.tsx:326-330`). A `target="_blank"` tab opened from THIS
-               * document inherits no sessionStorage — the opener is the `initiative.`
-               * sibling, a different origin from the apex — so the new tab holds no
-               * profile for Operon and meets the login instead of the message.
-               * Navigating in place is what the injected switcher already relies on
-               * (`operon-switcher.tsx:242` renders its module links with no `target`):
-               * the tab showing Initiative is the tab that was showing Operon, and it
-               * still holds that origin's profile. The alternative — moving the
-               * non-secret profile into a cookie readable across the sibling hosts —
-               * widens a surface AuthContext deliberately narrowed, to buy what one
-               * attribute buys. GitHub and Gitea point at third-party hosts with no
-               * Operon session to keep, so they keep the new tab; `rel` stays on every
-               * link, because it is `noreferrer` as much as `noopener`.
-               */
-              target={isTelegraphLink(link) ? undefined : "_blank"}
-              rel="noopener noreferrer"
-              className="group flex items-center gap-3 py-2 px-3 rounded-md hover:bg-accent/50 transition-colors"
-            >
-              {isTelegraphLink(link) ? (
-                <MessageSquare className="size-4 flex-shrink-0 text-muted-foreground" />
-              ) : isGiteaResourceLink(link) ? (
-                <FolderGit className="size-4 flex-shrink-0 text-muted-foreground" />
-              ) : (
-                <GithubIcon className="size-4 flex-shrink-0 text-muted-foreground" />
-              )}
-              <span className="text-sm truncate flex-1 text-foreground/90 group-hover:text-foreground">
-                {link.title || link.externalId}
-                {/*
+          {linksWithoutRedundantBranches.map((link) =>
+            isFileLink(link) ? (
+              <FileLinkRow key={link.id} link={link} />
+            ) : (
+              <a
+                key={link.id}
+                data-testid={
+                  isTelegraphLink(link) ? "telegraph-external-link" : undefined
+                }
+                href={
+                  isTelegraphLink(link) ? telegraphLinkHref(link) : link.url
+                }
+                /*
+                 * A TELEGRAPH LINK NAVIGATES THIS TAB; EVERY OTHER PROVIDER STILL OPENS
+                 * A NEW ONE (Operon spec R12, decision 108).
+                 *
+                 * Operon's session-restore profile is `sessionStorage`
+                 * (`app/src/auth/AuthContext.tsx:99,122` in the Operon repository), so it
+                 * is scoped to the tab, and the restore returns early when it is absent
+                 * (`AuthContext.tsx:326-330`). A `target="_blank"` tab opened from THIS
+                 * document inherits no sessionStorage — the opener is the `initiative.`
+                 * sibling, a different origin from the apex — so the new tab holds no
+                 * profile for Operon and meets the login instead of the message.
+                 * Navigating in place is what the injected switcher already relies on
+                 * (`operon-switcher.tsx:242` renders its module links with no `target`):
+                 * the tab showing Initiative is the tab that was showing Operon, and it
+                 * still holds that origin's profile. The alternative — moving the
+                 * non-secret profile into a cookie readable across the sibling hosts —
+                 * widens a surface AuthContext deliberately narrowed, to buy what one
+                 * attribute buys. GitHub and Gitea point at third-party hosts with no
+                 * Operon session to keep, so they keep the new tab; `rel` stays on every
+                 * link, because it is `noreferrer` as much as `noopener`.
+                 */
+                target={isTelegraphLink(link) ? undefined : "_blank"}
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3 py-2 px-3 rounded-md hover:bg-accent/50 transition-colors"
+              >
+                {isTelegraphLink(link) ? (
+                  <MessageSquare className="size-4 flex-shrink-0 text-muted-foreground" />
+                ) : isGiteaResourceLink(link) ? (
+                  <FolderGit className="size-4 flex-shrink-0 text-muted-foreground" />
+                ) : (
+                  <GithubIcon className="size-4 flex-shrink-0 text-muted-foreground" />
+                )}
+                <span className="text-sm truncate flex-1 text-foreground/90 group-hover:text-foreground">
+                  {link.title || link.externalId}
+                  {/*
                   A Telegraph externalId is a 64-hex Nostr event id, not a
                   human-facing issue number, so it is not repeated as "#<id>" —
                   that would push the title out of a 224px sidebar entirely.
                 */}
-                {link.resourceType !== "branch" && !isTelegraphLink(link) && (
-                  <span className="text-muted-foreground ml-2">
-                    #{link.externalId}
-                  </span>
-                )}
-              </span>
-              {getStatusBadge(link)}
-            </a>
-          ))}
+                  {link.resourceType !== "branch" && !isTelegraphLink(link) && (
+                    <span className="text-muted-foreground ml-2">
+                      #{link.externalId}
+                    </span>
+                  )}
+                </span>
+                {getStatusBadge(link)}
+              </a>
+            ),
+          )}
         </div>
       </CollapsibleContent>
     </Collapsible>

@@ -106,6 +106,40 @@ async function mintKeyFor(
   return key;
 }
 
+/**
+ * The unforgeable marker can be written only by a SERVER-side mint
+ * (`hooks.before` refuses client-supplied metadata), which is exactly how the
+ * workspace bootstrap marks Operon's service key.
+ */
+async function mintMarkedServiceKeyFor(
+  userId: string,
+  permissions: Record<string, string[]>,
+) {
+  const created = await auth.api.createApiKey({
+    body: {
+      userId,
+      name: `operon-service-${Date.now() % 100000}`,
+      permissions,
+      metadata: { operonService: true },
+    },
+  });
+  const key = created?.key;
+  if (!key) throw new Error("failed to mint a marked service key");
+  return key;
+}
+
+/** Put a real user in an EXISTING workspace with the named role. */
+async function addMemberToWorkspace(workspaceId: string, role: string) {
+  const member = await createWorkspaceMember({ role });
+  await db.insert(schema.workspaceUserTable).values({
+    workspaceId,
+    userId: member.user.id,
+    role,
+    joinedAt: new Date(),
+  });
+  return member.user;
+}
+
 describe("API integration: the telegraph external-link write route", () => {
   beforeEach(async () => {
     await resetTestDatabase();
@@ -336,17 +370,76 @@ describe("API integration: the telegraph external-link write route", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("refuses a resourceType other than message", async () => {
+  it("accepts a file resourceType and still refuses an upstream resource kind", async () => {
     const { member, task, integration } = await seedTelegraphProject();
     mockAuthenticatedSession(member.user);
     const { app } = createApp();
 
-    const response = await post(app, {
+    const fileResponse = await post(app, {
+      ...attachBody(task.id, integration.id),
+      resourceType: "file",
+      externalId: "11111111-1111-4111-8111-111111111111",
+      url: "https://operon.test/#/files/11111111-1111-4111-8111-111111111111",
+    });
+    expect(fileResponse.status).toBe(200);
+    expect((await fileResponse.json()).resourceType).toBe("file");
+
+    const issueResponse = await post(app, {
       ...attachBody(task.id, integration.id),
       resourceType: "issue",
     });
+    expect(issueResponse.status).toBe(400);
+  });
 
-    expect(response.status).toBe(400);
+  it("keeps a message and a file link with the SAME externalId apart on one task", async () => {
+    // `resource_type` is in migration 0045's unique key, so one task through one
+    // telegraph integration can carry both kinds for the same id.
+    const { member, task, integration } = await seedTelegraphProject();
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const fileId = "22222222-2222-4222-8222-222222222222";
+    const message = await post(app, attachBody(task.id, integration.id));
+    const file = await post(app, {
+      ...attachBody(task.id, integration.id),
+      resourceType: "file",
+      externalId: fileId,
+      url: `https://operon.test/#/files/${fileId}`,
+    });
+    expect([message.status, file.status]).toEqual([200, 200]);
+
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.resourceType))).toEqual(
+      new Set(["message", "file"]),
+    );
+  });
+
+  it("converges on one row when the same file link is attached twice", async () => {
+    const { member, task, integration } = await seedTelegraphProject();
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const fileId = "33333333-3333-4333-8333-333333333333";
+    const body = {
+      ...attachBody(task.id, integration.id),
+      resourceType: "file",
+      externalId: fileId,
+      url: `https://operon.test/#/files/${fileId}`,
+    };
+
+    expect((await post(app, body)).status).toBe(200);
+    expect((await post(app, { ...body, title: "retitled" })).status).toBe(200);
+
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.resourceType).toBe("file");
+    expect(rows[0]?.title).toBe("retitled");
   });
 
   it("keeps an upstream issue and branch with the SAME id apart on one task", async () => {
@@ -517,5 +610,112 @@ describe("API integration: the telegraph external-link write route", () => {
       Date.parse(beforeTask.updatedAt),
     );
     expect(afterTask.createdAt).toBe(beforeTask.createdAt);
+  });
+
+  // ── S11: the on-behalf-of gate ────────────────────────────────────────────────
+  //
+  // The service key is minted against the owner, so without this gate every
+  // server-side write would happen AS THE OWNER. The header is honoured only for
+  // a key whose ROW carries the unforgeable marker, which is why re-reading the
+  // row is the assertion that catches a gate reading `c.get("apiKey").metadata`.
+
+  it("refuses the service key acting for a VIEWER with 403, and writes nothing", async () => {
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const viewer = await addMemberToWorkspace(member.workspace.id, "viewer");
+    const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
+      task: ["update"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": serviceKey,
+      "X-Operon-On-Behalf-Of": viewer.id,
+    });
+
+    expect(response.status).toBe(403);
+    const rows = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("honours the header for a MEMBER, proving the marker is actually found", async () => {
+    // If the gate read `c.get("apiKey").metadata` it would be undefined and the
+    // viewer test above would 200 (the owner's authority). This direction is the
+    // positive control that the marker is read from the row.
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const teammate = await addMemberToWorkspace(member.workspace.id, "member");
+    const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
+      task: ["update"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": serviceKey,
+      "X-Operon-On-Behalf-Of": teammate.id,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a NON-MEMBER id with 403", async () => {
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const outsider = await createWorkspaceMember();
+    const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
+      task: ["update"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": serviceKey,
+      "X-Operon-On-Behalf-Of": outsider.user.id,
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("IGNORES the header on a credential whose row carries no marker", async () => {
+    // The control for "ignored": the header names a non-member, so a gate that
+    // trusted the header anyway would 403. The write proceeds as the key's own
+    // user, which is what an unmarked credential must always get.
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const outsider = await createWorkspaceMember();
+    const ordinaryKey = await mintKeyFor(member.user.id, {
+      task: ["update"],
+    });
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": ordinaryKey,
+      "X-Operon-On-Behalf-Of": outsider.user.id,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("IGNORES the header on a key whose metadata lacks the marker", async () => {
+    // Finding 3's second control: metadata present but NOT the marker must not
+    // accidentally honour the header. A non-member id keeps the two apart.
+    const { member, task, integration } = await seedTelegraphProject("admin");
+    const outsider = await createWorkspaceMember();
+    const created = await auth.api.createApiKey({
+      body: {
+        userId: member.user.id,
+        name: `metadata-without-marker-${Date.now() % 100000}`,
+        permissions: { task: ["update"] },
+        metadata: { somethingElse: true },
+      },
+    });
+    const key = created?.key;
+    if (!key) throw new Error("failed to mint the metadata control key");
+    const { app } = createApp();
+
+    const response = await post(app, attachBody(task.id, integration.id), {
+      "x-api-key": key,
+      "X-Operon-On-Behalf-Of": outsider.user.id,
+    });
+
+    expect(response.status).toBe(200);
   });
 });
