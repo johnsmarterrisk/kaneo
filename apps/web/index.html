@@ -33,9 +33,12 @@
   <meta name="application-name" content="Initiative">
   <link rel="canonical" href="https://kaneo.app">
 
+  <meta name="theme-color" content="#081a33" id="operon-theme-color">
+
   <script>
     // Pre-paint theme resolution (Codex round-1 finding 12, manager ruling; mirrors
-    // `app/index.html`'s pre-paint script in the Operon repository, GUI pass task 1).
+    // `app/index.html`'s pre-paint script in the Operon repository, GUI pass task 1;
+    // widened by fix brief row 11, `docs/specs/operon-gui-pass-fix-brief.md`, "the hop").
     // Runs synchronously, before React mounts, so the first frame already carries the
     // right class instead of painting a persisted Kaneo theme and flashing to Operon's
     // choice once `ThemeProvider`'s effect (GUI pass task 4b) runs. Never throws: a
@@ -43,8 +46,16 @@
     //
     // Order: the operon_theme cookie (GUI pass task 4b's handoff) beats this store's own
     // persisted `user-preferences` record beats the store's own default ("dark").
+    //
+    // `navy` now maps to `navy` (fix brief row 8) — Kaneo's OWN first-class theme
+    // (`index.css`'s `.navy` block), not `dark`. Fix brief row 11 additionally stamps a
+    // navy `background-color` directly on `<html>` before the stylesheet has necessarily
+    // applied, and swaps `<meta name="theme-color">` to navy's hex — so the Operon ->
+    // Initiative hop never paints a white or grey frame between origins, matching the
+    // Operon shell's own pre-paint script.
     (function () {
-      var OPERON_TO_KANEO = { navy: 'dark', light: 'light', dark: 'dark' };
+      var OPERON_TO_KANEO = { navy: 'navy', light: 'light', dark: 'dark' };
+      var THEME_COLOR = { navy: '#081a33', light: '#faf8f4', dark: '#0e2546' };
       function fromOperonCookie() {
         var match = document.cookie.match(/(?:^|;\s*)operon_theme=([^;]+)/);
         if (!match) return null;
@@ -60,7 +71,7 @@
           if (!raw) return null;
           var parsed = JSON.parse(raw);
           var stored = parsed && parsed.state && parsed.state.theme;
-          if (stored === 'light' || stored === 'dark') return stored;
+          if (stored === 'light' || stored === 'dark' || stored === 'navy') return stored;
           if (stored === 'system') {
             return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
@@ -71,6 +82,13 @@
       }
       var theme = fromOperonCookie() || fromStore() || 'dark';
       document.documentElement.classList.add(theme);
+      document.documentElement.style.backgroundColor = THEME_COLOR[theme];
+      try {
+        var meta = document.getElementById('operon-theme-color');
+        if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
+      } catch (e) {
+        // theme-color is cosmetic (PWA chrome tint) — never worth breaking the mount over.
+      }
     })();
   </script>
 

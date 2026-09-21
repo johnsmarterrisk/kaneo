@@ -1,6 +1,19 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
+/*
+ * Manrope + IBM Plex Mono (fix brief row 10, `docs/specs/operon-gui-pass-fix-brief.md`,
+ * "the single biggest cohesion win"): self-hosted via `@fontsource`, following the SAME
+ * pattern this file already used for Geist (`@import` of a package, not a Google Fonts
+ * `<link>` in `index.html`) — the brief names this as the alternative when the fork already
+ * self-hosts, which it does. IBM Plex Mono has no variable-font build on Fontsource, so the
+ * two weights Operon's own `app/index.html` loads (400/500) are imported explicitly rather
+ * than the whole family. `--font-sans`/`--font-mono` below are re-pointed at these; the
+ * `@fontsource-variable/geist{,-mono}` packages stay installed and in `package.json` — off
+ * this fork's touch list, they are still `@import`ed by `apps/site/app/globals.css` (the
+ * marketing site, entirely off the touch list) and removing them would break that build.
+ */
+@import "@fontsource-variable/manrope";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
@@ -134,14 +147,20 @@ input:-webkit-autofill:active {
  * note.
  */
 :root {
+  /* Manrope / IBM Plex Mono (fix brief row 10) — the font stack mirrors
+     `app/tailwind.config.js`'s `fontFamily.sans`/`.mono` in the Operon repository (same
+     family names and fallback order) so the two surfaces read as one typographic system. */
   --font-sans:
-    "Geist Variable",
+    "Manrope Variable",
     ui-sans-serif,
     system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
     sans-serif;
   --font-heading: var(--font-sans);
   --font-mono:
-    "Geist Mono Variable",
+    "IBM Plex Mono",
     ui-monospace,
     SFMono-Regular,
     Menlo,
@@ -274,6 +293,55 @@ input:-webkit-autofill:active {
   --code: var(--card);
   --code-foreground: var(--foreground);
   --code-highlight: var(--accent);
+}
+
+/*
+ * NAVY — a first-class Kaneo theme, not "dark" (fix brief `docs/specs/operon-gui-pass-fix-brief.md`
+ * row 7; supersedes the GUI-pass-era mapping of Operon's `navy` cookie value onto THIS FILE's
+ * `.dark` block, recorded as historical context in `theme-provider/index.tsx`). John's round-2
+ * rejection ("white cards on the blue background... Initiative flashes, it feels like another
+ * app") traced to Initiative rendering `.dark` (navy-600 CARDS on a navy-700 ground) for what
+ * Operon's own shell renders as WHITE panels on the navy ground — two different anatomies under
+ * one theme name. `.navy` fixes that by being `:root` (the LIGHT token values — white cards,
+ * navy-ink text) with only the ground/rail/control tokens below overridden to navy, so a panel
+ * inside Initiative is the same white-on-navy object as a panel in the Operon shell. Every value
+ * below is quoted verbatim from the fix brief's row 7 table, which is itself
+ * `docs/design/theme-proposal.md` §4a's B-navy palette. `--radius` moves from `0.625rem` to `1rem`
+ * for navy ONLY — `:root`/`.dark` keep Kaneo's stock radius (see the file's earlier note; the
+ * touch-list exemption for `--radius` was scoped to those two blocks, not to `.navy`, which does
+ * not exist yet at that note's writing).
+ */
+.navy {
+  --background: #081a33;
+  --foreground: #ffffff;
+  --sidebar: #081a33;
+  --sidebar-foreground: #ffffff;
+  /* rgba, not hex (brief row 7, verbatim): Tailwind v4 reads a CSS custom property as a plain
+     color value here (no `rgb(var(--x) / <alpha-value>)` indirection like the Operon app's own
+     token layer), so an alpha-baked rgba() is the correct and only way to express "10% white on
+     whatever sits under it" as a single token. */
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1c3a63;
+  --sidebar-ring: #f5b700;
+  --card: #ffffff;
+  --card-foreground: #0b1f3a;
+  --popover: #ffffff;
+  --popover-foreground: #0b1f3a;
+  --muted: #efefef;
+  --muted-foreground: #5a6577;
+  --border: #d7dee8;
+  --input: #8496ae;
+  --primary: #15315a;
+  --primary-foreground: #ffffff;
+  --ring: #15315a;
+  --accent: #fbf4df;
+  --accent-foreground: #0b1f3a;
+  --radius: 1rem;
+  /* Not named by row 7's override table, so kept at `:root`'s (light's) own value —
+     `--sidebar-primary`/`-foreground` is already the signal-yellow-fill-on-navy-ink pair the
+     active rail bar needs (`#f5b700`/`#0b1f3a`), and success/warning/destructive/info,
+     `--chart-*` and `--code*` are the same white-card pairings `:root` already audited. */
 }
 
 @layer base {

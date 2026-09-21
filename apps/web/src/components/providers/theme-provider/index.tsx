@@ -2,16 +2,19 @@ import { useEffect, useLayoutEffect } from "react";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
 /**
- * Operon mode (spec: GUI pass task 4b; docs/fork-discipline.md row 13): Initiative
+ * Operon mode (spec: GUI pass task 4b, widened by fix brief row 8
+ * `docs/specs/operon-gui-pass-fix-brief.md`; docs/fork-discipline.md row 13): Initiative
  * follows Operon's theme instead of keeping its own.
  *
  * Operon writes the `operon_theme` cookie, on the widest domain it shares with this
  * origin, every time its OWN theme changes (`app/src/theme/ThemeProvider.tsx` ->
  * `writeThemeCookie`, GUI pass task 1) — exactly one of three values: `navy`, `light`,
- * `dark`. Kaneo has no navy mode of its own, so `navy` (Operon's default) maps to `dark`,
- * which is this store's own pre-existing default (`useUserPreferencesStore`'s
- * `theme: "dark"`) and the closer of Kaneo's two rendered surfaces to Operon's
- * navy-ground design; `light` and `dark` map onto themselves.
+ * `dark`. `navy` now maps to Kaneo's OWN first-class `.navy` class (`index.css`), not
+ * `dark` — the original GUI pass shipped `navy` -> `dark` because Kaneo had no navy mode
+ * of its own yet; John's round-2 rejection ("Initiative flashes, it feels like another
+ * app") is what that mapping cost: `.dark` is navy-600 CARDS on a navy-700 ground, while
+ * Operon's own shell renders WHITE panels on the navy ground under the same theme name.
+ * `light` and `dark` still map onto themselves.
  *
  * Read ONCE, on first mount, not subscribed to cookie changes: a person can still
  * override it from Initiative's own theme control afterwards without this effect
@@ -21,13 +24,13 @@ import { useUserPreferencesStore } from "@/store/user-preferences";
  */
 const OPERON_THEME_COOKIE = "operon_theme";
 
-const OPERON_TO_KANEO_THEME: Record<string, "light" | "dark"> = {
-  navy: "dark",
+const OPERON_TO_KANEO_THEME: Record<string, "light" | "dark" | "navy"> = {
+  navy: "navy",
   light: "light",
   dark: "dark",
 };
 
-function readOperonThemeCookie(): "light" | "dark" | null {
+function readOperonThemeCookie(): "light" | "dark" | "navy" | null {
   const match = document.cookie.match(
     new RegExp(`(?:^|; )${OPERON_THEME_COOKIE}=([^;]*)`),
   );
@@ -71,7 +74,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
+    // "navy" is included in the remove list (fix brief row 8) so this effect can strip a
+    // pre-paint-script-applied `.navy` class before repainting from the store's own
+    // light/dark/system choice — the same reason `light`/`dark` were already here. `system`
+    // never resolves to `navy` (theme-proposal.md §4a.4: no OS exposes a navy preference).
+    root.classList.remove("light", "dark", "navy");
 
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
@@ -86,7 +93,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = (e: MediaQueryListEvent) => {
       if (theme === "system") {
-        root.classList.remove("light", "dark");
+        root.classList.remove("light", "dark", "navy");
         root.classList.add(e.matches ? "dark" : "light");
       }
     };

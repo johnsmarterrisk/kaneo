@@ -61,9 +61,20 @@ function Layout({ children, className }: LayoutProps) {
         }
       >
         <AppSidebar />
+        {/*
+          Main content is a panel, not the ground (fix brief row 9,
+          `docs/specs/operon-gui-pass-fix-brief.md`): `bg-card`/`rounded-lg` (the panel's own
+          16px radius in navy, via `--radius`; stock 10px in light/dark, unchanged), the
+          brief's own shadow value replacing the border — theme-proposal.md §4a.1: "the
+          ground carries no border token... panels on the ground are separated by gap and
+          shadow only." `m-3` gives the 12px gutter from the sidebar and the viewport on
+          every side. Previously `bg-background border border-border/80`, i.e. the SAME tone
+          as the page behind it with only a hairline outline — the exact "blurs together"
+          John rejected, because this pane and the ground it sits on were the same surface.
+        */}
         <SidebarInset
           className={cn(
-            "m-2 flex flex-1 flex-col overflow-auto rounded-xl border border-border/80 bg-background shadow-sm/5",
+            "m-3 flex flex-1 flex-col overflow-auto rounded-lg bg-card text-card-foreground shadow-[0_18px_44px_-20px_rgba(0,0,0,.55),0_1px_2px_rgba(8,26,51,.40)]",
             className,
           )}
         >

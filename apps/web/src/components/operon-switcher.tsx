@@ -45,7 +45,14 @@ import { useUserWebSocket } from "@/hooks/use-user-websocket";
  */
 export const OPERON_COLORS = {
   surface: "#081a33",
-  surfaceActive: "#f5b700",
+  // `activeBorder` (fix brief row 11, `docs/specs/operon-gui-pass-fix-brief.md`, "the
+  // switcher... shows the same... active style as the shell rail"): Operon's OWN
+  // `Sidebar.tsx` renders the active module as a 3px `border-sidebar-primary` (signal
+  // yellow) left bar plus full-weight white text — NEVER a solid yellow fill. The prior
+  // `surfaceActive: "#f5b700"` solid-fill value both mismatched the shell rail's actual
+  // anatomy and put white text on yellow at ~1.8:1 (theme-proposal.md §4a.2, item 1: yellow
+  // is a fill-with-navy-ink-on-top pair, never a surface for white text).
+  activeBorder: "#f5b700",
   border: "rgba(255, 255, 255, 0.1)",
   textPrimary: "#ffffff",
   textMuted: "rgba(255, 255, 255, 0.7)",
@@ -244,7 +251,7 @@ export function OperonSwitcher() {
             "data-module": module.key,
             "data-external": isCurrent ? "false" : "true",
             className:
-              "whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium no-underline",
+              "whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium no-underline border-l-[3px]",
           };
 
           return isCurrent ? (
@@ -253,8 +260,9 @@ export function OperonSwitcher() {
               {...shared}
               aria-current="page"
               style={{
-                backgroundColor: OPERON_COLORS.surfaceActive,
+                borderLeftColor: OPERON_COLORS.activeBorder,
                 color: OPERON_COLORS.textPrimary,
+                fontWeight: 600,
               }}
             >
               {module.icon} {module.label}
@@ -269,7 +277,13 @@ export function OperonSwitcher() {
               // hierarchy comes from weight and the active module's fill, never dimming.
               // Round 1 already fixed this for Operon's own `Sidebar.tsx` (finding 15); this
               // injected switcher is the mirror of that same rail and had the same bug.
-              style={{ color: OPERON_COLORS.textPrimary }}
+              // `borderLeftColor: "transparent"` keeps this item the same width as the
+              // active one's 3px border (`shared.className`), matching `Sidebar.tsx`'s own
+              // `border-transparent` inactive state rather than leaving the 3px unset.
+              style={{
+                color: OPERON_COLORS.textPrimary,
+                borderLeftColor: "transparent",
+              }}
             >
               {module.icon} {module.label}
             </a>

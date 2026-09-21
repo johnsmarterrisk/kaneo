@@ -4,14 +4,19 @@ import { useUserPreferencesStore } from "@/store/user-preferences";
 import { ThemeProvider } from "./index";
 
 /**
- * Operon mode (spec: GUI pass task 4b; docs/fork-discipline.md row 13): Initiative
+ * Operon mode (spec: GUI pass task 4b, widened by fix brief row 8
+ * `docs/specs/operon-gui-pass-fix-brief.md`; docs/fork-discipline.md row 13): Initiative
  * follows Operon's theme via the `operon_theme` cookie, read once on mount.
  *
- * Three claims:
- *  1. `navy` (Operon's default, which Kaneo has no mode of its own for) maps to `dark`.
+ * Four claims:
+ *  1. `navy` maps to Kaneo's OWN first-class `navy` class (not `dark` — the original GUI
+ *     pass mapping, superseded by the fix brief because `.dark` is a different anatomy).
  *  2. `light` and `dark` map onto themselves, unchanged.
  *  3. No cookie at all leaves the store's own theme alone — this provider must not force
  *     a value onto a deployment that never received Operon's handoff.
+ *  4. The `dark` class is never present alongside `navy` — Tailwind's `dark:` variant
+ *     (`@custom-variant dark (&:is(.dark *))`) must not fire under navy, since navy uses
+ *     the light token values on white surfaces, not dark's.
  *
  * `document.documentElement`'s class list is asserted rather than the store's raw `theme`
  * field: the second `useEffect` (pre-existing, untouched by this task) is what actually
@@ -50,13 +55,14 @@ afterEach(() => {
 });
 
 describe("ThemeProvider, Operon-mode cookie handoff", () => {
-  it("maps navy (Operon's default) to dark", () => {
+  it("maps navy to Kaneo's own navy class, not dark (fix brief row 8)", () => {
     useUserPreferencesStore.setState({ theme: "light" });
     setOperonThemeCookie("navy");
 
     render(<ThemeProvider>child</ThemeProvider>);
 
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("navy")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(document.documentElement.classList.contains("light")).toBe(false);
   });
 
@@ -77,6 +83,22 @@ describe("ThemeProvider, Operon-mode cookie handoff", () => {
     render(<ThemeProvider>child</ThemeProvider>);
 
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
+  it("strips a stale dark class when the store transitions to navy (no dark: leakage, fix brief row 8)", () => {
+    // Simulates arriving on a tab that previously rendered `dark` (e.g. a stale
+    // pre-navy-support session) and then receiving the navy cookie — the render-effect's
+    // remove list must include "navy" alongside "light"/"dark" or a leftover `dark` class
+    // would leave Tailwind's `dark:` variant firing on top of navy's own white-surface
+    // token values, corrupting the "light tokens on white surfaces" contract (row 8).
+    document.documentElement.classList.add("dark");
+    useUserPreferencesStore.setState({ theme: "light" });
+    setOperonThemeCookie("navy");
+
+    render(<ThemeProvider>child</ThemeProvider>);
+
+    expect(document.documentElement.classList.contains("navy")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
   it("leaves the store's own theme alone when no cookie is present", () => {

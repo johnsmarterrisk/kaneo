@@ -9,9 +9,14 @@ export function isWeekStartDay(value: number): value is WeekStartDay {
 }
 
 type UserPreferencesStore = {
-  theme: "light" | "dark" | "system";
+  // "navy" (fix brief row 8, `docs/specs/operon-gui-pass-fix-brief.md`) is reachable only
+  // through the Operon cookie handoff in `providers/theme-provider/index.tsx` — the local
+  // light/dark toggle (`theme-toggle-dropdown.tsx`) never sets it. It is a real member of
+  // this union, not a side-channel DOM class, so the existing `theme`-keyed paint effect in
+  // `ThemeProvider` treats it exactly like `light`/`dark` instead of special-casing it.
+  theme: "light" | "dark" | "navy" | "system";
   setTheme: (
-    theme: "light" | "dark" | "system",
+    theme: "light" | "dark" | "navy" | "system",
     coordinates?: { x: number; y: number },
   ) => void;
 
@@ -53,7 +58,7 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
     (set) => ({
       theme: "dark",
       setTheme: (
-        theme: "light" | "dark" | "system",
+        theme: "light" | "dark" | "navy" | "system",
         coordinates?: { x: number; y: number },
       ) => {
         if (coordinates) {
