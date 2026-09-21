@@ -22,9 +22,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  3. `WorkspaceSwitcher` is not rendered by `AppSidebar`. The real module is replaced by a
  *     marker component, so re-adding it anywhere in that tree turns this test red rather
  *     than passing quietly.
- *  4. Stream resolves to `${apex}/#/activity`, Stash resolves to the apex root like every
- *     other non-addressed module, and every other apex module still resolves to the apex
- *     root — asserting only Stream would pass a version that sent every module there.
+ *  4. Every addressable module resolves to its OWN hash address — Stream to
+ *     `${apex}/#/activity`, Telegraph to `${apex}/#/telegraph`, Stash to `${apex}/#/files`,
+ *     Settings to `${apex}/#/settings` — never the bare apex root (John, 2026-09-21: fixed
+ *     the rail bug where clicking any module but Stream from inside Initiative landed on
+ *     Stream, because a cold mount at the bare root had no route to read). Asserting only
+ *     Stream would pass a version that still sent every other module there.
+ *  4b. The rail rows stay left-aligned (rail-parity check, John 2026-09-21): no row carries
+ *     a `justify-center` class. Unlike the Operon-side rail, this one never needed a fix —
+ *     see `ModuleRow`'s own doc comment in `operon-switcher.tsx` for why — but a future
+ *     `justify-center` addition WOULD centre these rows for real (this fork's base-layer
+ *     touch-target rule does not reach `<a>`/`<span>`), so this guards against
+ *     reintroducing the bug the Operon side actually had.
  *  5. The FIRST module reads *Stream ⚡* while its KEY stays `signals`. Its POSITION is
  *     asserted too: the operator's 2026-09-11 decision put Stream at the head of both
  *     switchers, and array order is the only thing that expresses it.
@@ -142,16 +151,22 @@ describe("OperonModuleNav", () => {
     render(<OperonModuleNav variant="top" />);
 
     const telegraph = screen.getByTestId("module-telegraph");
-    expect(telegraph.getAttribute("href")).toBe("https://apex.b11.test:9443/");
+    expect(telegraph.getAttribute("href")).toBe(
+      "https://apex.b11.test:9443/#/telegraph",
+    );
     // The dev fallback must not have been used while a value was configured.
     expect(telegraph.getAttribute("href")).not.toContain("lvh.me");
   });
 
-  it("sends Stream to its own address and every other module (including Stash) to the apex root", () => {
-    // Before task G11, `moduleHref` ignored the key, so a member clicking Stream inside
-    // Initiative landed on whatever the apex root opens. Both halves are asserted, because
-    // a version that sent EVERY module to `#/activity` would pass an assertion about
-    // Stream alone.
+  it("sends every module to its own address, never the bare apex root (John, 2026-09-21 rail bug)", () => {
+    // THE BUG: `moduleHref` used to route Stream alone to `#/activity` and send every
+    // other module to the bare apex root with no hash — and this link is a full
+    // cross-origin navigation (`window.location.assign`), so the Operon side always cold
+    // mounts on the far end. A cold mount at the bare root has no route to read, so
+    // `initialModule()` fell through to `LANDING_MODULE` (Stream) regardless of which
+    // module was clicked: from Initiative, every rail click except Stream and Settings
+    // landed on Stream. Every addressable module is asserted individually so a version
+    // that fixed only Stream (or only Telegraph) would still fail here.
     vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.g11.test:9443/");
 
     render(<OperonModuleNav variant="top" />);
@@ -159,17 +174,49 @@ describe("OperonModuleNav", () => {
     expect(screen.getByTestId("module-signals").getAttribute("href")).toBe(
       "https://apex.g11.test:9443/#/activity",
     );
-
-    for (const key of ["telegraph", "files"]) {
-      expect(screen.getByTestId(`module-${key}`).getAttribute("href")).toBe(
-        "https://apex.g11.test:9443/",
-      );
-    }
+    expect(screen.getByTestId("module-telegraph").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/telegraph",
+    );
+    expect(screen.getByTestId("module-files").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/files",
+    );
 
     // Initiative is the current module: a span, so it carries no href at all.
     expect(
       screen.getByTestId("module-initiative").getAttribute("href"),
     ).toBeNull();
+  });
+
+  it('sends Settings to its own address too (variant="settings")', () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.g11-settings.test:9443/");
+
+    render(<OperonModuleNav variant="settings" />);
+
+    expect(screen.getByTestId("module-settings").getAttribute("href")).toBe(
+      "https://apex.g11-settings.test:9443/#/settings",
+    );
+  });
+
+  it("keeps every row left-aligned: no row carries a justify-center class (rail-parity check)", () => {
+    // John, 2026-09-21: "apply the same rail left-alignment fix to the fork rail." The
+    // Operon-side rail (`app/src/shell/Sidebar.tsx`) DID need `!justify-start`, because
+    // its rows are `<button>` and `index.css`'s `@layer base` touch-target rule forces
+    // `justify-content: center` on every one, with no real CSS cascade layer in that
+    // build to let a bare utility outrank it. Neither half applies here: `ModuleRow`
+    // renders `<a>`/`<span>`, and this fork's OWN equivalent base rule explicitly
+    // excludes `<a>` from its centering clause (see `index.css`'s "Touch targets"
+    // comment) — confirmed live against the running stack, `justifyContent` reads
+    // `"normal"` (flex-start) on every row, not `"center"`. This test does not assert a
+    // fix; it asserts the ABSENCE of the class that would reintroduce the bug, since
+    // adding `justify-center` here WOULD actually centre these rows (no base rule would
+    // fight it the way it does on the Operon side).
+    render(<OperonModuleNav variant="top" />);
+    render(<OperonModuleNav variant="settings" />);
+
+    for (const module of OPERON_MODULES) {
+      const row = screen.getByTestId(`module-${module.key}`);
+      expect(row.className).not.toMatch(/justify-center/);
+    }
   });
 
   it("labels the first module Stream, keeping `signals` as its key", () => {

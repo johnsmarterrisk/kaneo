@@ -188,22 +188,38 @@ export function __resetApexUrlWarning() {
  * The apex target for a module.
  *
  * The Operon shell keeps the active module in SPA state rather than in the URL, so a module
- * is only addressable once the shell registers a hash route for it. **Stream is the first
- * one that has** — `#/activity` (Operon spec R20/R21/R22, task G10's `app/src/feed/routes.ts`
- * and its narrow `#/activity/...` fallback) — so it is the one case here, and this function
- * stays the single place that changes when the next module gains an address.
+ * is only addressable once the shell registers a hash route for it.
  *
- * Every other module still resolves to the apex root, because the shell recognises no
- * `#/telegraph`, `#/settings`, `#/files` or `#/login` hash: the root is the only address
- * they have, and inventing one here would link to a route that does not exist. What the
- * root opens is the shell's own landing decision (G10 makes that Stream), which is
- * deliberately not second-guessed from inside the fork.
+ * FIXED (John, 2026-09-21 — the rail bug): this used to route Stream alone to `#/activity`
+ * and send every OTHER module to the bare apex root with no hash at all, reasoning "the
+ * shell recognises no `#/telegraph`/`#/settings`/`#/files` hash, so the root is the only
+ * address they have." That reasoning was already half wrong (`#/settings` bare has been
+ * recognised since GUI pass task 4a) and it produced the actual defect this fixes: this
+ * link is a FULL cross-origin navigation (`window.location.assign` in `AppShell.tsx`'s
+ * `activateInitiative`, not an in-SPA click), so every hop away from Initiative is a cold
+ * mount on the Operon side — and a cold mount at the bare apex root has no route to read,
+ * so `initialModule()` fell through to `LANDING_MODULE` (Stream) regardless of which module
+ * was clicked. `app/src/shell/AppShell.tsx`'s `initialModule()` now recognises bare
+ * `#/telegraph` and `#/files` for exactly this caller (see its own doc comment), so every
+ * module this switcher can link to now has a real address to send it to.
  */
 function moduleHref(apex: string, key: OperonModuleKey): string {
-  if (key === "signals") {
-    return `${apex}/#/activity`;
+  switch (key) {
+    case "signals":
+      return `${apex}/#/activity`;
+    case "telegraph":
+      return `${apex}/#/telegraph`;
+    case "files":
+      return `${apex}/#/files`;
+    case "settings":
+      return `${apex}/#/settings`;
+    default:
+      // "initiative" never reaches here: `ModuleRow` renders the current module as a
+      // `<span>`, never an `<a>` (see `isCurrent` below), so `moduleHref` is only ever
+      // called for the OTHER four keys — this default exists so the switch stays
+      // exhaustive if a fifth, still-addressless module ever joins the list.
+      return `${apex}/`;
   }
-  return `${apex}/`;
 }
 
 /**
@@ -214,6 +230,26 @@ function moduleHref(apex: string, key: OperonModuleKey): string {
  * override; this fork has no such override, so 15px is approximated by the stock `text-sm`
  * this codebase already uses everywhere else, rather than inventing an arbitrary size that
  * would be the only one in the file).
+ *
+ * NO `!justify-start` NEEDED HERE (John, 2026-09-21 rail-parity check) — investigated
+ * because the Operon-side rail (`app/src/shell/Sidebar.tsx`'s `renderModule`) DID need one:
+ * there, `index.css`'s `@layer base` touch-target rule forces `justify-content: center` on
+ * every `<button>`, and Tailwind 3's `@layer` there is source-order convention only (no real
+ * CSS cascade layer), so a bare `.justify-start` utility could not outrank the base rule on
+ * plain specificity. NEITHER half of that applies here: (1) this row renders `<a>`
+ * (`ModuleRow` below) or `<span>` (the current module), never `<button>` — and this fork's
+ * own equivalent rule (`index.css`, `@layer base`, "Touch targets") explicitly EXCLUDES
+ * `<a>` from its `justify-content: center` clause (TipTap prose links would break otherwise
+ * — see that rule's own comment), so no centering is ever forced here in the first place;
+ * (2) `shared.className` below sets `flex` but no `justify-*` utility at all, so
+ * `justify-content` is the flexbox INITIAL value, `normal` (behaves as `flex-start`) —
+ * confirmed against the running stack: `getComputedStyle(...).justifyContent` reads
+ * `"normal"` on every rendered row, not `"center"`. Tailwind 4 also compiles `@layer` to
+ * REAL CSS cascade layers (unlike Tailwind 3's Operon build), so even if a base-layer rule
+ * DID try to force this, Tailwind's `utilities` layer is declared after `base` and would
+ * already win on layer order alone — the `!important` workaround the Operon side needed
+ * would not even be the right mechanism here. `operon-switcher.test.tsx`'s own "rows stay
+ * left-aligned" test guards this staying true.
  */
 function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
   const isCurrent = module.key === CURRENT_MODULE;
