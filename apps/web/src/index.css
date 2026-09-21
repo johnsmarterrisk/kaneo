@@ -19,7 +19,7 @@ input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-text-fill-color: var(--foreground) !important;
+  -webkit-text-fill-color: var(--card-foreground) !important;
   -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
   transition: background-color 5000s ease-in-out 0s;
 }
@@ -66,6 +66,10 @@ input:-webkit-autofill:active {
   --font-sans: var(--font-sans);
   --font-heading: var(--font-heading);
   --font-mono: var(--font-mono);
+  --color-tag: var(--tag);
+  --color-tag-foreground: var(--tag-foreground);
+  --color-ink-secondary: var(--ink-secondary);
+  --shadow-panel: var(--panel-shadow);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -118,35 +122,12 @@ input:-webkit-autofill:active {
   }
 }
 
-/*
- * Re-tinted to Operon's Option B palette (`docs/design/theme-proposal.md` §4/§4a in the
- * Operon repository, the same values `app/src/index.css`'s `.light`/`.dark` blocks carry
- * there as RGB triples) — GUI pass Codex round-1 finding 2, manager ruling: DO the
- * proposal's planned re-tint rather than add a third Kaneo theme. `--font-sans`,
- * `--font-heading`, `--font-mono` and `--radius` are UNCHANGED (Geist stays Geist,
- * 0.625rem stays 0.625rem) — the ruling scopes this to colour, not typography, and this
- * file's own font/radius pair is not on `docs/fork-discipline.md`'s touch list at all.
- * `--chart-1..5` (task-board chart colours, not part of the brand palette) are also
- * unchanged; nothing here reads them for chrome. `--code`/`--code-foreground`/
- * `--code-highlight` map onto `--card`/`--foreground`/`--accent` respectively, the same
- * relationship the original color-mix expressions had to `--background`/`--foreground`.
- *
- * Kaneo has no navy mode of its own — the fork's `ThemeProvider` (GUI pass task 4b) maps
- * Operon's `navy` onto THIS `.dark` block, so re-tinting dark to B's navy-700 ground and
- * signal-yellow primary is what makes "Initiative follows Operon's navy theme" true rather
- * than "Initiative goes generic dark".
- *
- * NOT a byte-for-byte copy of `app/src/index.css`'s values (Codex round 2, findings 1/2):
- * the round-1 pass DID copy two families of token verbatim, and Kaneo's own upstream
- * components (off the touch list) consume them differently than Operon's own components
- * do, which round 1 had not checked. `--success/-warning/-destructive/-info-foreground`
- * now read each base token's OWN hex rather than white/navy-ink (`ui/badge.tsx` pairs them
- * with a faint tint of the SAME colour, not a solid fill); `--sidebar-accent` is `#1c3e6e`
- * rather than white (`ui/sidebar.tsx` applies it at FULL opacity, unlike Operon's own
- * `Sidebar.tsx`, whose call sites always fraction it). Each site below carries its own
- * note.
- */
+/* Option B: surface tokens are independent of page and rail tokens. */
 :root {
+  --tag: #f5b700;
+  --tag-foreground: #0b1f3a;
+  --ink-secondary: #3d4757;
+  --panel-shadow: 0 4px 16px -8px rgba(8,26,51,.18);
   /* Manrope / IBM Plex Mono (fix brief row 10) — the font stack mirrors
      `app/tailwind.config.js`'s `fontFamily.sans`/`.mono` in the Operon repository (same
      family names and fallback order) so the two surfaces read as one typographic system. */
@@ -177,31 +158,11 @@ input:-webkit-autofill:active {
   --card: #ffffff;
   --card-foreground: #0b1f3a;
   --destructive: #c0362c;
-  /* Status `-foreground` tokens (Codex round-2 finding 1) are TEXT COLOR for status
-     copy/badges rendered against the page/card — `ui/badge.tsx` pairs them with a faint
-     `bg-X/8` tint of the SAME token, not a solid fill (`bg-destructive/8
-     text-destructive-foreground`), and most other status text in this app
-     (`public-pr-badge.tsx`, `external-links-accordion.tsx`, `field.tsx`, …) reads directly
-     against `--card`/`--background`. Stock Kaneo's own pre-re-tint defaults already knew
-     this — `--destructive-foreground` was `red-700` in light / `red-400` in dark, a
-     readable SHADE OF THE HUE, never white or the page ink — and the first re-tint pass
-     missed it, setting every one of these to `--X-foreground: #ffffff` (light) /
-     `#0b1f3a` (dark), which reads fine on nothing: white text is invisible on an 8% tint
-     of itself over a white card, and navy-ink is invisible on an 8%–16% tint over the
-     navy-700 dark canvas. The fix reuses each base token's OWN hex — `theme-proposal.md`
-     §4a.1's palette already audited these specific values for "on canvas" contrast (danger
-     5.20:1 light / 7.55:1 dark, ok 5.05:1 / 8.41:1, warn 5.59:1 / 8.50:1, link 8.33:1 /
-     7.63:1), which is exactly the surface this token is actually read against. The one
-     tension this does not resolve: `backlog.tsx` (upstream, off the touch list) has FOUR
-     `hover:bg-destructive hover:text-destructive-foreground` icon buttons — a genuine
-     solid-fill pairing — where same-as-background text is as illegible as stock Kaneo's
-     own red-700-on-red-500 hover already was; that is a pre-existing upstream tension this
-     fork does not introduce and is not positioned to fix without editing `backlog.tsx`. */
-  --destructive-foreground: #c0362c;
+  --destructive-foreground: #ffffff;
   --foreground: #0b1f3a;
   --info: #2d4592;
   --info-foreground: #2d4592;
-  --input: #ded9ce;
+  --input: #8496ae;
   --muted: #f2efe8;
   --muted-foreground: #5a6577;
   --popover: #ffffff;
@@ -247,6 +208,8 @@ input:-webkit-autofill:active {
 }
 
 .dark {
+  --ink-secondary: #b6c4d8;
+  --panel-shadow: 0 4px 16px -8px rgba(0,0,0,.4);
   --accent: #1c3e6e;
   --accent-foreground: #edf2f9;
   --background: #0e2546;
@@ -254,7 +217,7 @@ input:-webkit-autofill:active {
   --card: #15315a;
   --card-foreground: #edf2f9;
   --destructive: #ff9b93;
-  --destructive-foreground: #ff9b93;
+  --destructive-foreground: #0b1f3a;
   --foreground: #edf2f9;
   --info: #8fb8ff;
   --info-foreground: #8fb8ff;
@@ -295,22 +258,7 @@ input:-webkit-autofill:active {
   --code-highlight: var(--accent);
 }
 
-/*
- * NAVY — a first-class Kaneo theme, not "dark" (fix brief `docs/specs/operon-gui-pass-fix-brief.md`
- * row 7; supersedes the GUI-pass-era mapping of Operon's `navy` cookie value onto THIS FILE's
- * `.dark` block, recorded as historical context in `theme-provider/index.tsx`). John's round-2
- * rejection ("white cards on the blue background... Initiative flashes, it feels like another
- * app") traced to Initiative rendering `.dark` (navy-600 CARDS on a navy-700 ground) for what
- * Operon's own shell renders as WHITE panels on the navy ground — two different anatomies under
- * one theme name. `.navy` fixes that by being `:root` (the LIGHT token values — white cards,
- * navy-ink text) with only the ground/rail/control tokens below overridden to navy, so a panel
- * inside Initiative is the same white-on-navy object as a panel in the Operon shell. Every value
- * below is quoted verbatim from the fix brief's row 7 table, which is itself
- * `docs/design/theme-proposal.md` §4a's B-navy palette. `--radius` moves from `0.625rem` to `1rem`
- * for navy ONLY — `:root`/`.dark` keep Kaneo's stock radius (see the file's earlier note; the
- * touch-list exemption for `--radius` was scoped to those two blocks, not to `.navy`, which does
- * not exist yet at that note's writing).
- */
+/* Navy uses light surfaces on a dark ground; it never activates dark variants. */
 .navy {
   --background: #081a33;
   --foreground: #ffffff;
@@ -338,10 +286,26 @@ input:-webkit-autofill:active {
   --accent: #fbf4df;
   --accent-foreground: #0b1f3a;
   --radius: 1rem;
-  /* Not named by row 7's override table, so kept at `:root`'s (light's) own value —
-     `--sidebar-primary`/`-foreground` is already the signal-yellow-fill-on-navy-ink pair the
-     active rail bar needs (`#f5b700`/`#0b1f3a`), and success/warning/destructive/info,
-     `--chart-*` and `--code*` are the same white-card pairings `:root` already audited. */
+  --secondary: #efefef;
+  --secondary-foreground: #0b1f3a;
+  --destructive: #c0362c;
+  --destructive-foreground: #ffffff;
+  --success: #167a4b;
+  --success-foreground: #167a4b;
+  --warning: #8a5a00;
+  --warning-foreground: #8a5a00;
+  --info: #2d4592;
+  --info-foreground: #2d4592;
+  --chart-1: #2d4592;
+  --chart-2: #167a4b;
+  --chart-3: #8a5a00;
+  --chart-4: #15315a;
+  --chart-5: #c0362c;
+  --code: #efefef;
+  --code-foreground: #0b1f3a;
+  --code-highlight: #fbf4df;
+  --ink-secondary: #3d4757;
+  --panel-shadow: 0 18px 44px -20px rgba(0,0,0,.55), 0 1px 2px rgba(8,26,51,.40);
 }
 
 @layer base {
@@ -443,11 +407,11 @@ input:-webkit-autofill:active {
     justify-content: center;
     width: 2rem;
     height: 2rem;
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border: 1px solid var(--input);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--background) 82%, transparent);
-    color: color-mix(in srgb, var(--foreground) 76%, transparent);
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--background) 68%, transparent);
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--card) 68%, transparent);
     transition:
       background-color 0.15s ease,
       border-color 0.15s ease,
@@ -456,9 +420,9 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-editor-quick-attach:hover {
-    border-color: color-mix(in srgb, var(--foreground) 18%, var(--border));
+    border-color: color-mix(in srgb, var(--card-foreground) 18%, var(--border));
     background: color-mix(in srgb, var(--accent) 72%, transparent);
-    color: var(--foreground);
+    color: var(--card-foreground);
     transform: translateY(-1px);
   }
 
@@ -466,7 +430,7 @@ input:-webkit-autofill:active {
     outline: none;
     box-shadow:
       0 0 0 2px color-mix(in srgb, var(--ring) 24%, transparent),
-      0 4px 16px color-mix(in srgb, var(--background) 68%, transparent);
+      0 4px 16px color-mix(in srgb, var(--card) 68%, transparent);
   }
 
   .kaneo-tiptap-bubble {
@@ -512,11 +476,11 @@ input:-webkit-autofill:active {
     gap: 0.35rem;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
     border-radius: 0.45rem;
-    background: color-mix(in srgb, var(--background) 90%, transparent);
+    background: color-mix(in srgb, var(--card) 90%, transparent);
     padding: 0.2rem 0.5rem;
     font-size: 0.72rem;
     line-height: 1;
-    color: color-mix(in srgb, var(--foreground) 80%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 80%, transparent);
     backdrop-filter: blur(8px);
     transition:
       border-color 0.12s ease,
@@ -526,8 +490,8 @@ input:-webkit-autofill:active {
 
   .kaneo-codeblock-language-trigger:hover {
     border-color: color-mix(in srgb, var(--ring) 42%, var(--border));
-    color: var(--foreground);
-    background: color-mix(in srgb, var(--background) 96%, transparent);
+    color: var(--card-foreground);
+    background: color-mix(in srgb, var(--card) 96%, transparent);
   }
 
   .kaneo-codeblock-copy-trigger {
@@ -546,8 +510,8 @@ input:-webkit-autofill:active {
     font-size: 0.965rem;
     line-height: 1.72;
     white-space: pre-wrap;
-    color: var(--foreground);
-    caret-color: var(--foreground);
+    color: var(--card-foreground);
+    caret-color: var(--card-foreground);
     outline: none;
   }
 
@@ -576,7 +540,7 @@ input:-webkit-autofill:active {
     font-weight: 600;
     letter-spacing: 0.01em;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--foreground) 48%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 48%, transparent);
   }
 
   .kaneo-tiptap-slash-item {
@@ -589,7 +553,7 @@ input:-webkit-autofill:active {
     padding: 0.4rem 0.45rem;
     text-align: left;
     font-size: 0.79rem;
-    color: color-mix(in srgb, var(--foreground) 88%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 88%, transparent);
   }
 
   .kaneo-tiptap-slash-label {
@@ -602,7 +566,7 @@ input:-webkit-autofill:active {
   .kaneo-tiptap-slash-shortcut {
     flex-shrink: 0;
     font-size: 0.68rem;
-    color: color-mix(in srgb, var(--foreground) 52%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 52%, transparent);
   }
 
   .kaneo-tiptap-slash-item:hover,
@@ -652,7 +616,7 @@ input:-webkit-autofill:active {
     padding: 0.32rem 0.42rem;
     text-align: left;
     font-size: 0.79rem;
-    color: color-mix(in srgb, var(--foreground) 88%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 88%, transparent);
   }
 
   .kaneo-mention-item:hover,
@@ -664,7 +628,7 @@ input:-webkit-autofill:active {
   .kaneo-tiptap-slash-empty {
     padding: 0.4rem 0.55rem;
     font-size: 0.76rem;
-    color: color-mix(in srgb, var(--foreground) 56%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 56%, transparent);
   }
 
   .kaneo-tiptap-content .ProseMirror p {
@@ -679,7 +643,7 @@ input:-webkit-autofill:active {
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.26;
-    color: var(--foreground);
+    color: var(--card-foreground);
   }
 
   .kaneo-tiptap-content .ProseMirror h1 {
@@ -721,7 +685,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-tiptap-content .ProseMirror li::marker {
-    color: color-mix(in srgb, var(--foreground) 70%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 70%, transparent);
   }
 
   .kaneo-tiptap-content .ProseMirror li {
@@ -778,7 +742,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-tiptap-content .ProseMirror li[data-type="taskItem"][data-checked="true"] > div p {
-    color: color-mix(in srgb, var(--foreground) 62%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 62%, transparent);
     text-decoration: line-through;
   }
 
@@ -798,7 +762,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-tiptap-content .ProseMirror a:hover {
-    color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
+    color: color-mix(in srgb, var(--primary) 84%, var(--card-foreground));
     text-decoration-color: currentColor;
   }
 
@@ -848,7 +812,7 @@ input:-webkit-autofill:active {
     margin: 0.5rem 0;
     border-left: 2px solid var(--border);
     padding-left: 0.75rem;
-    color: color-mix(in srgb, var(--foreground) 78%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 78%, transparent);
   }
 
   .kaneo-tiptap-content .ProseMirror img.kaneo-editor-image,
@@ -875,7 +839,7 @@ input:-webkit-autofill:active {
     content: attr(data-placeholder);
     height: 0;
     float: left;
-    color: color-mix(in srgb, var(--foreground) 40%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 40%, transparent);
   }
 
   .kaneo-tiptap-content .ProseMirror table {
@@ -937,7 +901,7 @@ input:-webkit-autofill:active {
   .kaneo-tiptap-content .ProseMirror [data-type="kaneo-embed"] > a {
     display: block;
     padding: 0.6rem 0.7rem;
-    color: var(--foreground);
+    color: var(--card-foreground);
     text-decoration: none;
     font-size: 0.82rem;
     word-break: break-word;
@@ -954,7 +918,7 @@ input:-webkit-autofill:active {
   .kaneo-tiptap-content .ProseMirror [data-type="kaneo-embed"] .kaneo-embed-unsupported {
     padding: 0.62rem 0.72rem;
     font-size: 0.78rem;
-    color: color-mix(in srgb, var(--foreground) 62%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 62%, transparent);
   }
 
   .kaneo-issue-link-node {
@@ -967,11 +931,11 @@ input:-webkit-autofill:active {
     max-width: min(26rem, 85vw);
     align-items: center;
     gap: 0.4rem;
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border: 1px solid var(--input);
     border-radius: 0.45rem;
     background: color-mix(in srgb, var(--accent) 22%, transparent);
     padding: 0.12rem 0.42rem;
-    color: var(--foreground);
+    color: var(--card-foreground);
     text-decoration: none;
     line-height: 1.3;
     transform: translateY(-0.02rem);
@@ -986,7 +950,7 @@ input:-webkit-autofill:active {
     flex-shrink: 0;
     font-size: 0.76rem;
     font-weight: 500;
-    color: color-mix(in srgb, var(--foreground) 64%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 64%, transparent);
   }
 
   .kaneo-issue-link-title {
@@ -996,7 +960,7 @@ input:-webkit-autofill:active {
     white-space: nowrap;
     font-size: 0.86rem;
     font-weight: 500;
-    color: var(--foreground);
+    color: var(--card-foreground);
   }
 
   .kaneo-issue-link-preview {
@@ -1015,7 +979,7 @@ input:-webkit-autofill:active {
     justify-content: space-between;
     gap: 0.6rem;
     font-size: 0.75rem;
-    color: color-mix(in srgb, var(--foreground) 68%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 68%, transparent);
   }
 
   .kaneo-issue-link-preview-key {
@@ -1028,7 +992,7 @@ input:-webkit-autofill:active {
     font-size: 0.9rem;
     line-height: 1.35;
     font-weight: 500;
-    color: var(--foreground);
+    color: var(--card-foreground);
   }
 
   .kaneo-issue-link-preview-meta {
@@ -1039,7 +1003,7 @@ input:-webkit-autofill:active {
     border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
     padding-top: 0.45rem;
     font-size: 0.76rem;
-    color: color-mix(in srgb, var(--foreground) 72%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 72%, transparent);
   }
 
   .kaneo-attachment-node {
@@ -1056,7 +1020,7 @@ input:-webkit-autofill:active {
     min-width: min(22rem, 100%);
     max-width: min(28rem, 100%);
     padding: 0.75rem 0.95rem;
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border: 1px solid var(--input);
     border-radius: calc(var(--radius) + 1px);
     background: linear-gradient(
       180deg,
@@ -1071,7 +1035,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-attachment-card:hover {
-    border-color: color-mix(in srgb, var(--foreground) 18%, var(--border));
+    border-color: color-mix(in srgb, var(--card-foreground) 18%, var(--border));
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--accent) 62%, transparent),
@@ -1086,8 +1050,8 @@ input:-webkit-autofill:active {
     justify-content: center;
     width: 1.8rem;
     height: 1.8rem;
-    color: color-mix(in srgb, var(--foreground) 72%, transparent);
-    background: color-mix(in srgb, var(--foreground) 6%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 72%, transparent);
+    background: color-mix(in srgb, var(--card-foreground) 6%, transparent);
     border-radius: 0.55rem;
     flex-shrink: 0;
   }
@@ -1099,7 +1063,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-attachment-card-title {
-    color: var(--foreground);
+    color: var(--card-foreground);
     font-size: 0.96rem;
     font-weight: 600;
     line-height: 1.2;
@@ -1110,7 +1074,7 @@ input:-webkit-autofill:active {
 
   .kaneo-attachment-card-meta {
     margin-top: 0.18rem;
-    color: color-mix(in srgb, var(--foreground) 58%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 58%, transparent);
     font-size: 0.76rem;
     line-height: 1.2;
     white-space: nowrap;
@@ -1159,7 +1123,7 @@ input:-webkit-autofill:active {
     padding: 0.38rem 0.45rem;
     text-align: left;
     font-size: 0.82rem;
-    color: color-mix(in srgb, var(--foreground) 90%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 90%, transparent);
   }
 
   .kaneo-embed-choice-item:hover,
@@ -1189,7 +1153,7 @@ input:-webkit-autofill:active {
   .kaneo-comment-composer {
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
     border-radius: 0.62rem;
-    background: color-mix(in srgb, var(--background) 96%, transparent);
+    background: color-mix(in srgb, var(--card) 96%, transparent);
     transition:
       border-color 0.14s ease,
       box-shadow 0.14s ease;
@@ -1201,9 +1165,9 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-comment-card-body {
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border: 1px solid var(--input);
     border-radius: 0.6rem;
-    background: color-mix(in srgb, var(--card) 82%, transparent);
+    background: var(--secondary);
     backdrop-filter: blur(3px);
     position: relative;
   }
@@ -1228,7 +1192,7 @@ input:-webkit-autofill:active {
     z-index: 85;
     border-radius: 999px;
     background: color-mix(in srgb, var(--ring) 78%, var(--primary));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--background) 88%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--card) 88%, transparent);
   }
 
   .kaneo-editor-drop-indicator span {
@@ -1248,8 +1212,8 @@ input:-webkit-autofill:active {
     font-size: 0.92rem;
     line-height: 1.62;
     white-space: pre-wrap;
-    color: var(--foreground);
-    caret-color: var(--foreground);
+    color: var(--card-foreground);
+    caret-color: var(--card-foreground);
     outline: none;
   }
 
@@ -1304,7 +1268,7 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-comment-editor-prose li::marker {
-    color: color-mix(in srgb, var(--foreground) 70%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 70%, transparent);
   }
 
   .kaneo-comment-editor-prose li {
@@ -1360,13 +1324,13 @@ input:-webkit-autofill:active {
   }
 
   .kaneo-comment-editor-prose li[data-type="taskItem"][data-checked="true"] > div p {
-    color: color-mix(in srgb, var(--foreground) 62%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 62%, transparent);
     text-decoration: line-through;
   }
 
   .kaneo-comment-editor-prose a,
   .kaneo-tiptap-prose a {
-    color: color-mix(in srgb, var(--foreground) 88%, #4c9aff 12%);
+    color: color-mix(in srgb, var(--card-foreground) 88%, #4c9aff 12%);
     cursor: pointer;
     text-decoration: underline;
     text-decoration-color: color-mix(in srgb, var(--ring) 44%, transparent);
@@ -1416,7 +1380,7 @@ input:-webkit-autofill:active {
   .kaneo-comment-editor-prose [data-type="kaneo-embed"] > a {
     display: block;
     padding: 0.6rem 0.7rem;
-    color: var(--foreground);
+    color: var(--card-foreground);
     text-decoration: none;
     font-size: 0.82rem;
     word-break: break-word;
@@ -1465,7 +1429,7 @@ input:-webkit-autofill:active {
 
   .kaneo-comment-editor-prose .is-editor-empty:first-child::before {
     content: attr(data-placeholder);
-    color: color-mix(in srgb, var(--foreground) 42%, transparent);
+    color: color-mix(in srgb, var(--card-foreground) 42%, transparent);
     pointer-events: none;
     float: left;
     height: 0;

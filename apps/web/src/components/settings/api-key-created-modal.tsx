@@ -72,8 +72,8 @@ export function ApiKeyCreatedModal({
                 )}
               </Button>
             </div>
-            <div className="bg-sidebar border border-border rounded-sm p-2.5 max-h-24 overflow-y-auto">
-              <code className="text-xs font-mono text-foreground break-all leading-relaxed">
+            <div className="bg-card border border-border rounded-sm p-2.5 max-h-24 overflow-y-auto">
+              <code className="text-xs font-mono text-card-foreground break-all leading-relaxed">
                 {apiKey}
               </code>
             </div>

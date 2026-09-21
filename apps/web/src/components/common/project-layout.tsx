@@ -109,13 +109,13 @@ export default function ProjectLayout({
 
   return (
     <Layout>
-      <Layout.Header className="h-11 border-border/80 px-2">
+      <Layout.Header className="border-border px-4">
         <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-foreground/85 hover:text-foreground" />
+                  <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-card-foreground/85 hover:text-card-foreground" />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="flex items-center gap-2 text-[10px]">
@@ -135,7 +135,7 @@ export default function ProjectLayout({
 
             <div className="hidden min-w-0 items-center gap-1 md:flex">
               <WorkspaceCrumbSelect />
-              <span className="text-foreground/30 text-xs">/</span>
+              <span className="text-card-foreground/30 text-xs">/</span>
               <ProjectCrumbSelect
                 workspaceId={workspaceId}
                 projectId={projectId}
@@ -160,7 +160,7 @@ export default function ProjectLayout({
             </div>
 
             {showViewSwitcher && (
-              <div className="hidden h-8 items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 sm:inline-flex">
+              <div className="hidden flex-wrap items-center gap-1 sm:inline-flex">
                 <Button
                   variant={resolvedView === "backlog" ? "secondary" : "ghost"}
                   size="xs"

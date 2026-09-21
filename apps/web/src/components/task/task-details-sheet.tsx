@@ -69,7 +69,7 @@ export default function TaskDetailsSheet({
         side="right"
         className="w-full max-w-full sm:max-w-lg md:max-w-2xl lg:max-w-4xl p-0 gap-0 [&>button]:hidden"
       >
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-background shrink-0">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card text-card-foreground shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">
               {project?.slug}-{task?.number}
@@ -85,8 +85,9 @@ export default function TaskDetailsSheet({
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={t("tasks:detail.openInFullPage")}
                     onClick={handleOpenFullPage}
-                    className="text-foreground"
+                    className="text-card-foreground"
                   >
                     <Maximize2 className="size-4" />
                   </Button>
@@ -99,8 +100,9 @@ export default function TaskDetailsSheet({
             <Button
               variant="ghost"
               size="sm"
+              aria-label={t("common:actions.close")}
               onClick={onClose}
-              className="text-foreground"
+              className="text-card-foreground"
             >
               <X className="size-4" />
             </Button>
@@ -115,7 +117,7 @@ export default function TaskDetailsSheet({
             taskId={currentTaskId}
             projectId={projectId}
             workspaceId={workspaceId}
-            className="w-full bg-sidebar border-b border-border flex flex-col gap-0 overflow-y-auto shrink-0"
+            className="w-full bg-card border-b border-border flex flex-col gap-0 overflow-y-auto shrink-0"
             compact={true}
           />
 

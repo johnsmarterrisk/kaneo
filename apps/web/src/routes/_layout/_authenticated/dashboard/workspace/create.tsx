@@ -102,7 +102,7 @@ function RouteComponent() {
                       required
                     />
                     {!name.trim() && (
-                      <p className="mt-1 text-destructive-foreground text-sm">
+                      <p className="mt-1 text-destructive text-sm">
                         {t("workspace:create.required")}
                       </p>
                     )}

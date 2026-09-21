@@ -65,7 +65,7 @@ export default function TaskStartDatePopover({
             <Button
               variant="ghost"
               size="sm"
-              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-card-foreground"
               onClick={() => handleDateChange(undefined)}
             >
               <X className="h-4 w-4" />

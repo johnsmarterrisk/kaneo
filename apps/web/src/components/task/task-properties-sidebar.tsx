@@ -140,7 +140,7 @@ export default function TaskPropertiesSidebar({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         {/* Compact mode: properties + icons in one row */}
         {compact && (
-          <div className="flex flex-row-reverse gap-2 w-full border-b border-border">
+          <div className="flex flex-wrap items-start gap-2 w-full border-b border-border">
             <div className="flex px-3 py-2">
               {task && canMoveTask && (
                 <TaskMovePopover
@@ -156,7 +156,7 @@ export default function TaskPropertiesSidebar({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-foreground border-r-0",
+                        "text-card-foreground border-r-0",
                         canMoveTask ? "rounded-none" : "rounded-r-none",
                       )}
                       onClick={() => handleCopyTaskLink()}
@@ -177,7 +177,7 @@ export default function TaskPropertiesSidebar({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-foreground rounded-l-none"
+                      className="text-card-foreground rounded-l-none"
                       onClick={() => handleCopyTaskBranch()}
                     >
                       <GitBranch className="size-4" />
@@ -194,11 +194,11 @@ export default function TaskPropertiesSidebar({
               </TooltipProvider>
             </div>
 
-            <div className="flex flex-row flex-wrap gap-1 items-center p-2 w-full">
+            <div className="flex flex-1 flex-wrap gap-2 items-center p-2 min-w-0">
               {task && (
                 <TaskStatusPopover task={task}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="justify-start h-7 px-1.5 gap-1.5"
                   >
@@ -216,7 +216,7 @@ export default function TaskPropertiesSidebar({
               {task && (
                 <TaskPriorityPopover task={task}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="justify-start h-7 px-1.5 gap-1.5"
                   >
@@ -230,7 +230,7 @@ export default function TaskPropertiesSidebar({
               {task && (
                 <TaskAssigneePopover task={task} workspaceId={workspaceId}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="justify-start h-7 px-1.5 gap-1.5"
                   >
@@ -265,7 +265,7 @@ export default function TaskPropertiesSidebar({
               {task && (
                 <TaskStartDatePopover task={task}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="justify-start h-7 px-1.5 gap-1.5"
                   >
@@ -283,7 +283,7 @@ export default function TaskPropertiesSidebar({
               {task && (
                 <TaskDueDatePopover task={task}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="justify-start h-7 px-1.5 gap-1.5"
                   >
@@ -331,7 +331,7 @@ export default function TaskPropertiesSidebar({
         {!compact && (
           <>
             {/* Mobile: Compact-style layout */}
-            <div className="flex flex-row-reverse gap-2 w-full border-b border-border lg:hidden">
+            <div className="flex flex-wrap items-start gap-2 w-full border-b border-border lg:hidden">
               <div className="flex px-3 py-2">
                 {task && canMoveTask && (
                   <TaskMovePopover
@@ -347,7 +347,7 @@ export default function TaskPropertiesSidebar({
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "text-foreground border-r-0",
+                          "text-card-foreground border-r-0",
                           canMoveTask ? "rounded-none" : "rounded-r-none",
                         )}
                         onClick={() => handleCopyTaskLink()}
@@ -368,7 +368,7 @@ export default function TaskPropertiesSidebar({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-foreground rounded-l-none"
+                        className="text-card-foreground rounded-l-none"
                         onClick={() => handleCopyTaskBranch()}
                       >
                         <GitBranch className="size-4" />
@@ -385,11 +385,11 @@ export default function TaskPropertiesSidebar({
                 </TooltipProvider>
               </div>
 
-              <div className="flex flex-row flex-wrap gap-1 items-center p-2 w-full">
+              <div className="flex flex-1 flex-wrap gap-2 items-center p-2 min-w-0">
                 {task && (
                   <TaskStatusPopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5"
                     >
@@ -407,7 +407,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskPriorityPopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5"
                     >
@@ -421,7 +421,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskAssigneePopover task={task} workspaceId={workspaceId}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5"
                     >
@@ -456,7 +456,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskStartDatePopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5"
                     >
@@ -474,7 +474,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskDueDatePopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5"
                     >
@@ -521,7 +521,7 @@ export default function TaskPropertiesSidebar({
             {/* Desktop: Title + stacked properties */}
             <div className="hidden lg:block">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border lg:border-none">
-                <p className="text-sm font-medium text-foreground/70 flex-1">
+                <p className="text-sm font-medium text-card-foreground/70 flex-1">
                   {t("tasks:properties.title")}
                 </p>
                 <div className="flex">
@@ -539,7 +539,7 @@ export default function TaskPropertiesSidebar({
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-foreground border-r-0",
+                            "text-card-foreground border-r-0",
                             canMoveTask ? "rounded-none" : "rounded-r-none",
                           )}
                           onClick={() => handleCopyTaskLink()}
@@ -560,7 +560,7 @@ export default function TaskPropertiesSidebar({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-foreground rounded-l-none"
+                          className="text-card-foreground rounded-l-none"
                           onClick={() => handleCopyTaskBranch()}
                         >
                           <GitBranch className="size-4" />
@@ -582,7 +582,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskStatusPopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5 w-full"
                     >
@@ -600,7 +600,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskPriorityPopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5 w-full"
                     >
@@ -614,7 +614,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskAssigneePopover task={task} workspaceId={workspaceId}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5 w-full"
                     >
@@ -649,7 +649,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskStartDatePopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5 w-full"
                     >
@@ -667,7 +667,7 @@ export default function TaskPropertiesSidebar({
                 {task && (
                   <TaskDueDatePopover task={task}>
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="justify-start h-7 px-1.5 gap-1.5 w-full"
                     >
@@ -715,7 +715,7 @@ export default function TaskPropertiesSidebar({
 
         <div className="hidden lg:flex px-3 flex-col gap-3 p-2">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-foreground/70 px-2">
+            <span className="text-xs font-medium text-card-foreground/70 px-2">
               {t("tasks:properties.labels")}
             </span>
             <div className="flex flex-wrap items-center gap-1.5 px-2">
@@ -730,7 +730,7 @@ export default function TaskPropertiesSidebar({
                       triggerNativeButton={false}
                     >
                       <Badge
-                        variant="outline"
+                        variant="tag"
                         className="flex items-center gap-1 px-1.5 py-0.5 cursor-pointer hover:bg-accent/50 transition-colors text-[10px]"
                       >
                         <span
@@ -750,7 +750,7 @@ export default function TaskPropertiesSidebar({
               {task && (
                 <TaskLabelsPopover task={task} workspaceId={workspaceId}>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     className="h-5 w-5 p-0 rounded-full"
                   >

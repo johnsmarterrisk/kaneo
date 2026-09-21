@@ -72,7 +72,7 @@ export default function WorkflowEditor({ projectId }: WorkflowEditorProps) {
           return (
             <div
               key={`${integrationType}-${eventType}`}
-              className="flex items-center justify-between gap-4 p-3 border border-border rounded-md bg-sidebar"
+              className="flex items-center justify-between gap-4 p-3 border border-border rounded-md bg-card"
             >
               <span className="text-sm">
                 {t(`settings:workflowEditor.events.${eventType}`)}

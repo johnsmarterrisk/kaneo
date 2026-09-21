@@ -257,11 +257,11 @@ function RouteComponent() {
         title={t("tasks:gantt.pageTitle", { name: project?.name })}
         hideAppName
       />
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex h-full min-h-0 flex-col bg-card">
         <div className="border-b border-border/80 px-3 py-3 sm:px-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1">
-              <h1 className="text-sm font-semibold text-foreground">
+              <h1 className="text-sm font-semibold text-card-foreground">
                 {t("tasks:gantt.title")}
               </h1>
             </div>
@@ -308,7 +308,7 @@ function RouteComponent() {
         {!timeline || parsedTasks.length === 0 ? (
           <div className="flex flex-1 items-center justify-center px-6">
             <div className="max-w-sm text-center">
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-card-foreground">
                 {t("tasks:gantt.noTasks")}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -319,7 +319,7 @@ function RouteComponent() {
         ) : scheduledTasks.length === 0 ? (
           <div className="flex flex-1 items-center justify-center px-6">
             <div className="max-w-sm text-center">
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-card-foreground">
                 {t("tasks:gantt.noTasksFound")}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -334,10 +334,10 @@ function RouteComponent() {
             style={{ scrollPaddingLeft: `${scrollPaddingLeftRem}rem` }}
           >
             <div className="relative min-w-max touch-pan-x touch-pan-y">
-              <div className="sticky top-0 z-20 flex border-b border-border bg-background/95 backdrop-blur">
+              <div className="sticky top-0 z-20 flex border-b border-border bg-card/95 backdrop-blur">
                 {showTaskRail ? (
                   <div
-                    className="sticky left-0 z-30 shrink-0 border-r border-border bg-background px-2 py-2.5 sm:w-80 sm:px-4 sm:py-3"
+                    className="sticky left-0 z-30 shrink-0 border-r border-border bg-card px-2 py-2.5 sm:w-80 sm:px-4 sm:py-3"
                     style={{
                       width: isMobile ? `${taskColumnWidthRem}rem` : undefined,
                     }}
@@ -428,7 +428,7 @@ function RouteComponent() {
                         }}
                       >
                         {showTaskRail ? (
-                          <div className="sticky left-0 z-[11] h-full border-r border-border bg-background">
+                          <div className="sticky left-0 z-[11] h-full border-r border-border bg-card">
                             <button
                               type="button"
                               className="flex min-h-[44px] w-full min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-2 text-left transition-colors hover:bg-muted sm:min-h-0 sm:px-3 sm:py-1.5"
@@ -448,7 +448,7 @@ function RouteComponent() {
                                   {project?.slug}-{task.number}
                                 </span>
                               </div>
-                              <p className="w-full line-clamp-1 text-xs font-medium leading-tight text-foreground">
+                              <p className="w-full line-clamp-1 text-xs font-medium leading-tight text-card-foreground">
                                 {task.title}
                               </p>
                               <p className="w-full truncate text-[11px] leading-tight text-muted-foreground">

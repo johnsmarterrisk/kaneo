@@ -78,7 +78,7 @@ export default function SubtaskRow({
             <SubtaskStatusPopover tasks={tasks} projectId={projectId}>
               <button
                 type="button"
-                className="shrink-0 flex items-center justify-center rounded p-0.5 transition-colors outline-none [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground"
+                className="shrink-0 flex items-center justify-center rounded p-0.5 transition-colors outline-none [&_svg]:text-muted-foreground hover:[&_svg]:text-card-foreground"
               >
                 {getColumnIcon(task.status, false)}
               </button>
@@ -90,7 +90,7 @@ export default function SubtaskRow({
               onClick={onNavigate}
             >
               <span
-                className={`text-sm truncate block ${isCompleted ? "line-through text-muted-foreground" : "text-foreground/90"}`}
+                className={`text-sm truncate block ${isCompleted ? "line-through text-muted-foreground" : "text-card-foreground/90"}`}
               >
                 {task.title}
               </span>

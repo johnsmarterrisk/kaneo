@@ -40,7 +40,7 @@ export default function TaskCrumbSelect({
           <Button
             variant="ghost"
             size="xs"
-            className="h-7 max-w-56 justify-between gap-1.5 px-2 text-xs text-foreground"
+            className="h-7 max-w-56 justify-between gap-1.5 px-2 text-xs text-card-foreground"
           />
         }
       >
@@ -65,7 +65,7 @@ export default function TaskCrumbSelect({
                 onClick={() => onSelectTask(task.id)}
                 className="h-8 gap-2 text-sm"
               >
-                <span className="min-w-0 truncate text-foreground">
+                <span className="min-w-0 truncate text-card-foreground">
                   {task.number != null ? `#${task.number} ` : ""}
                   {task.title}
                 </span>

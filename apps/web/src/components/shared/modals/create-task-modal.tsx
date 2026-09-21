@@ -648,7 +648,7 @@ function CreateTaskModal({
                     t("common:modals.createTask.breadcrumbTask")}
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
-                <BreadcrumbItem className="text-foreground font-medium text-sm">
+                <BreadcrumbItem className="text-card-foreground font-medium text-sm">
                   {t("common:modals.createTask.title")}
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -670,7 +670,7 @@ function CreateTaskModal({
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
               placeholder={t("common:modals.createTask.taskTitlePlaceholder")}
-              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-3 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
+              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-3 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-card-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
               required
             />
 
@@ -717,7 +717,7 @@ function CreateTaskModal({
                       className={cn(
                         "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                         resolvedProjectId
-                          ? "bg-accent/30 text-foreground"
+                          ? "bg-accent/30 text-card-foreground"
                           : "text-muted-foreground",
                       )}
                     >
@@ -751,8 +751,8 @@ function CreateTaskModal({
                   </PopoverContent>
                 </Popover>
               )}
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/50 text-foreground rounded-md text-xs font-medium border border-border">
-                <div className="w-1.5 h-1.5 bg-foreground rounded-full" />
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/50 text-card-foreground rounded-md text-xs font-medium border border-border">
+                <div className="w-1.5 h-1.5 bg-card-foreground rounded-full" />
                 {statusLabel}
               </div>
 
@@ -763,7 +763,7 @@ function CreateTaskModal({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                       startDate
-                        ? "bg-accent/30 text-foreground"
+                        ? "bg-accent/30 text-card-foreground"
                         : "text-muted-foreground",
                     )}
                   >
@@ -805,7 +805,7 @@ function CreateTaskModal({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                       priority !== "no-priority"
-                        ? "bg-accent/30 text-foreground"
+                        ? "bg-accent/30 text-card-foreground"
                         : "text-muted-foreground",
                     )}
                   >
@@ -844,7 +844,7 @@ function CreateTaskModal({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                       selectedUser
-                        ? "bg-accent/30 text-foreground"
+                        ? "bg-accent/30 text-card-foreground"
                         : "text-muted-foreground",
                     )}
                   >
@@ -924,7 +924,7 @@ function CreateTaskModal({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                       dueDate
-                        ? "bg-accent/30 text-foreground"
+                        ? "bg-accent/30 text-card-foreground"
                         : "text-muted-foreground",
                     )}
                   >
@@ -966,7 +966,7 @@ function CreateTaskModal({
                     className={cn(
                       "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border border-border hover:bg-accent/50",
                       labels.length > 0
-                        ? "bg-accent/30 text-foreground"
+                        ? "bg-accent/30 text-card-foreground"
                         : "text-muted-foreground",
                     )}
                   >
@@ -986,7 +986,7 @@ function CreateTaskModal({
                           placeholder={t(
                             "common:modals.createTask.searchLabels",
                           )}
-                          className="w-full bg-transparent border-none text-foreground text-xs focus:outline-none placeholder:text-muted-foreground"
+                          className="w-full bg-transparent border-none text-card-foreground text-xs focus:outline-none placeholder:text-muted-foreground"
                         />
                       </div>
 
@@ -1100,14 +1100,14 @@ function CreateTaskModal({
             </div>
           </div>
 
-          <DialogFooter className="flex-shrink-0 border-t border-border bg-background px-6 py-4">
+          <DialogFooter className="flex-shrink-0 border-t border-border bg-card px-6 py-4">
             <div className="flex items-center gap-3 mr-auto">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-card-foreground transition-colors">
                 <input
                   type="checkbox"
                   checked={createMore}
                   onChange={(e) => setCreateMore(e.target.checked)}
-                  className="rounded border-border bg-background text-primary focus:ring-ring focus:ring-offset-0 focus:ring-2 transition-[border-color,box-shadow]"
+                  className="rounded border-border bg-card text-primary focus:ring-ring focus:ring-offset-0 focus:ring-2 transition-[border-color,box-shadow]"
                 />
                 {t("common:modals.createTask.createMore")}
               </label>
@@ -1118,7 +1118,7 @@ function CreateTaskModal({
               onClick={() => handleOpenChange(false)}
               variant="outline"
               size="sm"
-              className="border-border text-foreground hover:bg-accent"
+              className="border-border text-card-foreground hover:bg-accent"
             >
               {t("common:actions.cancel")}
             </Button>

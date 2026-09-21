@@ -305,7 +305,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
           <button
             type="button"
             onClick={() => toggleSection(column.id)}
-            className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-2 text-sm font-medium text-card-foreground hover:text-card-foreground transition-colors"
           >
             <ChevronRight
               className={cn(
@@ -331,7 +331,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
                 setIsTaskModalOpen(true);
                 setActiveColumn(column.id);
               }}
-              className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-card-foreground transition-colors"
               title={t("tasks:listView.addTask")}
             >
               <Plus className="w-3 h-3" />
@@ -341,7 +341,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
               <button
                 type="button"
                 onClick={() => handleArchiveClick(column)}
-                className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
+                className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-card-foreground transition-colors"
                 title={t("tasks:listView.archiveAllTooltip")}
               >
                 <Archive className="w-3 h-3" />
@@ -432,7 +432,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
                   <span className="text-[10px] font-mono text-muted-foreground">
                     {project?.slug}-{activeTask.number}
                   </span>
-                  <span className="text-xs text-foreground truncate">
+                  <span className="text-xs text-card-foreground truncate">
                     {activeTask.title}
                   </span>
                 </div>

@@ -189,7 +189,7 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
 
   if (!project?.columns) {
     return (
-      <div className="flex h-full w-full flex-col bg-linear-to-b from-muted/25 to-background">
+      <div className="flex h-full w-full flex-col bg-background">
         <header className="mb-6 mt-6 space-y-6 shrink-0 px-6">
           <div className="flex items-center justify-between">
             <div className="w-48 h-8 bg-muted/50 rounded-md animate-pulse" />
@@ -197,7 +197,7 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
         </header>
 
         <div className="relative min-h-0 flex-1">
-          <div className="flex h-full flex-1 gap-4 overflow-x-auto px-4 pb-4 md:px-5">
+          <div className="flex h-full flex-1 gap-3 overflow-x-auto p-3">
             {[...Array(4)].map((_, i) => (
               <div
                 key={`kanban-column-skeleton-${
@@ -248,9 +248,9 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full w-full flex-col bg-linear-to-b from-muted/20 to-background">
+      <div className="flex h-full w-full flex-col bg-background">
         <div className="min-h-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-          <div className="flex h-full min-w-max gap-4 px-4 py-4 md:px-5">
+          <div className="flex h-full min-w-max gap-3 p-3">
             {project.columns?.map((column) => (
               <div
                 key={column.id}

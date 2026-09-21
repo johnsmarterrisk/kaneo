@@ -188,12 +188,12 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
           {/** biome-ignore lint/a11y/noStaticElementInteractions: false positive for onClick and onKeyDown */}
           <div
             onClick={handleTaskCardClick}
-            className={`group relative rounded-lg border bg-background p-3 shadow-xs/5 transition-[background-color,border-color,box-shadow,scale] duration-150 ease-out active:scale-[0.98] ${
+            className={`group relative rounded-[14px] border bg-secondary text-card-foreground p-4 shadow-xs/5 transition-[background-color,border-color,box-shadow,scale] duration-150 ease-out active:scale-[0.98] ${
               disableDragDrop ? "cursor-default" : "cursor-move"
             } ${
               isDragging
                 ? "border-ring/40 bg-card shadow-lg"
-                : "hover:border-border/90 hover:bg-background hover:shadow-sm"
+                : "hover:border-border/90 hover:bg-accent hover:shadow-sm"
             } ${
               isTaskSelected
                 ? "border-ring/40 bg-accent/50 shadow-sm ring-1 ring-inset ring-ring/30"
@@ -207,40 +207,9 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
               }
             }}
           >
-            {showTaskNumbers && (
-              <div className="mb-2 text-[10px] font-mono text-muted-foreground/90">
-                {project?.slug}-{task.number}
-              </div>
-            )}
-
-            {showAssignees && (
-              <div className="absolute top-3 right-3">
-                {task.userId ? (
-                  <Avatar className="h-5 w-5">
-                    <AvatarImage
-                      src={assignee?.user?.image ?? ""}
-                      alt={assignee?.user?.name || ""}
-                    />
-                    <AvatarFallback className="text-xs font-medium border border-border/30">
-                      {getInitials(assignee?.user?.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <div
-                    className="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-muted"
-                    title={t("tasks:assignee.unassigned")}
-                  >
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      ?
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mb-2.5 pr-6">
+            <div className="mb-2.5">
               <div
-                className="overflow-hidden break-words leading-5 font-medium text-foreground/95 text-[15px]"
+                className="overflow-hidden break-words leading-5 font-medium text-card-foreground text-[15px]"
                 style={{
                   display: "-webkit-box",
                   WebkitLineClamp: 3,
@@ -253,11 +222,39 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
               </div>
             </div>
 
-            {showLabels && (
-              <div className="mb-2.5">
-                <TaskLabels labels={task.labels ?? []} />
-              </div>
-            )}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {showLabels && <TaskLabels labels={task.labels ?? []} />}
+              {showTaskNumbers && (
+                <div className="text-xs font-mono text-ink-secondary">
+                  {project?.slug}-{task.number}
+                </div>
+              )}
+
+              {showAssignees && (
+                <div className="ml-auto">
+                  {task.userId ? (
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage
+                        src={assignee?.user?.image ?? ""}
+                        alt={assignee?.user?.name || ""}
+                      />
+                      <AvatarFallback className="text-xs font-medium border border-border/30">
+                        {getInitials(assignee?.user?.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <div
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-muted"
+                      title={t("tasks:assignee.unassigned")}
+                    >
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        ?
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center gap-1.5">
               {showPriority && (

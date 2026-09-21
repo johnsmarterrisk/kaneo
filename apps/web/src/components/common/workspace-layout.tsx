@@ -39,7 +39,7 @@ export default function WorkspaceLayout({
     <Layout>
       <Layout.Header>
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-1 w-full">
+          <div className="flex min-w-0 items-center gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -77,7 +77,9 @@ export default function WorkspaceLayout({
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          <div className={`${cn("flex items-center gap-1.5", className)}`}>
+          <div
+            className={`${cn("flex shrink-0 items-center gap-1.5", className)}`}
+          >
             {headerActions}
           </div>
         </div>

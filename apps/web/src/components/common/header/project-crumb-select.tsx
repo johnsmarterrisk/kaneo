@@ -37,14 +37,14 @@ export default function ProjectCrumbSelect({
           <Button
             variant="ghost"
             size="xs"
-            className="h-7 justify-between gap-2.5 px-2 text-xs text-foreground"
+            className="h-7 justify-between gap-2.5 px-2 text-xs text-card-foreground"
           />
         }
       >
         <span className="truncate text-left">
           {projectName || t("settings:projectSwitcher.selectProject")}
         </span>
-        <ChevronsUpDown className="size-3 text-foreground/70" />
+        <ChevronsUpDown className="size-3 text-card-foreground/70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-72" align="start">
         <DropdownMenuGroup>

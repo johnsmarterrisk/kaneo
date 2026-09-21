@@ -120,7 +120,7 @@ function RouteComponent() {
         title={t("tasks:calendar.pageTitle", { name: project?.name })}
         hideAppName
       />
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex h-full min-h-0 flex-col bg-card">
         <CalendarToolbar
           visibleMonth={visibleMonth}
           onPreviousMonth={handlePreviousMonth}
@@ -142,7 +142,7 @@ function RouteComponent() {
           </div>
         ) : scheduledTasks.length === 0 ? (
           <div className="border-b border-border/80 px-4 py-3 text-center">
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-card-foreground">
               {t("tasks:calendar.noTasks")}
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground">

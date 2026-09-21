@@ -67,7 +67,7 @@ function CheckSlot({ checked }: { checked: boolean }) {
       className={`inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border ${
         checked
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-input bg-background"
+          : "border-input bg-card"
       }`}
     >
       {checked ? "✓" : null}
@@ -89,15 +89,15 @@ function ActiveFilterChip({
   onClear,
 }: ActiveFilterChipProps) {
   return (
-    <div className="inline-flex h-7 items-center rounded-md border border-border bg-background text-xs shadow-xs">
-      <span className="px-2 font-medium text-foreground">{subject}</span>
+    <div className="inline-flex h-7 items-center rounded-md border border-border bg-card text-xs shadow-xs">
+      <span className="px-2 font-medium text-card-foreground">{subject}</span>
       <span className="h-full w-px bg-border" />
-      <span className="px-2 text-foreground/80">{operator}</span>
+      <span className="px-2 text-card-foreground/80">{operator}</span>
       <span className="h-full w-px bg-border" />
-      <span className="flex px-2 text-foreground">{value}</span>
+      <span className="flex px-2 text-card-foreground">{value}</span>
       <span className="h-full w-px bg-border" />
       <button
-        className="inline-flex h-full w-7 items-center justify-center rounded-r-md text-foreground/70 hover:bg-accent/70 hover:text-foreground"
+        className="inline-flex h-full w-7 items-center justify-center rounded-r-md text-card-foreground/70 hover:bg-accent/70 hover:text-card-foreground"
         onClick={onClear}
         type="button"
       >
@@ -121,7 +121,7 @@ function StackedIcons({
       {items.slice(0, 3).map((item) => (
         <span
           key={item.id}
-          className={`inline-flex size-4 items-center justify-center rounded-full bg-background ${itemClassName ?? ""}`}
+          className={`inline-flex size-4 items-center justify-center rounded-full bg-card ${itemClassName ?? ""}`}
         >
           {item.node}
         </span>
@@ -252,7 +252,7 @@ export default function BoardToolbar({
   };
 
   return (
-    <div className="border-border/80 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+    <div className="border-border border-b bg-card text-card-foreground">
       <div className="flex min-h-10 items-center px-2 py-1.5 md:px-3">
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -261,7 +261,7 @@ export default function BoardToolbar({
                 render={
                   <button
                     type="button"
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-secondary px-2.5 text-card-foreground text-xs font-medium outline-none ring-0 hover:bg-accent/60"
                   />
                 }
               >
@@ -286,7 +286,7 @@ export default function BoardToolbar({
                         className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                           selectedStatusIds.length === 0
                             ? "bg-accent text-accent-foreground"
-                            : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                            : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                         }`}
                         onClick={() => updateFilter("status", null)}
                         type="button"
@@ -300,7 +300,7 @@ export default function BoardToolbar({
                           className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                             selectedStatusIds.includes(column.id)
                               ? "bg-accent text-accent-foreground"
-                              : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                              : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                           }`}
                           onClick={() => toggleStatusFilter(column.id)}
                           type="button"
@@ -328,7 +328,7 @@ export default function BoardToolbar({
                         className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                           selectedPriorityIds.length === 0
                             ? "bg-accent text-accent-foreground"
-                            : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                            : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                         }`}
                         onClick={() => updateFilter("priority", null)}
                         type="button"
@@ -342,7 +342,7 @@ export default function BoardToolbar({
                           className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                             selectedPriorityIds.includes(priority)
                               ? "bg-accent text-accent-foreground"
-                              : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                              : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                           }`}
                           onClick={() => togglePriorityFilter(priority)}
                           type="button"
@@ -372,7 +372,7 @@ export default function BoardToolbar({
                         className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                           selectedAssigneeIds.length === 0
                             ? "bg-accent text-accent-foreground"
-                            : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                            : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                         }`}
                         onClick={() => updateFilter("assignee", null)}
                         type="button"
@@ -386,7 +386,7 @@ export default function BoardToolbar({
                           className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                             selectedAssigneeIds.includes(member.userId)
                               ? "bg-accent text-accent-foreground"
-                              : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                              : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                           }`}
                           onClick={() => toggleAssigneeFilter(member.userId)}
                           type="button"
@@ -424,7 +424,7 @@ export default function BoardToolbar({
                         className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                           selectedDueDateFilters.length === 0
                             ? "bg-accent text-accent-foreground"
-                            : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                            : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                         }`}
                         onClick={() => updateFilter("dueDate", null)}
                         type="button"
@@ -444,7 +444,7 @@ export default function BoardToolbar({
                           className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs ${
                             selectedDueDateFilters.includes(dueDate)
                               ? "bg-accent text-accent-foreground"
-                              : "text-foreground/90 hover:bg-accent/60 hover:text-foreground"
+                              : "text-card-foreground/90 hover:bg-accent/60 hover:text-card-foreground"
                           }`}
                           onClick={() => toggleDueDateFilter(dueDate)}
                           type="button"
@@ -646,9 +646,10 @@ export default function BoardToolbar({
               type="button"
               className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${
                 viewMode === "board"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-card-foreground"
               }`}
+              aria-pressed={viewMode === "board"}
               onClick={() => setViewMode("board")}
             >
               <PanelsTopLeft className="h-3 w-3" />
@@ -658,9 +659,10 @@ export default function BoardToolbar({
               type="button"
               className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium transition-colors ${
                 viewMode === "list"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-card-foreground"
               }`}
+              aria-pressed={viewMode === "list"}
               onClick={() => setViewMode("list")}
             >
               <Rows3 className="h-3 w-3" />

@@ -140,13 +140,13 @@ export function ApiKeyTable({ apiKeys, isLoading }: ApiKeyTableProps) {
                   <TableCell
                     className={cn(
                       "font-medium",
-                      expiration.isExpired && "text-destructive-foreground",
+                      expiration.isExpired && "text-destructive",
                     )}
                   >
                     {apiKey.name || t("settings:apiKey.table.unnamedKey")}
                   </TableCell>
                   <TableCell>
-                    <code className="text-xs bg-background px-2 py-1 rounded border border-border">
+                    <code className="text-xs bg-card px-2 py-1 rounded border border-border">
                       {apiKey.start}...
                     </code>
                   </TableCell>

@@ -22,7 +22,7 @@ function CheckSlot({ checked }: { checked: boolean }) {
       className={`inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border ${
         checked
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-input bg-background"
+          : "border-input bg-card"
       }`}
     >
       {checked ? "\u2713" : null}
@@ -70,7 +70,7 @@ export default function SortControl({ sort, onSortChange }: SortControlProps) {
               className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium outline-none ring-0 ${
                 isActive
                   ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                  : "border-border bg-background text-foreground hover:bg-accent/60"
+                  : "border-input bg-secondary text-secondary-foreground hover:bg-accent/60"
               }`}
             />
           }
@@ -131,7 +131,7 @@ export default function SortControl({ sort, onSortChange }: SortControlProps) {
         <button
           type="button"
           onClick={toggleDirection}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent/60"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-input bg-secondary text-secondary-foreground hover:bg-accent/60"
           title={
             sort.direction === "asc"
               ? t("tasks:sort.ascending")

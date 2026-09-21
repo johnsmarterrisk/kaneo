@@ -91,7 +91,7 @@ function CreateWorkspaceModal({ open, onClose }: CreateWorkspaceModalProps) {
                   {t("common:modals.createWorkspace.breadcrumbKaneo")}
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
-                <BreadcrumbItem className="text-foreground font-medium text-sm">
+                <BreadcrumbItem className="text-card-foreground font-medium text-sm">
                   {t("common:modals.createWorkspace.title")}
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -110,7 +110,7 @@ function CreateWorkspaceModal({ open, onClose }: CreateWorkspaceModalProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("common:modals.createWorkspace.namePlaceholder")}
-              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
+              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-card-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
               required
             />
 
@@ -121,7 +121,7 @@ function CreateWorkspaceModal({ open, onClose }: CreateWorkspaceModalProps) {
               placeholder={t(
                 "common:modals.createWorkspace.descriptionPlaceholder",
               )}
-              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-base [&_[data-slot=input]]:leading-relaxed [&_[data-slot=input]]:text-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
+              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-base [&_[data-slot=input]]:leading-relaxed [&_[data-slot=input]]:text-card-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
             />
           </div>
 
@@ -131,7 +131,7 @@ function CreateWorkspaceModal({ open, onClose }: CreateWorkspaceModalProps) {
               onClick={handleClose}
               variant="outline"
               size="sm"
-              className="border-border text-foreground hover:bg-accent"
+              className="border-border text-card-foreground hover:bg-accent"
             >
               {t("common:actions.cancel")}
             </Button>

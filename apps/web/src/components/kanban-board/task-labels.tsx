@@ -14,8 +14,8 @@ export function TaskLabels({
       {labels.map((label) => (
         <Badge
           key={label.id}
-          variant="outline"
-          className="max-w-full min-w-0 px-2 py-0.5 text-[10px] flex items-center"
+          variant="tag"
+          className="max-w-full min-w-0 px-2 py-0.5 text-xs flex items-center"
         >
           <span
             aria-hidden="true"

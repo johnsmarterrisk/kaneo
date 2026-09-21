@@ -151,7 +151,7 @@ export function RepositoryBrowserModal({
               {[0, 1, 2, 3, 4].map((slot) => (
                 <div
                   key={`loading-skeleton-repo-${slot}`}
-                  className="p-4 border border-border rounded-md bg-sidebar animate-pulse"
+                  className="p-4 border border-border rounded-md bg-card animate-pulse"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-muted rounded-full" />
@@ -211,7 +211,7 @@ export function RepositoryBrowserModal({
                       type="button"
                       onClick={() => handleSelectRepository(repository)}
                       className={cn(
-                        "w-full p-4 border rounded-md text-left transition-colors group bg-sidebar",
+                        "w-full p-4 border rounded-md text-left transition-colors group bg-card",
                         "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                         selectedRepository === repository.full_name
                           ? "border-primary bg-accent"

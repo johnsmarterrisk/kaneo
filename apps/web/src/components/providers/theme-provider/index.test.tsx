@@ -1,4 +1,4 @@
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 import { ThemeProvider } from "./index";
@@ -121,4 +121,15 @@ describe("ThemeProvider, Operon-mode cookie handoff", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
+});
+
+it("keeps exactly one theme class through navy, dark, light and system transitions", () => {
+  render(<ThemeProvider>child</ThemeProvider>);
+  for (const theme of ["navy", "dark", "navy", "light", "system"] as const) {
+    act(() => useUserPreferencesStore.getState().setTheme(theme));
+    const modes = ["navy", "dark", "light"].filter((mode) =>
+      document.documentElement.classList.contains(mode),
+    );
+    expect(modes).toEqual([theme === "system" ? "light" : theme]);
+  }
 });

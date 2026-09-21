@@ -56,10 +56,10 @@ export function ColumnHeader({ column }: ColumnHeaderProps) {
         <span className="text-muted-foreground">
           {getColumnIcon(column.id, column.isFinal, column.icon)}
         </span>
-        <span className="truncate text-sm font-medium text-foreground/95">
+        <span className="truncate text-sm font-medium text-card-foreground">
           {column.name}
         </span>
-        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-ink-secondary">
           {column.tasks.length}
         </span>
       </div>

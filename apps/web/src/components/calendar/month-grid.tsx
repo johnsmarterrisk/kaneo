@@ -31,7 +31,7 @@ export default function MonthGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-x-contain">
-      <div className="sticky top-0 z-20 grid grid-cols-7 border-b border-border bg-background/95 backdrop-blur">
+      <div className="sticky top-0 z-20 grid grid-cols-7 border-b border-border bg-card/95 backdrop-blur">
         {weekdayTemplate.map((day) => (
           <div
             key={`weekday-${day.toISOString()}`}

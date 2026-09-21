@@ -55,13 +55,13 @@ export default function TaskLayout({
   return (
     <Layout className="flex flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col">
-        <Layout.Header className="h-11 border-border/80 px-2">
+        <Layout.Header className="border-border px-4">
           <div className="flex w-full items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-foreground/85 hover:text-foreground" />
+                    <SidebarTrigger className="-ml-1 h-7 w-7 cursor-pointer text-card-foreground/85 hover:text-card-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="flex items-center gap-2 text-[10px]">
@@ -88,11 +88,11 @@ export default function TaskLayout({
                       params: { workspaceId, projectId },
                     })
                   }
-                  className="max-w-40 truncate text-left text-xs text-foreground hover:underline"
+                  className="max-w-40 truncate text-left text-xs text-card-foreground hover:underline"
                 >
                   {project?.name || t("navigation:sidebar.projects")}
                 </button>
-                <span className="text-foreground/70 text-xs">/</span>
+                <span className="text-card-foreground/70 text-xs">/</span>
                 <TaskCrumbSelect
                   projectId={projectId}
                   taskId={taskId}

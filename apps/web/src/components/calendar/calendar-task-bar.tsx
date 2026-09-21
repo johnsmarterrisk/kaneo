@@ -11,8 +11,7 @@ export type CalendarTask = PackableTask & {
 };
 
 const STATUS_CLASSES: Record<string, string> = {
-  "to-do":
-    "border-slate-500/35 bg-slate-500/15 hover:border-slate-500/50 hover:bg-slate-500/20",
+  "to-do": "border-border bg-secondary hover:border-input hover:bg-accent",
   "in-progress":
     "border-blue-500/35 bg-blue-500/15 hover:border-blue-500/50 hover:bg-blue-500/20",
   "in-review":
@@ -77,7 +76,7 @@ export default function CalendarTaskBar({
       data-task-status={task.status}
       onClick={() => onOpenTask(task.id)}
       className={cn(
-        "z-10 mb-0.5 flex h-6 min-w-0 items-center overflow-hidden border px-1.5 text-left text-[11px] font-medium leading-none text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-5",
+        "z-10 mb-0.5 flex h-6 min-w-0 items-center overflow-hidden border px-1.5 text-left text-[11px] font-medium leading-none text-card-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-5",
         getCalendarTaskStatusClass(task.status),
         // Bars that run past a week edge lose their cap there so the two halves
         // read as one continuous span across rows.

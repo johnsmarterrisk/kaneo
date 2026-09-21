@@ -233,15 +233,6 @@ function RouteComponent() {
           title={t("workspace:projects.pageTitle")}
           headerActions={
             canCreate ? (
-              // `variant="default"`, not `outline` (John, GUI-pass fix): `ui/button.tsx`'s
-              // outline variant pairs `bg-popover` with `text-foreground`, which is a
-              // readable dark-ink-on-white pair in stock light/dark but white-on-white in
-              // `.navy` -- `--foreground` there is white-on-CANVAS (theme-proposal.md
-              // §4a.1), not ink-on-card, and `bg-popover` is a white card surface. `default`
-              // pairs `bg-primary`/`text-primary-foreground` instead, which is navy-600/
-              // white in light+navy and yellow/navy-ink in dark -- a correct pair in all
-              // three themes, not a navy-only patch. The other two identical buttons in
-              // this file (loading and populated states of this same page) get the same fix.
               <Button
                 variant="default"
                 size="xs"
@@ -257,16 +248,16 @@ function RouteComponent() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.title")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.progress")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.targetDate")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.status")}
                 </TableHead>
               </TableRow>
@@ -379,16 +370,16 @@ function RouteComponent() {
           <Table>
             <TableHeader className="p-4">
               <TableRow>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.title")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.progress")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.dueDate")}
                 </TableHead>
-                <TableHead className="text-foreground font-medium">
+                <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.status")}
                 </TableHead>
               </TableRow>
@@ -415,8 +406,8 @@ function RouteComponent() {
                   const getStatusVariant = () => {
                     if (project.statistics.totalTasks === 0) return "secondary";
                     if (project.statistics.completionPercentage === 100)
-                      return "default";
-                    return "outline";
+                      return "success";
+                    return "secondary";
                   };
 
                   return (

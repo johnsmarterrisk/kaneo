@@ -132,7 +132,7 @@ export default function TaskMovePopover({
           type="button"
           variant="outline"
           size="sm"
-          className={cn("text-foreground", triggerClassName)}
+          className={cn("text-card-foreground", triggerClassName)}
           title={t("tasks:move.title")}
           aria-label={t("tasks:move.title")}
         >
@@ -141,7 +141,7 @@ export default function TaskMovePopover({
       </PopoverTrigger>
       <PopoverContent className="w-80 p-3" align="end" sideOffset={4}>
         <div className="flex flex-col gap-3">
-          <p className="text-sm font-medium text-foreground">
+          <p className="text-sm font-medium text-card-foreground">
             {t("tasks:move.title")}
           </p>
 

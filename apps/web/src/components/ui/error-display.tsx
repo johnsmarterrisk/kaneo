@@ -51,7 +51,7 @@ export function ErrorDisplay({
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/12">
-            <AlertTriangle className="h-6 w-6 text-destructive-foreground" />
+            <AlertTriangle className="h-6 w-6 text-destructive" />
           </div>
           <CardTitle className="text-lg">{resolvedTitle}</CardTitle>
           <CardDescription className="text-sm">
@@ -61,7 +61,7 @@ export function ErrorDisplay({
         <CardContent className="space-y-4">
           {troubleshootingSteps.length > 0 && (
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-foreground">
+              <h4 className="text-sm font-medium text-card-foreground">
                 {t("common:error.troubleshooting")}
               </h4>
               <ul className="text-xs text-muted-foreground space-y-1">

@@ -168,7 +168,7 @@ export function TasksImportExport({ project }: TasksImportExportProps) {
         <DialogPopup className="w-full max-w-md">
           <div className="bg-card rounded-lg shadow-xl border border-border">
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <DialogTitle className="text-lg font-semibold text-foreground">
+              <DialogTitle className="text-lg font-semibold text-card-foreground">
                 {t("settings:tasksImportExport.dialogTitle")}
               </DialogTitle>
             </div>
@@ -182,7 +182,7 @@ export function TasksImportExport({ project }: TasksImportExportProps) {
                 <p className="text-muted-foreground mb-1 text-xs">
                   {t("settings:tasksImportExport.expectedFormat")}
                 </p>
-                <pre className="text-foreground overflow-auto max-h-32 text-xs">
+                <pre className="text-card-foreground overflow-auto max-h-32 text-xs">
                   {`{
   "tasks": [
     {
@@ -217,7 +217,7 @@ export function TasksImportExport({ project }: TasksImportExportProps) {
                     {t("settings:tasksImportExport.dropHint")}
                   </p>
                   <Button
-                    className="mt-2 bg-card hover:bg-accent text-foreground border border-border"
+                    className="mt-2 bg-card hover:bg-accent text-card-foreground border border-border"
                     size="sm"
                     onClick={handleImportClick}
                     disabled={isImporting}
@@ -234,7 +234,7 @@ export function TasksImportExport({ project }: TasksImportExportProps) {
               <div className="flex justify-end gap-2">
                 <DialogClose
                   render={
-                    <Button className="bg-card hover:bg-accent text-foreground border border-border" />
+                    <Button className="bg-card hover:bg-accent text-card-foreground border border-border" />
                   }
                 >
                   {t("common:actions.cancel")}

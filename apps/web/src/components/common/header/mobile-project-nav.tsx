@@ -69,7 +69,7 @@ export default function MobileProjectNav({
                 className={cn(
                   "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
                   activeView === "backlog"
-                    ? "border-border bg-secondary text-foreground"
+                    ? "border-border bg-secondary text-card-foreground"
                     : "border-transparent text-muted-foreground hover:bg-accent",
                 )}
               >
@@ -81,7 +81,7 @@ export default function MobileProjectNav({
                 className={cn(
                   "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
                   activeView === "board"
-                    ? "border-border bg-secondary text-foreground"
+                    ? "border-border bg-secondary text-card-foreground"
                     : "border-transparent text-muted-foreground hover:bg-accent",
                 )}
               >
@@ -94,7 +94,7 @@ export default function MobileProjectNav({
                 className={cn(
                   "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
                   activeView === "calendar"
-                    ? "border-border bg-secondary text-foreground"
+                    ? "border-border bg-secondary text-card-foreground"
                     : "border-transparent text-muted-foreground hover:bg-accent",
                 )}
               >
@@ -107,7 +107,7 @@ export default function MobileProjectNav({
                 className={cn(
                   "flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
                   activeView === "gantt"
-                    ? "border-border bg-secondary text-foreground"
+                    ? "border-border bg-secondary text-card-foreground"
                     : "border-transparent text-muted-foreground hover:bg-accent",
                 )}
               >
@@ -135,8 +135,8 @@ export default function MobileProjectNav({
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                       isCurrentProject
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        ? "bg-accent text-card-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-card-foreground",
                     )}
                   >
                     <Icon className="size-3.5" />
@@ -151,7 +151,7 @@ export default function MobileProjectNav({
           <button
             type="button"
             onClick={onAddProject}
-            className="flex w-full items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-sm text-card-foreground transition-colors hover:bg-accent"
           >
             <Plus className="size-3.5" />
             Add project

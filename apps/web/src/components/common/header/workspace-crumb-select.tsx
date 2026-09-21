@@ -12,7 +12,7 @@ export default function WorkspaceCrumbSelect() {
     <Button
       variant="ghost"
       size="xs"
-      className="h-7 justify-between px-2 text-xs text-foreground"
+      className="h-7 justify-between px-2 text-xs text-card-foreground"
       onClick={() => {
         navigate({
           to: "/dashboard/workspace/$workspaceId",

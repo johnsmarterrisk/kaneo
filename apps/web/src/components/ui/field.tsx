@@ -18,7 +18,7 @@ function FieldLabel({ className, ...props }: FieldPrimitive.Label.Props) {
   return (
     <FieldPrimitive.Label
       className={cn(
-        "inline-flex items-center gap-2 font-medium text-base/4.5 text-foreground sm:text-sm/4",
+        "inline-flex items-center gap-2 font-medium text-base/4.5 text-card-foreground sm:text-sm/4",
         className,
       )}
       data-slot="field-label"
@@ -53,7 +53,7 @@ function FieldDescription({
 function FieldError({ className, ...props }: FieldPrimitive.Error.Props) {
   return (
     <FieldPrimitive.Error
-      className={cn("text-destructive-foreground text-xs", className)}
+      className={cn("text-destructive text-xs", className)}
       data-slot="field-error"
       {...props}
     />

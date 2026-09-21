@@ -85,7 +85,7 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
             type="text"
             placeholder={t("tasks:detail.titlePlaceholder")}
             readOnly={!canEdit}
-            className="block h-auto w-full appearance-none border-0 bg-transparent p-0 font-heading text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em] text-foreground outline-none placeholder:text-foreground/45"
+            className="block h-auto w-full appearance-none border-0 bg-transparent p-0 font-heading text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em] text-card-foreground outline-none placeholder:text-card-foreground/45"
             onChange={(e) => {
               field.onChange(e);
               handleTitleChange(e.target.value);

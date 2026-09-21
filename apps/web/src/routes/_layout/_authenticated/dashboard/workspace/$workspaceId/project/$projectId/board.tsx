@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardToolbar from "@/components/board/board-toolbar";
@@ -9,6 +9,7 @@ import ListView from "@/components/list-view";
 import PageTitle from "@/components/page-title";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { shortcuts } from "@/constants/shortcuts";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
@@ -17,6 +18,7 @@ import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-
 import { useBoardSort } from "@/hooks/use-board-sort";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { sortTasks } from "@/lib/sort-tasks";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
@@ -43,9 +45,12 @@ const skeletonColumns = [
 
 function BoardSkeleton() {
   return (
-    <div className="flex h-full w-full gap-4 p-4 overflow-hidden">
+    <div className="flex h-full w-full gap-3 p-3 overflow-hidden">
       {skeletonColumns.map((col) => (
-        <div key={col.key} className="flex w-72 shrink-0 flex-col gap-3">
+        <div
+          key={col.key}
+          className="flex w-72 shrink-0 flex-col gap-3 rounded-2xl bg-card p-3 shadow-panel"
+        >
           <div className="flex items-center gap-2 px-1">
             <div className="h-3 w-3 rounded-full bg-muted animate-pulse" />
             <div className="h-4 w-24 rounded bg-muted animate-pulse" />
@@ -56,7 +61,7 @@ function BoardSkeleton() {
               (cardKey) => (
                 <div
                   key={cardKey}
-                  className="rounded-lg border border-border bg-card p-3 space-y-2.5"
+                  className="rounded-[14px] border border-border bg-secondary p-4 space-y-2.5"
                 >
                   <div className="h-3.5 w-4/5 rounded bg-muted animate-pulse" />
                   <div className="h-3 w-3/5 rounded bg-muted animate-pulse" />
@@ -76,6 +81,7 @@ function BoardSkeleton() {
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { canCreateTasks } = useWorkspacePermission();
   const { projectId, workspaceId } = Route.useParams();
   const { taskId } = Route.useSearch();
   const navigate = useNavigate();
@@ -215,7 +221,17 @@ function RouteComponent() {
       projectId={projectId}
       workspaceId={workspaceId}
       activeView="board"
-      headerActions={boardHeaderSearch}
+      headerActions={
+        <>
+          {boardHeaderSearch}
+          {canCreateTasks() && (
+            <Button onClick={() => setIsTaskModalOpen(true)}>
+              <Plus className="size-4" />
+              {t("tasks:kanban.addTask")}
+            </Button>
+          )}
+        </>
+      }
     >
       <PageTitle
         title={`${project?.name} · ${viewMode === "board" ? t("tasks:view.board") : t("tasks:view.list")}`}
@@ -237,7 +253,9 @@ function RouteComponent() {
           onSortChange={setSort}
         />
 
-        <div className="flex h-full flex-1 overflow-hidden bg-background">
+        <div
+          className={`flex h-full flex-1 overflow-hidden ${viewMode === "board" ? "bg-background" : "bg-card text-card-foreground"}`}
+        >
           {sortedProject ? (
             viewMode === "board" ? (
               <KanbanBoard

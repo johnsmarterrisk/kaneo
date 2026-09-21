@@ -238,14 +238,14 @@ export function GitHubIntegrationSettings({
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+        <div className="space-y-4 border border-border rounded-md p-4 bg-card">
           <div className="space-y-4">
             <div className="h-4 bg-muted rounded animate-pulse w-40" />
             <div className="h-4 bg-muted rounded animate-pulse w-full" />
             <div className="h-10 bg-muted rounded animate-pulse w-full" />
           </div>
         </div>
-        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+        <div className="space-y-4 border border-border rounded-md p-4 bg-card">
           <div className="space-y-4">
             <div className="h-4 bg-muted rounded animate-pulse w-40" />
             <div className="h-10 bg-muted rounded animate-pulse w-full" />
@@ -264,7 +264,7 @@ export function GitHubIntegrationSettings({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+      <div className="space-y-4 border border-border rounded-md p-4 bg-card">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <p className="text-sm font-medium">
@@ -396,8 +396,8 @@ export function GitHubIntegrationSettings({
                   </>
                 ) : (
                   <>
-                    <XCircle className="h-4 w-4 text-destructive-foreground" />
-                    <span className="font-medium text-destructive-foreground">
+                    <XCircle className="h-4 w-4 text-destructive" />
+                    <span className="font-medium text-destructive">
                       {t("settings:githubIntegration.statusNotInstalled")}
                     </span>
                   </>
@@ -407,7 +407,7 @@ export function GitHubIntegrationSettings({
           </>
         )}
       </div>
-      <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+      <div className="space-y-4 border border-border rounded-md p-4 bg-card">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -571,7 +571,7 @@ export function GitHubIntegrationSettings({
                   verificationResult.repositoryExists ? (
                   <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning-foreground" />
                 ) : (
-                  <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive-foreground" />
+                  <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
                 )}
                 <div className="flex-1">
                   <p className="font-medium">{verificationResult.message}</p>
@@ -640,7 +640,7 @@ export function GitHubIntegrationSettings({
       </div>
 
       {isConnected && (
-        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+        <div className="space-y-4 border border-border rounded-md p-4 bg-card">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <p className="text-sm font-medium">

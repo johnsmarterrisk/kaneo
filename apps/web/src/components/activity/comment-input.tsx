@@ -58,7 +58,7 @@ export default function CommentInput({ taskId }: CommentInputProps) {
 
   return (
     <div className="w-full">
-      <div className="rounded-xl border border-border/80 bg-card/70 transition-colors focus-within:border-ring/60 focus-within:shadow-[0_0_0_2px_color-mix(in_srgb,var(--ring)_20%,transparent)]">
+      <div className="rounded-xl border border-input bg-card text-card-foreground transition-colors focus-within:border-ring/60 focus-within:shadow-[0_0_0_2px_color-mix(in_srgb,var(--ring)_20%,transparent)]">
         <CommentEditor
           value={content}
           onChange={setContent}

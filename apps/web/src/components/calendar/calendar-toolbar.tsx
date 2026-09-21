@@ -23,7 +23,7 @@ export default function CalendarToolbar({
     <div className="border-b border-border/80 px-3 py-3 sm:px-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-sm font-semibold text-foreground">
+          <h1 className="truncate text-sm font-semibold text-card-foreground">
             {t("tasks:calendar.title")}
           </h1>
           <span

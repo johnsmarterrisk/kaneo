@@ -47,7 +47,7 @@ function BreadcrumbLink({
   ...props
 }: useRender.ComponentProps<"a">) {
   const defaultProps = {
-    className: cn("transition-colors hover:text-foreground", className),
+    className: cn("transition-colors hover:text-card-foreground", className),
     "data-slot": "breadcrumb-link",
   };
 
@@ -64,7 +64,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
     <span
       aria-current="page"
       aria-disabled="true"
-      className={cn("font-normal text-foreground", className)}
+      className={cn("font-normal text-card-foreground", className)}
       data-slot="breadcrumb-page"
       role="link"
       {...props}

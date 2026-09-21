@@ -267,7 +267,7 @@ export default function TaskRelations({
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-card-foreground transition-colors"
               >
                 {isOpen ? (
                   <ChevronDown className="size-4" />
@@ -318,7 +318,7 @@ export default function TaskRelations({
                           >
                             <button
                               type="button"
-                              className="shrink-0 flex items-center justify-center rounded p-0.5 transition-colors outline-none [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground"
+                              className="shrink-0 flex items-center justify-center rounded p-0.5 transition-colors outline-none [&_svg]:text-muted-foreground hover:[&_svg]:text-card-foreground"
                             >
                               {getColumnIcon(
                                 item.task.status,
@@ -334,7 +334,7 @@ export default function TaskRelations({
                             onClick={() => handleNavigateToTask(item.task.id)}
                           >
                             <span
-                              className={`text-sm truncate block ${finalStatusSlugs.has(item.task.status) ? "line-through text-muted-foreground" : "text-foreground/90"}`}
+                              className={`text-sm truncate block ${finalStatusSlugs.has(item.task.status) ? "line-through text-muted-foreground" : "text-card-foreground/90"}`}
                             >
                               {item.task.title}
                             </span>
@@ -462,7 +462,7 @@ export default function TaskRelations({
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors ${selectedRelationType === "related" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors ${selectedRelationType === "related" ? "bg-accent text-card-foreground" : "text-muted-foreground hover:text-card-foreground"}`}
                   onClick={() => setSelectedRelationType("related")}
                 >
                   <Link2 className="size-3" />
@@ -470,7 +470,7 @@ export default function TaskRelations({
                 </button>
                 <button
                   type="button"
-                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors ${selectedRelationType === "blocks" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors ${selectedRelationType === "blocks" ? "bg-accent text-card-foreground" : "text-muted-foreground hover:text-card-foreground"}`}
                   onClick={() => setSelectedRelationType("blocks")}
                 >
                   <X className="size-3" />

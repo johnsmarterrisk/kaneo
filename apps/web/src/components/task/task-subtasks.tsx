@@ -316,7 +316,7 @@ export default function TaskSubtasks({
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-card-foreground transition-colors"
               >
                 {isOpen ? (
                   <ChevronDown className="size-4" />

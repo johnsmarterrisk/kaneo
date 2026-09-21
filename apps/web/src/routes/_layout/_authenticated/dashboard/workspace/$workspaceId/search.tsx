@@ -132,7 +132,7 @@ function SearchComponent() {
                           });
                         }
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-background hover:bg-accent/60 transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent/60 transition-colors text-left"
                     >
                       <div className="flex-shrink-0 first:[&_svg]:h-4 first:[&_svg]:w-4">
                         {getPriorityIcon(result.priority ?? "")}
@@ -145,7 +145,7 @@ function SearchComponent() {
                       )}
 
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm text-foreground truncate block">
+                        <span className="text-sm text-card-foreground truncate block">
                           {result.title}
                         </span>
                       </div>

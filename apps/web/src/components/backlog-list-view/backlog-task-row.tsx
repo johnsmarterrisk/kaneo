@@ -166,7 +166,7 @@ export default function BacklogTaskRow({ task }: BacklogTaskRowProps) {
 
             <div className="flex-1 min-w-0 flex items-center gap-2">
               <div className="flex items-center gap-2 justify-between w-full">
-                <span className="text-sm text-foreground truncate">
+                <span className="text-sm text-card-foreground truncate">
                   {task.title}
                 </span>
                 {showLabels && (

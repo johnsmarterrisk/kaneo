@@ -42,7 +42,7 @@ export default function DayOverflowPopover({
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger
         aria-label={t("tasks:calendar.dayTasksAriaLabel", { date: dayLabel })}
-        className="w-full truncate rounded-sm px-1.5 pb-1 text-left text-[10px] leading-tight text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="w-full truncate rounded-sm px-1.5 pb-1 text-left text-[10px] leading-tight text-muted-foreground transition-colors hover:text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {t("tasks:calendar.moreTasks", { count: hiddenCount })}
       </PopoverTrigger>
@@ -64,7 +64,7 @@ export default function DayOverflowPopover({
                     {projectSlug}-{task.number}
                   </span>
                 ) : null}
-                <span className="w-full truncate text-xs font-medium text-foreground">
+                <span className="w-full truncate text-xs font-medium text-card-foreground">
                   {task.title}
                 </span>
                 <span className="w-full truncate text-[11px] text-muted-foreground">

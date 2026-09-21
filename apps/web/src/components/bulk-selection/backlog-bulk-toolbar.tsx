@@ -377,9 +377,9 @@ function BacklogBulkToolbar() {
 
   return (
     <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 transition-[translate,opacity] duration-200 ease-out starting:translate-y-3 starting:opacity-0 motion-reduce:starting:translate-y-0">
-      <Toolbar className="items-center gap-1 rounded-xl border-border/80 bg-background px-1.5 py-1 shadow-lg/8">
+      <Toolbar className="items-center gap-1 rounded-xl border-border/80 bg-card px-1.5 py-1 shadow-lg/8">
         <ToolbarGroup className="px-1.5">
-          <span className="text-sm font-medium text-foreground">
+          <span className="text-sm font-medium text-card-foreground">
             {t("tasks:bulk.selectedCount", { count: selectedCount })}
           </span>
         </ToolbarGroup>
@@ -432,7 +432,7 @@ function BacklogBulkToolbar() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground rounded-none"
+                      className="w-full justify-start gap-2 text-muted-foreground hover:text-card-foreground rounded-none"
                       onClick={() => handleBulkDueDate(undefined)}
                     >
                       <X className="h-4 w-4" />

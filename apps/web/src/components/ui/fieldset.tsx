@@ -19,7 +19,7 @@ function FieldsetLegend({
 }: FieldsetPrimitive.Legend.Props) {
   return (
     <FieldsetPrimitive.Legend
-      className={cn("font-semibold text-foreground", className)}
+      className={cn("font-semibold text-card-foreground", className)}
       data-slot="fieldset-legend"
       {...props}
     />

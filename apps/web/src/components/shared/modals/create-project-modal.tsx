@@ -113,7 +113,7 @@ function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
                   t("common:modals.createProject.workspaceFallback")}
               </BreadcrumbItem>
               <BreadcrumbSeparator className="[&>svg]:size-3.5" />
-              <BreadcrumbItem className="text-foreground font-medium">
+              <BreadcrumbItem className="text-card-foreground font-medium">
                 {t("common:modals.createProject.breadcrumbNew")}
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -169,8 +169,7 @@ function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
                             }}
                             className={cn(
                               "h-10 items-center justify-center rounded-md p-0",
-                              isSelected &&
-                                "bg-sidebar-accent text-sidebar-accent-foreground",
+                              isSelected && "bg-accent text-accent-foreground",
                             )}
                             title={iconName}
                           >
@@ -190,7 +189,7 @@ function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
               onChange={handleNameChange}
               autoFocus
               placeholder={t("common:modals.createProject.projectName")}
-              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
+              className="w-full [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:px-0 [&_[data-slot=input]]:py-2 [&_[data-slot=input]]:text-2xl [&_[data-slot=input]]:leading-tight [&_[data-slot=input]]:font-semibold [&_[data-slot=input]]:tracking-tight [&_[data-slot=input]]:text-card-foreground [&_[data-slot=input]]:placeholder:text-muted-foreground [&_[data-slot=input]]:outline-none"
               required
             />
           </div>
@@ -207,7 +206,7 @@ function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
                   onChange={(e) => setSlug(e.target.value)}
                   placeholder="PRO"
                   maxLength={8}
-                  className="w-20 h-8 text-center font-semibold text-sm bg-background border-border rounded-lg transition-colors duration-150"
+                  className="w-20 h-8 text-center font-semibold text-sm bg-card border-border rounded-lg transition-colors duration-150"
                   required
                 />
               </div>
@@ -225,7 +224,7 @@ function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
               onClick={handleClose}
               variant="outline"
               size="sm"
-              className="border-border text-foreground hover:bg-accent"
+              className="border-border text-card-foreground hover:bg-accent"
             >
               {t("common:actions.cancel")}
             </Button>

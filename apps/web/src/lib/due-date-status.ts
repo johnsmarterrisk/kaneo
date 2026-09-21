@@ -39,7 +39,7 @@ export function getDueDateStatus(
 }
 
 export const dueDateStatusColors = {
-  overdue: "bg-destructive/10 text-destructive-foreground",
+  overdue: "bg-destructive/10 text-destructive",
   "due-soon": "bg-warning/10 text-warning-foreground",
   "far-future": "bg-muted/50 text-muted-foreground",
   "no-due-date": "bg-muted/50 text-muted-foreground",
