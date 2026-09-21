@@ -139,3 +139,42 @@ describe("MembersTable, read-only in Operon mode", () => {
     expect(screen.getByText("team:roles.owner")).toBeTruthy();
   });
 });
+
+/**
+ * Row striping (John): shares `ui/table.tsx` with the Projects list, so the same
+ * `bg-row-alt` class applies here. Pending invitations render in the SAME `<TableBody>`
+ * as the member rows (one table), so the alternation must continue across the boundary
+ * rather than restart — a third member plus one invitation is what proves that: member
+ * rows alone would end on an even index and let a restart pass unnoticed.
+ */
+describe("MembersTable row striping", () => {
+  const thirdMember = {
+    id: "member-3",
+    userId: "third-user",
+    role: "member",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    user: { email: "third@example.com", name: "Third Person", image: null },
+  } as unknown as WorkspaceUser;
+
+  it("stripes even rows and continues the alternation into pending invitations", () => {
+    render(
+      <MembersTable
+        workspaceId="workspace-1"
+        invitations={[pendingInvitation]}
+        users={[owner, member, thirdMember]}
+      />,
+    );
+
+    // The header row is always first in DOM order (<TableHeader> precedes <TableBody>);
+    // dropping it leaves exactly the data rows in render order.
+    const [, ...rows] = screen.getAllByRole("row");
+    // 3 member rows + 1 invitation row = 4 data rows, indices 0..3.
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) => row.className.includes("bg-row-alt"))).toEqual([
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
+});

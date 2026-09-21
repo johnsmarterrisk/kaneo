@@ -72,11 +72,16 @@ function SortableProjectRow({
   canReorder,
   onClick,
   children,
+  alt = false,
 }: {
   id: string;
   canReorder: boolean;
   onClick: () => void;
   children: ReactNode;
+  /** Row striping (John): true on alternating (even) rows — a semantic `bg-row-alt`
+      class, never a hard-coded colour; see `index.css`'s `--row-alt` for the per-mode
+      value. */
+  alt?: boolean;
 }) {
   const {
     listeners,
@@ -111,6 +116,7 @@ function SortableProjectRow({
       data-kaneo-sortable=""
       className={cn(
         "group/row cursor-pointer",
+        !isDragging && alt && "bg-row-alt",
         isDragging && "relative z-10 bg-muted shadow-md",
       )}
       onClick={onClick}
@@ -389,66 +395,76 @@ function RouteComponent() {
                 items={orderedProjects?.map((project) => project.id) ?? []}
                 strategy={verticalListSortingStrategy}
               >
-                {orderedProjects?.map((project) => {
-                  if (!project?.id || !project.statistics) return null;
+                {/* Row striping (John): `renderedRowIndex` counts only rows that actually
+                    render, so a skipped (malformed) project does not shift the
+                    alternation's parity for everything after it. */}
+                {(() => {
+                  let renderedRowIndex = -1;
+                  return orderedProjects?.map((project) => {
+                    if (!project?.id || !project.statistics) return null;
+                    renderedRowIndex += 1;
+                    const rowIndex = renderedRowIndex;
 
-                  const IconComponent =
-                    icons[project.icon as keyof typeof icons] || icons.Layout;
+                    const IconComponent =
+                      icons[project.icon as keyof typeof icons] || icons.Layout;
 
-                  const getStatusText = () => {
-                    if (project.statistics.totalTasks === 0)
-                      return t("workspace:projects.projectStatus.notStarted");
-                    if (project.statistics.completionPercentage === 100)
-                      return t("workspace:projects.projectStatus.complete");
-                    return t("workspace:projects.projectStatus.inProgress");
-                  };
+                    const getStatusText = () => {
+                      if (project.statistics.totalTasks === 0)
+                        return t("workspace:projects.projectStatus.notStarted");
+                      if (project.statistics.completionPercentage === 100)
+                        return t("workspace:projects.projectStatus.complete");
+                      return t("workspace:projects.projectStatus.inProgress");
+                    };
 
-                  const getStatusVariant = () => {
-                    if (project.statistics.totalTasks === 0) return "secondary";
-                    if (project.statistics.completionPercentage === 100)
-                      return "success";
-                    return "secondary";
-                  };
+                    const getStatusVariant = () => {
+                      if (project.statistics.totalTasks === 0)
+                        return "secondary";
+                      if (project.statistics.completionPercentage === 100)
+                        return "success";
+                      return "secondary";
+                    };
 
-                  return (
-                    <SortableProjectRow
-                      key={project.id}
-                      id={project.id}
-                      canReorder={canReorder}
-                      onClick={() => handleProjectClick(project.id)}
-                    >
-                      <TableCell className="py-3">
-                        <div className="flex items-center gap-3">
-                          <IconComponent className="w-5 h-5 text-muted-foreground" />
-                          <span className="font-medium">{project.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <div className="flex items-center gap-2">
-                          <Progress
-                            value={project.statistics.completionPercentage}
-                            className="w-16 h-2"
-                          />
+                    return (
+                      <SortableProjectRow
+                        key={project.id}
+                        id={project.id}
+                        canReorder={canReorder}
+                        onClick={() => handleProjectClick(project.id)}
+                        alt={rowIndex % 2 === 0}
+                      >
+                        <TableCell className="py-3">
+                          <div className="flex items-center gap-3">
+                            <IconComponent className="w-5 h-5 text-muted-foreground" />
+                            <span className="font-medium">{project.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <div className="flex items-center gap-2">
+                            <Progress
+                              value={project.statistics.completionPercentage}
+                              className="w-16 h-2"
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {project.statistics.completionPercentage}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3">
                           <span className="text-sm text-muted-foreground">
-                            {project.statistics.completionPercentage}%
+                            {project.statistics.dueDate
+                              ? formatDateMedium(project.statistics.dueDate)
+                              : t("workspace:projects.noDueDate")}
                           </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <span className="text-sm text-muted-foreground">
-                          {project.statistics.dueDate
-                            ? formatDateMedium(project.statistics.dueDate)
-                            : t("workspace:projects.noDueDate")}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <Badge variant={getStatusVariant()}>
-                          {getStatusText()}
-                        </Badge>
-                      </TableCell>
-                    </SortableProjectRow>
-                  );
-                })}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <Badge variant={getStatusVariant()}>
+                            {getStatusText()}
+                          </Badge>
+                        </TableCell>
+                      </SortableProjectRow>
+                    );
+                  });
+                })()}
               </SortableContext>
             </TableBody>
           </Table>

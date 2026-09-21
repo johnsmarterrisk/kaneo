@@ -207,13 +207,20 @@ function MembersTable({ workspaceId, invitations, users }: Props) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedUsers.map((member) => {
+          {sortedUsers.map((member, index) => {
             const isSelf = currentUser?.id === member.userId;
             const showRoleSelect =
               canChangeRoles && !isSelf && member.role !== "owner";
             const tone = toneFor(member.user.email);
             return (
-              <TableRow key={member.user.email}>
+              // Row striping (John): shares ui/table.tsx with the Projects list, so the
+              // same semantic bg-row-alt class applies here too. Pending invitations
+              // below continue the SAME alternation (offset by sortedUsers.length) —
+              // one table, one stripe rhythm, not two that restart.
+              <TableRow
+                key={member.user.email}
+                className={cn(index % 2 === 0 && "bg-row-alt")}
+              >
                 <TableCell className="ps-6 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar className={cn("size-8", tone)}>
@@ -324,8 +331,13 @@ function MembersTable({ workspaceId, invitations, users }: Props) {
             );
           })}
 
-          {pendingInvitations.map((invitation) => (
-            <TableRow key={`invite-${invitation.id}`}>
+          {pendingInvitations.map((invitation, pendingIndex) => (
+            <TableRow
+              key={`invite-${invitation.id}`}
+              className={cn(
+                (sortedUsers.length + pendingIndex) % 2 === 0 && "bg-row-alt",
+              )}
+            >
               <TableCell className="ps-6 py-3">
                 <div className="flex items-center gap-3">
                   <div className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
