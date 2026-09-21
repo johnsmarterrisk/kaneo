@@ -233,8 +233,17 @@ function RouteComponent() {
           title={t("workspace:projects.pageTitle")}
           headerActions={
             canCreate ? (
+              // `variant="default"`, not `outline` (John, GUI-pass fix): `ui/button.tsx`'s
+              // outline variant pairs `bg-popover` with `text-foreground`, which is a
+              // readable dark-ink-on-white pair in stock light/dark but white-on-white in
+              // `.navy` -- `--foreground` there is white-on-CANVAS (theme-proposal.md
+              // §4a.1), not ink-on-card, and `bg-popover` is a white card surface. `default`
+              // pairs `bg-primary`/`text-primary-foreground` instead, which is navy-600/
+              // white in light+navy and yellow/navy-ink in dark -- a correct pair in all
+              // three themes, not a navy-only patch. The other two identical buttons in
+              // this file (loading and populated states of this same page) get the same fix.
               <Button
-                variant="outline"
+                variant="default"
                 size="xs"
                 onClick={handleCreateProject}
                 className="gap-1"
@@ -298,7 +307,7 @@ function RouteComponent() {
           headerActions={
             canCreate ? (
               <Button
-                variant="outline"
+                variant="default"
                 size="xs"
                 onClick={handleCreateProject}
                 className="gap-1"
@@ -348,7 +357,7 @@ function RouteComponent() {
         headerActions={
           canCreate ? (
             <Button
-              variant="outline"
+              variant="default"
               size="xs"
               onClick={handleCreateProject}
               className="gap-1"

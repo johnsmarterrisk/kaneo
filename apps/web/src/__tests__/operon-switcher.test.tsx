@@ -1,14 +1,17 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Operon fork check (spec R14, task B11; extended by task G11).
+ * Operon fork check (spec R14, task B11; extended by task G11; rebuilt for the rail-parity
+ * fix brief, John 2026-09-21).
  *
- * Five claims, one test each, and each one can fail:
+ * Claims, one test each:
  *
- *  1. The injected switcher renders all four Operon modules, in `branding.ts`'s order,
- *     with Initiative marked as the module the user is already inside.
+ *  1. `OperonModuleNav variant="top"` renders all FIVE Operon modules except Settings, in
+ *     `branding.ts`'s order, with Initiative marked as the module the user is already in.
+ *  1b. `variant="settings"` renders Settings alone — the module list is never duplicated
+ *     across the two variants and Settings never appears in the top one.
  *  2. Its Telegraph link points at the apex host taken from CONFIGURATION. The test sets a
  *     host that appears nowhere in the source, so a hard-coded literal — including the
  *     dev fallback — fails it.
@@ -19,13 +22,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  3. `WorkspaceSwitcher` is not rendered by `AppSidebar`. The real module is replaced by a
  *     marker component, so re-adding it anywhere in that tree turns this test red rather
  *     than passing quietly.
- *  4. **G11:** Stream resolves to `${apex}/#/activity` and every other apex module still
- *     resolves to the apex root — both halves, since asserting only the first would pass a
- *     version that sent every module to `#/activity`.
- *  5. **G11:** the FIRST module reads *Stream ⚡* while its KEY stays `signals`, which is
- *     what both switchers dispatch on. Its POSITION is asserted too: the operator's
- *     2026-09-11 decision put Stream at the head of both switchers, and array order is the
- *     only thing that expresses it.
+ *  4. Stream resolves to `${apex}/#/activity`, Stash resolves to the apex root like every
+ *     other non-addressed module, and every other apex module still resolves to the apex
+ *     root — asserting only Stream would pass a version that sent every module there.
+ *  5. The FIRST module reads *Stream ⚡* while its KEY stays `signals`. Its POSITION is
+ *     asserted too: the operator's 2026-09-11 decision put Stream at the head of both
+ *     switchers, and array order is the only thing that expresses it.
+ *  6. Initiative's active row carries the mockup's active treatment — a
+ *     `rgba(255,255,255,.10)` fill and an inset 3px signal-yellow bar — not a plain border,
+ *     which is what the pre-rebuild switcher had.
+ *  7. `AppSidebar` composes the rail in three tiers matching `Sidebar.tsx`: header (mark +
+ *     top module nav), content (Kaneo's own nav), footer (Settings row + user/Sign out) —
+ *     and the OLD footer contents (TrialCard, VersionDisplay) are gone, replaced per
+ *     John's explicit new footer spec.
  *
  * See `docs/fork-discipline.md` in the Operon repository for why this check lives in the
  * fork rather than in Operon.
@@ -43,8 +52,21 @@ vi.mock("@/hooks/use-user-websocket", () => ({
   useUserWebSocket: vi.fn(),
 }));
 
+vi.mock("@/components/providers/auth-provider/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { name: "Jane Rivera", email: "jane@example.com" } }),
+}));
+
+vi.mock("@/hooks/mutations/use-sign-out", () => ({
+  default: () => ({ mutateAsync: vi.fn() }),
+}));
+
+vi.mock("@/hooks/queries/config/use-get-config", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 const {
-  OperonSwitcher,
+  OperonModuleNav,
+  OperonRailFooter,
   OPERON_MODULES,
   apexUrl,
   DEV_APEX_URL,
@@ -56,35 +78,30 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("OperonSwitcher", () => {
-  it("renders the four Operon modules in order with Initiative as the current one", () => {
-    render(<OperonSwitcher />);
+describe("OperonModuleNav", () => {
+  it('variant="top" renders every module except Settings, in order, with Initiative current', () => {
+    render(<OperonModuleNav variant="top" />);
 
-    expect(screen.getByTestId("operon-switcher")).toBeTruthy();
-
+    const nav = screen.getByTestId("operon-module-nav");
     const rendered = Array.from(
-      screen
-        .getByTestId("operon-switcher")
-        .querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
+      nav.querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
     );
     expect(rendered.map((element) => element.dataset.module)).toEqual([
       "signals",
       "telegraph",
       "initiative",
-      "settings",
+      "files",
     ]);
-    expect(rendered.map((element) => element.dataset.module)).toEqual(
-      OPERON_MODULES.map((module) => module.key),
-    );
+    expect(
+      OPERON_MODULES.filter((m) => m.key !== "settings").map((m) => m.key),
+    ).toEqual(["signals", "telegraph", "initiative", "files"]);
 
-    // Initiative is where the user already is: current, not a link, not "external".
     const initiative = screen.getByTestId("module-initiative");
     expect(initiative.getAttribute("aria-current")).toBe("page");
     expect(initiative.tagName).toBe("SPAN");
     expect(initiative.dataset.external).toBe("false");
 
-    // ...and every other module leaves this origin.
-    for (const key of ["telegraph", "signals", "settings"]) {
+    for (const key of ["telegraph", "signals", "files"]) {
       const element = screen.getByTestId(`module-${key}`);
       expect(element.tagName).toBe("A");
       expect(element.dataset.external).toBe("true");
@@ -92,11 +109,37 @@ describe("OperonSwitcher", () => {
     }
   });
 
+  it('variant="settings" renders Settings alone', () => {
+    render(<OperonModuleNav variant="settings" />);
+
+    const nav = screen.getByTestId("operon-settings-nav");
+    const rendered = Array.from(
+      nav.querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
+    );
+    expect(rendered.map((element) => element.dataset.module)).toEqual([
+      "settings",
+    ]);
+  });
+
+  it("gives Initiative's row a rgba(255,255,255,.10) fill and an inset 3px yellow bar, not a plain border", () => {
+    render(<OperonModuleNav variant="top" />);
+
+    const initiative = screen.getByTestId("module-initiative");
+    expect(initiative.style.backgroundColor).toBe("rgba(255, 255, 255, 0.1)");
+    expect(initiative.style.boxShadow).toContain("inset");
+    expect(initiative.style.boxShadow).toContain("3px");
+    expect(initiative.style.boxShadow.toLowerCase()).toContain("#f5b700");
+
+    const telegraph = screen.getByTestId("module-telegraph");
+    expect(telegraph.style.backgroundColor).toBe("transparent");
+    expect(telegraph.style.boxShadow).toBe("none");
+  });
+
   it("targets the Telegraph apex host from configuration, not a literal", () => {
     // A host that exists in no source file, so only a configured read can produce it.
     vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.b11.test:9443/");
 
-    render(<OperonSwitcher />);
+    render(<OperonModuleNav variant="top" />);
 
     const telegraph = screen.getByTestId("module-telegraph");
     expect(telegraph.getAttribute("href")).toBe("https://apex.b11.test:9443/");
@@ -104,20 +147,20 @@ describe("OperonSwitcher", () => {
     expect(telegraph.getAttribute("href")).not.toContain("lvh.me");
   });
 
-  it("sends Stream to its own address and every other module to the apex root", () => {
-    // The whole of task G11: before it, `moduleHref` ignored the key, so a member clicking
-    // Stream inside Initiative landed on whatever the apex root opens. Both halves are
-    // asserted, because a version that sent EVERY module to `#/activity` would pass an
-    // assertion about Stream alone.
+  it("sends Stream to its own address and every other module (including Stash) to the apex root", () => {
+    // Before task G11, `moduleHref` ignored the key, so a member clicking Stream inside
+    // Initiative landed on whatever the apex root opens. Both halves are asserted, because
+    // a version that sent EVERY module to `#/activity` would pass an assertion about
+    // Stream alone.
     vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.g11.test:9443/");
 
-    render(<OperonSwitcher />);
+    render(<OperonModuleNav variant="top" />);
 
     expect(screen.getByTestId("module-signals").getAttribute("href")).toBe(
       "https://apex.g11.test:9443/#/activity",
     );
 
-    for (const key of ["telegraph", "settings"]) {
+    for (const key of ["telegraph", "files"]) {
       expect(screen.getByTestId(`module-${key}`).getAttribute("href")).toBe(
         "https://apex.g11.test:9443/",
       );
@@ -133,7 +176,7 @@ describe("OperonSwitcher", () => {
     // `app/src/shell/branding.ts` says Stream ⚡ and lists it first, and this list is a hand
     // copy of that one. The KEY is the cross-repository contract and must not follow the
     // label; nor must the hash route, which stays `#/activity` (Operon spec D7).
-    render(<OperonSwitcher />);
+    render(<OperonModuleNav variant="top" />);
 
     expect(OPERON_MODULES[0].key).toBe("signals");
     const activity = screen.getByTestId("module-signals");
@@ -142,6 +185,32 @@ describe("OperonSwitcher", () => {
     expect(activity.textContent).not.toContain("Activity");
     expect(activity.textContent).toContain("⚡");
     expect(activity.textContent).not.toContain("Signals");
+  });
+
+  it("lists Stash as the fifth module, key `files`", () => {
+    render(<OperonModuleNav variant="top" />);
+
+    const stash = screen.getByTestId("module-files");
+    expect(stash.textContent).toContain("Stash");
+    expect(stash.textContent).toContain("📁");
+  });
+});
+
+describe("OperonRailFooter", () => {
+  it("shows the signed-in user's name and a Sign out button, not a menu", () => {
+    render(<OperonRailFooter />);
+
+    expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+      "Jane Rivera",
+    );
+    const signOut = screen.getByRole("button", { name: "Sign out" });
+    expect(signOut).toBeTruthy();
+    // 44px minimum hit area, matching the shell's own footer button.
+    expect(signOut.className).toContain("min-h-[44px]");
+
+    // A visible action, not a dropdown trigger: clicking it must not throw even with the
+    // sign-out mutation mocked to a no-op.
+    expect(() => fireEvent.click(signOut)).not.toThrow();
   });
 });
 
@@ -193,15 +262,6 @@ describe("AppSidebar", () => {
     vi.doMock("@/components/search", () => ({
       default: () => <div data-testid="search" />,
     }));
-    vi.doMock("@/components/trial-card", () => ({
-      TrialCard: () => <div data-testid="trial-card" />,
-    }));
-    vi.doMock("@/components/version-display", () => ({
-      VersionDisplay: () => <div data-testid="version-display" />,
-    }));
-    vi.doMock("@/components/theme-toggle-dropdown", () => ({
-      ThemeToggleDropdown: () => <div data-testid="theme-toggle" />,
-    }));
     vi.doMock("@/hooks/use-keyboard-shortcuts", () => ({
       useRegisterShortcuts: vi.fn(),
       // `constants/shortcuts.ts` calls this at module scope, so the mock must carry it.
@@ -226,31 +286,50 @@ describe("AppSidebar", () => {
     vi.resetModules();
   });
 
-  it("renders the Operon switcher in the header and no WorkspaceSwitcher at all", async () => {
+  it("renders the Operon rail header and top module nav in the header slot, no WorkspaceSwitcher", async () => {
     const { AppSidebar } = await import("@/components/app-sidebar");
 
     render(<AppSidebar />);
 
-    expect(screen.getByTestId("operon-switcher")).toBeTruthy();
     expect(screen.queryByTestId("workspace-switcher")).toBeNull();
-    // It replaced the dropdown in the header slot rather than being added elsewhere.
+    const header = screen.getByTestId("sidebar-header");
     expect(
-      screen
-        .getByTestId("sidebar-header")
-        .querySelector('[data-testid="operon-switcher"]'),
+      header.querySelector('[data-testid="operon-rail-header"]'),
+    ).not.toBeNull();
+    expect(
+      header.querySelector('[data-testid="operon-module-nav"]'),
     ).not.toBeNull();
   });
 
-  it("renders no independent theme control (Codex round-2 finding 5; GUI pass finding 11)", async () => {
+  it("renders the Settings row and the user footer in the footer slot, not TrialCard/VersionDisplay", async () => {
     const { AppSidebar } = await import("@/components/app-sidebar");
 
     render(<AppSidebar />);
 
-    // The mock above (`theme-toggle-dropdown`) is left in place deliberately: if
-    // `app-sidebar.tsx` ever re-imports `ThemeToggleDropdown`, this mock intercepts it and
-    // renders `theme-toggle`, which is exactly what this assertion would then catch. Operon
-    // Settings is the one theme control; the footer keeps only the version display.
-    expect(screen.queryByTestId("theme-toggle")).toBeNull();
-    expect(screen.getByTestId("version-display")).toBeTruthy();
+    const footer = screen.getByTestId("sidebar-footer");
+    expect(
+      footer.querySelector('[data-testid="operon-settings-nav"]'),
+    ).not.toBeNull();
+    expect(
+      footer.querySelector('[data-testid="operon-rail-footer"]'),
+    ).not.toBeNull();
+    // The old footer contents are gone (John's explicit new footer spec: user name + Sign
+    // out only), not merely unasserted — a regression that brought either back should fail
+    // this test rather than pass silently because nothing looked for them.
+    expect(screen.queryByTestId("trial-card")).toBeNull();
+    expect(screen.queryByTestId("version-display")).toBeNull();
+  });
+
+  it("renders Kaneo's own nav (Search, NavMain, NavProjects) in the content slot, unstructured", async () => {
+    const { AppSidebar } = await import("@/components/app-sidebar");
+
+    render(<AppSidebar />);
+
+    const content = screen.getByTestId("sidebar-content");
+    expect(content.querySelector('[data-testid="search"]')).not.toBeNull();
+    expect(content.querySelector('[data-testid="nav-main"]')).not.toBeNull();
+    expect(
+      content.querySelector('[data-testid="nav-projects"]'),
+    ).not.toBeNull();
   });
 });

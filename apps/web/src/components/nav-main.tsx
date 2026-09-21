@@ -71,10 +71,16 @@ export function NavMain() {
   return (
     <Collapsible defaultOpen className="group/collapsible">
       <SidebarGroup className="gap-1 p-2">
+        {/*
+          Restyled to match Telegraph's CHANNELS section (John, fix brief, GUI-pass rail
+          rebuild): uppercase 12.5px/700 tracking-wide label. `text-sidebar-accent-foreground`
+          is UNCHANGED — it already resolves to white in `.navy` (`index.css`), which is
+          the "white text" half of the ask; only the case/size/weight needed adding.
+        */}
         <CollapsibleTrigger
           className="data-panel-open:[&_svg]:rotate-90"
           render={
-            <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-sidebar-accent-foreground" />
+            <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-[12.5px] font-bold uppercase tracking-wide text-sidebar-accent-foreground" />
           }
         >
           <span>{t("navigation:sidebar.overview")}</span>
@@ -85,11 +91,19 @@ export function NavMain() {
             <SidebarMenu className="gap-0.5">
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
+                  {/*
+                    `h-11` (44px, was `h-8`/32px) — the row-height half of the ask. The
+                    active fill (`data-[active=true]:bg-sidebar-accent`, from
+                    `sidebarMenuButtonVariants` in `ui/sidebar.tsx`, untouched) is ALREADY
+                    `rgba(255,255,255,.10)` in `.navy` — the same value the mockup's own
+                    active-row spec and the Operon shell's `Sidebar.tsx` hover treatment
+                    use — so "same active bg" needed no override, only the height did.
+                  */}
                   <SidebarMenuButton
                     tooltip={item.title}
                     isActive={item.isActive}
                     size="default"
-                    className="h-8 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
+                    className="h-11 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
                     onClick={() => navigate({ to: item.url })}
                   >
                     <span>{item.title}</span>

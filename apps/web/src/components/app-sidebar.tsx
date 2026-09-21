@@ -2,8 +2,11 @@ import type * as React from "react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
-import { OperonSwitcher } from "@/components/operon-switcher";
-import { TrialCard } from "@/components/trial-card";
+import {
+  OperonModuleNav,
+  OperonRailFooter,
+  OperonRailHeader,
+} from "@/components/operon-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -11,7 +14,6 @@ import {
   SidebarHeader,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { VersionDisplay } from "@/components/version-display";
 import { shortcuts } from "@/constants/shortcuts";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import Search from "./search";
@@ -31,38 +33,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar
       collapsible="offcanvas"
       variant="inset"
-      className="border-none pt-1.5"
+      className="border-none p-0"
       {...props}
     >
       {/*
-        Operon chrome (spec R14, task B11). `OperonSwitcher` stands where
-        `WorkspaceSwitcher` stood: the header slot is unchanged and the sidebar below it is
-        not restructured, so every upstream surface underneath is untouched (R35). The
-        workspace dropdown is gone because Initiative has exactly one workspace by design
-        (decision 49); the notification bell, the user avatar and the user-scoped WebSocket
-        that dropdown also owned are re-mounted inside `OperonSwitcher` rather than lost.
+        Operon rail (spec R14, task B11; rebuilt John 2026-09-21 — this whole rail IS the
+        Operon shell's `Sidebar.tsx`, not a switcher living inside Kaneo's own chrome).
+        `SidebarHeader`/`SidebarContent`/`SidebarFooter` are the three fixed slots the
+        upstream `Sidebar` primitive already offers (header and footer do not scroll,
+        content does), which map onto the shell's own three tiers one for one: mark + module
+        nav (fixed top), Kaneo's own per-module list (scrollable middle, RESTYLED to match
+        Telegraph's channel-list section but not restructured — see `nav-main.tsx` and
+        `nav-projects.tsx`), Settings + user footer (fixed bottom). `p-0` on `Sidebar`
+        itself (was `pt-1.5`): the ground has no gutter of its own in the shell either.
       */}
-      <SidebarHeader className="pt-1 pb-1.5">
-        <OperonSwitcher />
+      <SidebarHeader className="gap-0 p-0">
+        <OperonRailHeader />
+        <OperonModuleNav variant="top" />
       </SidebarHeader>
       <SidebarContent className="overflow-hidden gap-1 py-1">
         <Search />
         <NavMain />
         <NavProjects />
       </SidebarContent>
-      <SidebarFooter>
-        <TrialCard />
-        {/*
-          Operon mode (Codex round-1 finding 11, manager ruling): NO independent theme
-          control here. `ThemeToggleDropdown` used to update `useUserPreferencesStore`
-          on its own, diverging from whatever Operon's Settings -> Theme switch had just
-          set the `operon_theme` cookie to — Operon Settings is the single control, and
-          the cookie handoff (GUI pass task 4b, `providers/theme-provider/index.tsx`) is
-          deliberately one-way, read once on arrival, not synced back from here.
-        */}
-        <div className="flex items-center justify-end">
-          <VersionDisplay />
-        </div>
+      <SidebarFooter className="gap-0 p-0">
+        <OperonModuleNav variant="settings" />
+        <OperonRailFooter />
       </SidebarFooter>
     </Sidebar>
   );

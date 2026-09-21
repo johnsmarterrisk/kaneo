@@ -51,6 +51,12 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
             "export default {};",
             "export const UserAvatar = () => null;",
             "export const useUserWebSocket = () => {};",
+            // Added for the rail-rebuild's OperonRailFooter (John, fix brief): the same
+            // generic stub module resolves EVERY non-relative import regardless of its
+            // real path, so one added export covers `useAuth` wherever it is imported
+            // from; `useSignOut`/`useGetConfig` are default imports, already covered by
+            // `export default {}` above.
+            "export const useAuth = () => ({ user: null });",
           ].join("\n"),
           loader: "js",
         }));

@@ -1,14 +1,35 @@
 import NotificationDropdown from "@/components/notification/notification-dropdown";
+import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import { UserAvatar } from "@/components/user-avatar";
+import useSignOut from "@/hooks/mutations/use-sign-out";
+import useGetConfig from "@/hooks/queries/config/use-get-config";
 import { useUserWebSocket } from "@/hooks/use-user-websocket";
 
 /**
- * OperonSwitcher — the Operon chrome injected into the Initiative fork (spec R14, task B11).
+ * operon-switcher.tsx — the Operon rail chrome injected into the Initiative fork (spec
+ * R14, task B11; rebuilt per the fix brief's rail-parity ask, John 2026-09-21: "the
+ * Initiative sidebar must be the OPERON RAIL, not Kaneo's sidebar with a switcher block").
  *
- * Initiative is one of Operon's four modules, served from a sibling origin
- * (`initiative.operon.<tld>`) rather than from inside the Operon SPA. Without this bar a
- * person who reaches Initiative has no way back to Telegraph except the browser's history,
- * and Initiative looks like a separate product rather than a module of one.
+ * The original B11 switcher was a small bordered box inside Kaneo's OWN sidebar header,
+ * with the module list wrapping onto a second row. John's ask replaces that shape
+ * entirely: the top of this rail — mark, product name, module list — IS the shell's own
+ * `Sidebar.tsx` rail, reproduced row for row (height, font, spacing, the active module's
+ * `rgba(255,255,255,.10)` fill + inset 3px yellow bar), not a switcher living inside a
+ * visually distinct Kaneo chrome. Three pieces are exported and composed by
+ * `app-sidebar.tsx`, because the shell's OWN rail also has three tiers — the module nav at
+ * the top, the per-module list in the middle (Kaneo's own nav, here), and a Settings row +
+ * user footer at the bottom (`Sidebar.tsx`'s own `<nav aria-label="Settings">` and
+ * `p-3 border-t` footer) — and Settings has to land in the BOTTOM tier, not inside the top
+ * module list, to match:
+ *
+ *  - `OperonRailHeader` — the mark + "Operon" + the notification bell/avatar (see the note
+ *    on WHY THOSE TWO STILL LIVE HERE, below).
+ *  - `OperonModuleNav` — the vertical module list, filtered by `variant` so the same
+ *    row-rendering code produces BOTH the top nav (every module except Settings) and the
+ *    bottom Settings-only row, exactly as `Sidebar.tsx`'s own `renderModule` is reused for
+ *    both of ITS `<nav>`s.
+ *  - `OperonRailFooter` — user name + Sign out, matching `Sidebar.tsx`'s own footer
+ *    markup (a plain name span and a button, not a menu).
  *
  * ── WHY THE TOKENS AND THE MODULE LIST ARE COPIED, NOT IMPORTED ──────────────────────
  * The source of truth is Operon's `app/src/shell/branding.ts` — `BRANDING_COLORS` and
@@ -16,53 +37,45 @@ import { useUserWebSocket } from "@/hooks/use-user-websocket";
  * palette, so neither a shared class name nor a shared import is available: a class name
  * would resolve to a different colour on each side, and an import would cross a repository
  * boundary that `docs/fork-discipline.md` exists to keep closed. The values below are
- * therefore REPLICATED, deliberately, as hex — which is exactly the reason `branding.ts`
- * states its colours as hex in the first place. **If a module or a colour changes there,
- * it changes here in the same commit.** Nothing enforces that but this comment.
+ * therefore REPLICATED, deliberately, as hex. **If a module or a colour changes there, it
+ * changes here in the same commit.** Nothing enforces that but this comment.
  *
- * ── WHY THIS COMPONENT ALSO CARRIES NOTIFICATIONS AND THE USER AVATAR ────────────────
- * It replaces `WorkspaceSwitcher` in `app-sidebar.tsx`'s header, and that component was
- * carrying three things besides the workspace dropdown: `useUserWebSocket()` (the
- * user-scoped socket that delivers NOTIFICATION_CREATED), `NotificationDropdown` and
- * `UserAvatar`. R35 says Kaneo's feature set is untouched, so hiding the dropdown must not
- * silently delete notifications or the account menu with it. They are re-mounted here.
- * What is intentionally NOT re-mounted is the workspace dropdown itself, the "add
- * workspace" item and the workspace keyboard shortcuts: per decision 49 Initiative has
- * exactly ONE workspace, created by the first admin's login, so there is nothing to switch
- * between and a second workspace is not a state this deployment should be able to reach.
+ * ── WHY THE HEADER STILL CARRIES NOTIFICATIONS AND THE USER AVATAR ───────────────────
+ * `Sidebar.tsx`'s own header row is JUST the mark, the name and a relay-status dot — no
+ * notification bell, no avatar — because Operon has no equivalent chrome anywhere else in
+ * the shell for them either. But `useUserWebSocket()` (the user-scoped socket that
+ * delivers NOTIFICATION_CREATED), `NotificationDropdown` and `UserAvatar` came from
+ * `WorkspaceSwitcher`, the component this file originally replaced, and R35 says Kaneo's
+ * feature set stays intact: hiding the workspace dropdown must not silently delete
+ * notifications or the account menu with it. There is no slot in the new three-tier design
+ * that is a closer match than the header row, so they stay here, compact, trailing the
+ * wordmark — an intentional, minimal departure from `Sidebar.tsx`'s own header, not an
+ * oversight.
  */
 
 /**
- * Operon's chrome colours, replicated from `app/src/shell/branding.ts` (`BRANDING_COLORS`).
- * Applied as inline styles rather than Tailwind classes for the reason given above.
- *
- * Re-tinted at the Codex round-1 gate (finding 2): these five values had never moved off
- * the pre-GUI-pass slate hex (`#1e293b`/`#334155`/`#f1f5f9`/`#94a3b8`) while `BRANDING_COLORS`
- * itself was re-tinted to navy/signal-yellow in GUI pass task 2 — so the injected bar kept
- * rendering the OLD chrome regardless of which theme Operon was actually in. Values below
- * are `BRANDING_COLORS`'s CURRENT navy values, copied verbatim (`background`/`surface` are
- * the same hex in navy mode, so one `surface` constant still covers both).
+ * Operon's chrome colours, replicated from `app/src/shell/branding.ts` (`BRANDING_COLORS`)
+ * and `app/src/index.css`'s `.navy` block (the two ground-relative rgba values, which
+ * `branding.ts` does not carry because Operon itself expresses them as Tailwind opacity
+ * modifiers — `bg-sidebar-accent/10` — not as flat hex).
  */
 export const OPERON_COLORS = {
-  surface: "#081a33",
-  // `activeBorder` (fix brief row 11, `docs/specs/operon-gui-pass-fix-brief.md`, "the
-  // switcher... shows the same... active style as the shell rail"): Operon's OWN
-  // `Sidebar.tsx` renders the active module as a 3px `border-sidebar-primary` (signal
-  // yellow) left bar plus full-weight white text — NEVER a solid yellow fill. The prior
-  // `surfaceActive: "#f5b700"` solid-fill value both mismatched the shell rail's actual
-  // anatomy and put white text on yellow at ~1.8:1 (theme-proposal.md §4a.2, item 1: yellow
-  // is a fill-with-navy-ink-on-top pair, never a surface for white text).
-  activeBorder: "#f5b700",
+  ground: "#081a33",
+  /** The active module's fill — `Sidebar.tsx`'s `hover:bg-sidebar-accent/10` and the
+      mockup's own `rgba(255,255,255,.10)` active-row spec (theme-proposal.md, fix brief
+      panel-anatomy section) are the SAME value; one constant covers both. */
+  groundAccent10: "rgba(255, 255, 255, 0.10)",
+  activeBar: "#f5b700",
   border: "rgba(255, 255, 255, 0.1)",
   textPrimary: "#ffffff",
-  textMuted: "rgba(255, 255, 255, 0.7)",
 } as const;
 
 export type OperonModuleKey =
   | "telegraph"
   | "initiative"
   | "signals"
-  | "settings";
+  | "settings"
+  | "files";
 
 export type OperonModule = {
   key: OperonModuleKey;
@@ -71,24 +84,20 @@ export type OperonModule = {
 };
 
 /**
- * The four modules, in order, replicated from `MODULES` in `app/src/shell/branding.ts`.
- * Order and labels are part of the contract: the switcher inside Telegraph and this one
- * must offer the same four things in the same sequence, or the shell reads as two products.
+ * The five modules, in order, replicated from `MODULES` in `app/src/shell/branding.ts`.
+ *
+ * Widened to FIVE (John, GUI-pass fix): this list had drifted to four, missing `files`
+ * (Stash, `branding.ts` decision 0) entirely — a real staleness this rebuild surfaces and
+ * fixes, not something the fix brief asked for by name, but the same "both switchers offer
+ * the same modules in the same order" contract this file's own header comment already
+ * states demands it. `OperonModuleNav`'s `variant` prop is what keeps Settings out of the
+ * top list and in its own bottom row, matching `Sidebar.tsx`'s two separate `<nav>`s.
  */
 export const OPERON_MODULES: readonly OperonModule[] = [
-  // STREAM IS FIRST, AND THE POSITION IS THE CONTRACT. Operator decision 2026-09-11 made the
-  // activity feed the leading tab; both switchers render their module array in order, so slot
-  // one here is the whole of the mirror for `MODULES` in Operon's `app/src/shell/branding.ts`.
-  //
-  // THE KEY STAYS `signals` AND MUST NOT BE RENAMED — only the label moved (Operon spec R20,
-  // D7; task G10 relabelled `MODULES` in `app/src/shell/branding.ts`, G11 mirrors it here).
-  // The key is what BOTH switchers dispatch on and what the e2e page objects read as
-  // `data-testid="module-signals"`, and the hash route stays `#/activity`, so renaming either
-  // would be a cross-repository breaking change bought for nothing: the reader only ever sees
-  // the label, and Stream is a relabel rather than a fifth module.
   { key: "signals", label: "Stream", icon: "⚡" },
   { key: "telegraph", label: "Telegraph", icon: "💬" },
   { key: "initiative", label: "Initiative", icon: "📋" },
+  { key: "files", label: "Stash", icon: "📁" },
   { key: "settings", label: "Settings", icon: "⚙️" },
 ] as const;
 
@@ -185,10 +194,10 @@ export function __resetApexUrlWarning() {
  * stays the single place that changes when the next module gains an address.
  *
  * Every other module still resolves to the apex root, because the shell recognises no
- * `#/telegraph`, `#/settings` or `#/login` hash: the root is the only address they have, and
- * inventing one here would link to a route that does not exist. What the root opens is the
- * shell's own landing decision (G10 makes that Stream), which is deliberately not
- * second-guessed from inside the fork.
+ * `#/telegraph`, `#/settings`, `#/files` or `#/login` hash: the root is the only address
+ * they have, and inventing one here would link to a route that does not exist. What the
+ * root opens is the shell's own landing decision (G10 makes that Stream), which is
+ * deliberately not second-guessed from inside the fork.
  */
 function moduleHref(apex: string, key: OperonModuleKey): string {
   if (key === "signals") {
@@ -197,99 +206,168 @@ function moduleHref(apex: string, key: OperonModuleKey): string {
   return `${apex}/`;
 }
 
-export function OperonSwitcher() {
-  // Re-mounted from `WorkspaceSwitcher`, which no longer renders — see the header comment.
-  useUserWebSocket();
+/**
+ * One module row — shared by both `OperonModuleNav` variants, exactly as `Sidebar.tsx`'s
+ * own `renderModule` closure is reused for its two `<nav>`s. 44px minimum height, `text-sm`
+ * (15px, this app's own default body size — the shell's own module row uses the SAME
+ * Tailwind `text-sm` key, just repainted to 15px by `app/tailwind.config.js`'s fontSize
+ * override; this fork has no such override, so 15px is approximated by the stock `text-sm`
+ * this codebase already uses everywhere else, rather than inventing an arbitrary size that
+ * would be the only one in the file).
+ */
+function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
+  const isCurrent = module.key === CURRENT_MODULE;
+  const shared = {
+    "data-testid": `module-${module.key}`,
+    "data-module": module.key,
+    "data-external": isCurrent ? "false" : "true",
+    className:
+      "flex min-h-[44px] w-full items-center rounded px-3 py-1.5 text-sm no-underline",
+  };
+  const style = {
+    color: OPERON_COLORS.textPrimary,
+    backgroundColor: isCurrent ? OPERON_COLORS.groundAccent10 : "transparent",
+    boxShadow: isCurrent
+      ? `inset 3px 0 0 0 ${OPERON_COLORS.activeBar}`
+      : "none",
+    fontWeight: isCurrent ? 600 : 500,
+  };
 
-  const apex = apexUrl();
+  return isCurrent ? (
+    <span key={module.key} {...shared} aria-current="page" style={style}>
+      {module.icon} {module.label}
+    </span>
+  ) : (
+    <a
+      key={module.key}
+      {...shared}
+      href={moduleHref(apex, module.key)}
+      style={style}
+    >
+      {module.icon} {module.label}
+    </a>
+  );
+}
+
+/**
+ * The rail's top: mark, "Operon", the notification bell and avatar — matching
+ * `Sidebar.tsx`'s `h-12 px-4 flex items-center` header row's height and padding. The mark
+ * is an inline SVG (navy rounded square, signal-yellow "O") rather than a reference to
+ * `public/logo-dark.svg`/`favicon.svg`: those two assets are still the pre-Operon
+ * slate/sky "Initiative" mark (never re-tinted — a real staleness, out of scope for this
+ * rail rebuild, which only needs the mark's SHAPE to match `app/public/operon.svg`, not to
+ * fix every branding asset in the same commit).
+ */
+export function OperonRailHeader() {
+  // Re-mounted from `WorkspaceSwitcher`, which no longer renders — see the file header.
+  useUserWebSocket();
 
   return (
     <div
-      data-testid="operon-switcher"
-      className="flex w-full flex-col gap-1.5 rounded-md border px-2 py-1.5"
+      data-testid="operon-rail-header"
+      className="flex h-12 w-full items-center gap-2 px-3"
+      style={{ backgroundColor: OPERON_COLORS.ground }}
+    >
+      <svg
+        aria-hidden="true"
+        width="16"
+        height="16"
+        viewBox="0 0 32 32"
+        className="shrink-0"
+      >
+        <rect width="32" height="32" rx="6" fill="#081a33" />
+        <text
+          x="50%"
+          y="55%"
+          dominantBaseline="middle"
+          textAnchor="middle"
+          fontSize="18"
+          fill="#f5b700"
+          fontFamily="system-ui"
+        >
+          O
+        </text>
+      </svg>
+      <h1
+        className="flex-1 truncate text-sm font-bold"
+        style={{ color: OPERON_COLORS.textPrimary }}
+      >
+        Operon
+      </h1>
+      <div className="flex shrink-0 items-center gap-1">
+        <NotificationDropdown />
+        <div className="h-8 w-8 shrink-0">
+          <UserAvatar />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The module nav — `variant="top"` renders every module except Settings (`Sidebar.tsx`'s
+ * `MODULES.filter(m => m.key !== 'settings')`); `variant="settings"` renders only Settings
+ * (`Sidebar.tsx`'s second `<nav aria-label="Settings">`, anchored just above the footer).
+ */
+export function OperonModuleNav({ variant }: { variant: "top" | "settings" }) {
+  const apex = apexUrl();
+  const modules = OPERON_MODULES.filter((module) =>
+    variant === "settings"
+      ? module.key === "settings"
+      : module.key !== "settings",
+  );
+
+  return (
+    <nav
+      aria-label={variant === "settings" ? "Settings" : "Modules"}
+      data-testid={
+        variant === "settings" ? "operon-settings-nav" : "operon-module-nav"
+      }
+      className="flex w-full flex-col gap-1 px-2 py-3"
+      style={{ backgroundColor: OPERON_COLORS.ground }}
+    >
+      {modules.map((module) => (
+        <ModuleRow key={module.key} module={module} apex={apex} />
+      ))}
+    </nav>
+  );
+}
+
+/**
+ * The rail's bottom: user name + Sign out, matching `Sidebar.tsx`'s own footer markup
+ * (`p-3 border-t`, a plain name span and a button — not `UserAvatar`'s dropdown menu, which
+ * hides both behind a click and stays in the header row for that reason).
+ */
+export function OperonRailFooter() {
+  const { user } = useAuth();
+  const { data: config } = useGetConfig();
+  const { mutateAsync: signOut } = useSignOut(config?.customOAuthLogoutUrl);
+
+  return (
+    <div
+      data-testid="operon-rail-footer"
+      className="flex w-full items-center justify-between border-t p-3"
       style={{
-        backgroundColor: OPERON_COLORS.surface,
+        backgroundColor: OPERON_COLORS.ground,
         borderColor: OPERON_COLORS.border,
       }}
     >
-      {/*
-        TWO ROWS, NOT ONE, AND THAT IS NOT A STYLE PREFERENCE.
-        Kaneo's sidebar is 224px wide. Four labelled modules plus the notification bell and
-        the avatar on ONE row squeezes every label down to its emoji — observed in the
-        browser, not predicted — and a switcher whose labels are invisible is not a
-        switcher. The account controls therefore keep the top row, beside the Operon
-        wordmark that tells the reader whose chrome this is, and the modules get a
-        full-width row of their own that wraps rather than truncates.
-      */}
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className="truncate text-xs font-semibold tracking-wide"
-          style={{ color: OPERON_COLORS.textPrimary }}
-        >
-          Operon
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
-          <NotificationDropdown />
-          <div className="h-8 w-8 shrink-0">
-            <UserAvatar />
-          </div>
-        </div>
-      </div>
-
-      {/*
-        `data-module`, `data-external` and `aria-current` are the switcher's contract, copied
-        from Operon's own `Sidebar.tsx` so one Playwright page object can read either side.
-        `data-external` means "activating this leaves the current origin" — which, inside
-        Initiative, is true of every module EXCEPT Initiative itself. That is the mirror
-        image of the apex switcher, where Initiative is the only external one.
-      */}
-      <nav aria-label="Modules" className="flex flex-wrap items-center gap-1">
-        {OPERON_MODULES.map((module) => {
-          const isCurrent = module.key === CURRENT_MODULE;
-          const shared = {
-            "data-testid": `module-${module.key}`,
-            "data-module": module.key,
-            "data-external": isCurrent ? "false" : "true",
-            className:
-              "whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium no-underline border-l-[3px]",
-          };
-
-          return isCurrent ? (
-            <span
-              key={module.key}
-              {...shared}
-              aria-current="page"
-              style={{
-                borderLeftColor: OPERON_COLORS.activeBorder,
-                color: OPERON_COLORS.textPrimary,
-                fontWeight: 600,
-              }}
-            >
-              {module.icon} {module.label}
-            </span>
-          ) : (
-            <a
-              key={module.key}
-              {...shared}
-              href={moduleHref(apex, module.key)}
-              // Full white, not `textMuted` (Codex round-2 finding 3): §4a.1 gives the navy
-              // ground exactly two ink values — white and signal yellow — and says
-              // hierarchy comes from weight and the active module's fill, never dimming.
-              // Round 1 already fixed this for Operon's own `Sidebar.tsx` (finding 15); this
-              // injected switcher is the mirror of that same rail and had the same bug.
-              // `borderLeftColor: "transparent"` keeps this item the same width as the
-              // active one's 3px border (`shared.className`), matching `Sidebar.tsx`'s own
-              // `border-transparent` inactive state rather than leaving the 3px unset.
-              style={{
-                color: OPERON_COLORS.textPrimary,
-                borderLeftColor: "transparent",
-              }}
-            >
-              {module.icon} {module.label}
-            </a>
-          );
-        })}
-      </nav>
+      <span
+        className="truncate text-xs"
+        style={{ color: OPERON_COLORS.textPrimary }}
+      >
+        {user?.name ?? ""}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          void signOut();
+        }}
+        className="min-h-[44px] rounded px-2 text-xs"
+        style={{ color: OPERON_COLORS.textPrimary }}
+      >
+        Sign out
+      </button>
     </div>
   );
 }

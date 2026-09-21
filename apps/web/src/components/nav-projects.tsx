@@ -215,10 +215,12 @@ export function NavProjects() {
     <>
       <Collapsible defaultOpen className="group/collapsible">
         <SidebarGroup className="group-data-[collapsible=icon]:hidden gap-1 p-2 pt-1">
+          {/* Restyled to match Telegraph's CHANNELS section — see the identical note in
+              `nav-main.tsx`. */}
           <CollapsibleTrigger
             className="data-panel-open:[&_svg]:rotate-90"
             render={
-              <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-sidebar-accent-foreground" />
+              <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-[12.5px] font-bold uppercase tracking-wide text-sidebar-accent-foreground" />
             }
           >
             <span>{t("navigation:sidebar.projects")}</span>
@@ -249,10 +251,12 @@ export function NavProjects() {
                           id={project.id}
                           canReorder={canReorder}
                         >
+                          {/* `h-11` (44px, was `h-8`) — row-height half of the ask, same
+                              as `nav-main.tsx`'s rows. */}
                           <SidebarMenuButton
                             isActive={isCurrentProject(project.id)}
                             size="default"
-                            className="h-8 gap-0 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
+                            className="h-11 gap-0 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
                             onClick={() => handleProjectClick(project)}
                           >
                             <span>{project.name}</span>
@@ -349,11 +353,19 @@ export function NavProjects() {
 
                   {canCreate && (
                     <SidebarMenuItem className="mt-1">
+                      {/* "Add project" as a row with a +, like ChannelList's "Channels +"
+                          (John) — `h-11` matches the other rows in this section. */}
                       <SidebarMenuButton
                         size="default"
-                        className="h-8 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
+                        className="h-11 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
                         onClick={() => setIsCreateProjectModalOpen(true)}
                       >
+                        <span
+                          aria-hidden="true"
+                          className="text-lg leading-none"
+                        >
+                          +
+                        </span>
                         <span>{t("navigation:projectList.addProject")}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
