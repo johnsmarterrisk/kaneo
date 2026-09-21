@@ -13,7 +13,6 @@ import useDeleteWorkspaceUser from "@/hooks/mutations/workspace-user/use-delete-
 import useUpdateWorkspaceUserRole from "@/hooks/mutations/workspace-user/use-update-workspace-user-role";
 import useWorkspaceRoles from "@/hooks/queries/workspace/use-workspace-roles";
 import { useCopyInvitationLink } from "@/hooks/use-copy-invitation-link";
-import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { formatDateMedium } from "@/lib/format";
 import { getInitials } from "@/lib/get-initials";
@@ -106,11 +105,16 @@ function MembersTable({ workspaceId, invitations, users }: Props) {
   const { mutateAsync: updateMemberRole } = useUpdateWorkspaceUserRole();
   const { copy: copyInvitationLink } = useCopyInvitationLink();
   const { data: allWorkspaceRoles = [] } = useWorkspaceRoles(workspaceId);
-  const { canManageTeam, canRemoveMembers, canInviteUsers } =
-    useWorkspacePermission();
-  const canChangeRoles = Boolean(canManageTeam());
-  const canRemove = Boolean(canRemoveMembers());
-  const canInvite = Boolean(canInviteUsers());
+
+  // Operon mode (spec R14, GUI pass task 4a; docs/fork-discipline.md row 13): Members is
+  // READ-ONLY chrome, unconditionally — role changes, removal and invitation actions all
+  // move to Operon Settings -> Users (the route component's header link). This no longer
+  // consults `useWorkspacePermission`: an admin's Kaneo-side permission would otherwise
+  // still light up controls that write directly against Kaneo's own membership tables,
+  // bypassing the one place (Operon) that is supposed to own that write.
+  const canChangeRoles = false;
+  const canRemove = false;
+  const canInvite = false;
 
   const customRoles = allWorkspaceRoles.filter(
     (role) => !RESERVED_ROLE_NAMES.has(role.role),

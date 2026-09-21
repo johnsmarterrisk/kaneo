@@ -1,11 +1,5 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   WorkspaceUser,
   WorkspaceUserInvitation,
@@ -54,23 +48,9 @@ vi.mock("@/hooks/queries/workspace/use-workspace-roles", () => ({
   default: () => ({ data: [] }),
 }));
 
-const canInviteUsers = vi.fn(() => true);
-
-vi.mock("@/hooks/use-workspace-permission", () => ({
-  useWorkspacePermission: () => ({
-    canManageTeam: () => true,
-    canRemoveMembers: () => true,
-    canInviteUsers: () => canInviteUsers(),
-  }),
-}));
-
 vi.mock("../providers/auth-provider/hooks/use-auth", () => ({
   useAuth: () => ({ user: { id: "current-user" } }),
 }));
-
-beforeEach(() => {
-  canInviteUsers.mockReturnValue(true);
-});
 
 afterEach(() => {
   cleanup();
@@ -85,68 +65,33 @@ const pendingInvitation = {
   expiresAt: "2026-09-01T00:00:00.000Z",
 } as unknown as WorkspaceUserInvitation;
 
-describe("MembersTable pending invitation row menu", () => {
-  it("copies the invitation link for that invitation when 'Copy link' is clicked", async () => {
-    copyToClipboard.mockResolvedValue(true);
+const owner = {
+  id: "member-1",
+  userId: "owner-user",
+  role: "owner",
+  createdAt: "2026-08-01T00:00:00.000Z",
+  user: { email: "owner@example.com", name: "Owner Person", image: null },
+} as unknown as WorkspaceUser;
 
-    render(
-      <MembersTable
-        workspaceId="workspace-1"
-        invitations={[pendingInvitation]}
-        users={[] as WorkspaceUser[]}
-      />,
-    );
+const member = {
+  id: "member-2",
+  userId: "member-user",
+  role: "member",
+  createdAt: "2026-08-01T00:00:00.000Z",
+  user: { email: "member@example.com", name: "Member Person", image: null },
+} as unknown as WorkspaceUser;
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "team:membersTable.ariaInvitationActions",
-      }),
-    );
-
-    fireEvent.click(
-      await screen.findByRole("menuitem", {
-        name: "team:invitations.copyLink",
-      }),
-    );
-
-    expect(copyToClipboard).toHaveBeenCalledWith(
-      `${window.location.origin}/invitation/accept/invite-1`,
-    );
-    await waitFor(() =>
-      expect(success).toHaveBeenCalledWith("team:invitations.linkCopied"),
-    );
-  });
-
-  it("still opens the cancel confirmation dialog instead of cancelling directly", async () => {
-    render(
-      <MembersTable
-        workspaceId="workspace-1"
-        invitations={[pendingInvitation]}
-        users={[] as WorkspaceUser[]}
-      />,
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "team:membersTable.ariaInvitationActions",
-      }),
-    );
-
-    fireEvent.click(
-      await screen.findByRole("menuitem", {
-        name: "team:membersTable.cancelInvitation",
-      }),
-    );
-
-    expect(
-      await screen.findByText("team:membersTable.cancelDialogTitle"),
-    ).toBeVisible();
-    expect(copyToClipboard).not.toHaveBeenCalled();
-  });
-
-  it("hides the row menu entirely when the user lacks canInvite", () => {
-    canInviteUsers.mockReturnValue(false);
-
+/**
+ * Operon mode (spec R14, GUI pass task 4a; docs/fork-discipline.md row 13): `MembersTable`
+ * no longer consults `useWorkspacePermission` at all — `canChangeRoles`, `canRemove` and
+ * `canInvite` are hardcoded `false` — so every one of these holds regardless of who is
+ * signed in or what role they hold. The pre-existing suite exercised the invitation row
+ * menu (copy link / cancel) as reachable actions; those are gone rather than merely hidden
+ * behind a permission this component still checked, so the tests below assert absence
+ * instead.
+ */
+describe("MembersTable, read-only in Operon mode", () => {
+  it("renders no pending-invitation row menu", () => {
     render(
       <MembersTable
         workspaceId="workspace-1"
@@ -160,5 +105,37 @@ describe("MembersTable pending invitation row menu", () => {
         name: "team:membersTable.ariaInvitationActions",
       }),
     ).toBeNull();
+    // The invitation itself is still shown — read-only means no ACTIONS, not no data.
+    expect(screen.getByText(pendingInvitation.email)).toBeTruthy();
+  });
+
+  it("renders no per-member remove menu", () => {
+    render(
+      <MembersTable
+        workspaceId="workspace-1"
+        invitations={[]}
+        users={[owner, member]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", {
+        name: "team:membersTable.ariaRemoveMember",
+      }),
+    ).toBeNull();
+  });
+
+  it("renders a non-owner's role as plain text, never an editable role Select", () => {
+    render(
+      <MembersTable
+        workspaceId="workspace-1"
+        invitations={[]}
+        users={[owner, member]}
+      />,
+    );
+
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByText("team:roles.member")).toBeTruthy();
+    expect(screen.getByText("team:roles.owner")).toBeTruthy();
   });
 });

@@ -14,7 +14,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { usePendingInvitations } from "@/hooks/queries/invitation/use-pending-invitations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { authClient } from "@/lib/auth-client";
 
@@ -23,7 +22,6 @@ export function NavMain() {
   const { data: activeWorkspace } = useActiveWorkspace();
   const { data: organizations } = authClient.useListOrganizations();
   const navigate = useNavigate();
-  const { data: invitations = [] } = usePendingInvitations();
 
   /*
     Operon change (spec R14, task B11): fall back to the session's single workspace.
@@ -45,8 +43,13 @@ export function NavMain() {
 
   if (!workspace) return null;
 
-  const pendingCount = invitations.length;
-
+  // Operon mode (spec R14, GUI pass task 4a; docs/fork-discipline.md row 13): no
+  // "Invitations" entry. Operon owns identity and workspace membership end to end
+  // (`operon-account`/`operon-provision-user`, fork-discipline.md rows 1 and 6) — a
+  // Kaneo-native invitation would mint access outside that path — so the item, its
+  // pending-count badge and the `usePendingInvitations` query it needed are all gone
+  // rather than merely hidden, and the Members row below is the one place left that
+  // still talks about who is on the workspace.
   const navItems = [
     {
       title: t("navigation:sidebar.projects"),
@@ -62,12 +65,6 @@ export function NavMain() {
         window.location.pathname ===
         `/dashboard/workspace/${workspace.id}/members`,
       badge: null,
-    },
-    {
-      title: t("navigation:sidebar.invitations"),
-      url: "/dashboard/invitations",
-      isActive: window.location.pathname === "/dashboard/invitations",
-      badge: pendingCount > 0 ? pendingCount : null,
     },
   ];
 
