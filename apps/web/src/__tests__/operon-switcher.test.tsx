@@ -240,4 +240,17 @@ describe("AppSidebar", () => {
         .querySelector('[data-testid="operon-switcher"]'),
     ).not.toBeNull();
   });
+
+  it("renders no independent theme control (Codex round-2 finding 5; GUI pass finding 11)", async () => {
+    const { AppSidebar } = await import("@/components/app-sidebar");
+
+    render(<AppSidebar />);
+
+    // The mock above (`theme-toggle-dropdown`) is left in place deliberately: if
+    // `app-sidebar.tsx` ever re-imports `ThemeToggleDropdown`, this mock intercepts it and
+    // renders `theme-toggle`, which is exactly what this assertion would then catch. Operon
+    // Settings is the one theme control; the footer keeps only the version display.
+    expect(screen.queryByTestId("theme-toggle")).toBeNull();
+    expect(screen.getByTestId("version-display")).toBeTruthy();
+  });
 });

@@ -122,6 +122,16 @@ input:-webkit-autofill:active {
  * Operon's `navy` onto THIS `.dark` block, so re-tinting dark to B's navy-700 ground and
  * signal-yellow primary is what makes "Initiative follows Operon's navy theme" true rather
  * than "Initiative goes generic dark".
+ *
+ * NOT a byte-for-byte copy of `app/src/index.css`'s values (Codex round 2, findings 1/2):
+ * the round-1 pass DID copy two families of token verbatim, and Kaneo's own upstream
+ * components (off the touch list) consume them differently than Operon's own components
+ * do, which round 1 had not checked. `--success/-warning/-destructive/-info-foreground`
+ * now read each base token's OWN hex rather than white/navy-ink (`ui/badge.tsx` pairs them
+ * with a faint tint of the SAME colour, not a solid fill); `--sidebar-accent` is `#1c3e6e`
+ * rather than white (`ui/sidebar.tsx` applies it at FULL opacity, unlike Operon's own
+ * `Sidebar.tsx`, whose call sites always fraction it). Each site below carries its own
+ * note.
  */
 :root {
   --font-sans:
@@ -148,10 +158,30 @@ input:-webkit-autofill:active {
   --card: #ffffff;
   --card-foreground: #0b1f3a;
   --destructive: #c0362c;
-  --destructive-foreground: #ffffff;
+  /* Status `-foreground` tokens (Codex round-2 finding 1) are TEXT COLOR for status
+     copy/badges rendered against the page/card — `ui/badge.tsx` pairs them with a faint
+     `bg-X/8` tint of the SAME token, not a solid fill (`bg-destructive/8
+     text-destructive-foreground`), and most other status text in this app
+     (`public-pr-badge.tsx`, `external-links-accordion.tsx`, `field.tsx`, …) reads directly
+     against `--card`/`--background`. Stock Kaneo's own pre-re-tint defaults already knew
+     this — `--destructive-foreground` was `red-700` in light / `red-400` in dark, a
+     readable SHADE OF THE HUE, never white or the page ink — and the first re-tint pass
+     missed it, setting every one of these to `--X-foreground: #ffffff` (light) /
+     `#0b1f3a` (dark), which reads fine on nothing: white text is invisible on an 8% tint
+     of itself over a white card, and navy-ink is invisible on an 8%–16% tint over the
+     navy-700 dark canvas. The fix reuses each base token's OWN hex — `theme-proposal.md`
+     §4a.1's palette already audited these specific values for "on canvas" contrast (danger
+     5.20:1 light / 7.55:1 dark, ok 5.05:1 / 8.41:1, warn 5.59:1 / 8.50:1, link 8.33:1 /
+     7.63:1), which is exactly the surface this token is actually read against. The one
+     tension this does not resolve: `backlog.tsx` (upstream, off the touch list) has FOUR
+     `hover:bg-destructive hover:text-destructive-foreground` icon buttons — a genuine
+     solid-fill pairing — where same-as-background text is as illegible as stock Kaneo's
+     own red-700-on-red-500 hover already was; that is a pre-existing upstream tension this
+     fork does not introduce and is not positioned to fix without editing `backlog.tsx`. */
+  --destructive-foreground: #c0362c;
   --foreground: #0b1f3a;
   --info: #2d4592;
-  --info-foreground: #ffffff;
+  --info-foreground: #2d4592;
   --input: #ded9ce;
   --muted: #f2efe8;
   --muted-foreground: #5a6577;
@@ -163,9 +193,9 @@ input:-webkit-autofill:active {
   --secondary: #f2efe8;
   --secondary-foreground: #0b1f3a;
   --success: #167a4b;
-  --success-foreground: #ffffff;
+  --success-foreground: #167a4b;
   --warning: #8a5a00;
-  --warning-foreground: #ffffff;
+  --warning-foreground: #8a5a00;
   --chart-1: var(--color-orange-600);
   --chart-2: var(--color-teal-600);
   --chart-3: var(--color-cyan-900);
@@ -177,7 +207,18 @@ input:-webkit-autofill:active {
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #f5b700;
   --sidebar-primary-foreground: #0b1f3a;
-  --sidebar-accent: #ffffff;
+  /* `--sidebar-accent` (Codex round-2 finding 2): upstream `ui/sidebar.tsx` (off the touch
+     list) applies this at FULL opacity — `hover:bg-sidebar-accent
+     hover:text-sidebar-accent-foreground`, `data-[active=true]:bg-sidebar-accent
+     data-[active=true]:text-sidebar-accent-foreground` — unlike Operon's OWN
+     `Sidebar.tsx`, whose every call site deliberately fractions it (`bg-sidebar-accent/10`)
+     and can therefore safely reuse white for both. Copying Operon's white-on-white verbatim
+     left this fork's OWN hover/active menu-item fill and text identical. `#1c3e6e` is the
+     navy-700→navy-600 "raised" step already used as `--accent`/`--muted`/`--secondary` in
+     `.dark` below — a full-opacity fill one step lighter than the `#15315a` sidebar itself,
+     which white text reads on exactly as well as it already does against `--card`/
+     `--popover` at that same depth elsewhere in this palette. */
+  --sidebar-accent: #1c3e6e;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #ffffff;
   --sidebar-ring: #f5b700;
@@ -194,10 +235,10 @@ input:-webkit-autofill:active {
   --card: #15315a;
   --card-foreground: #edf2f9;
   --destructive: #ff9b93;
-  --destructive-foreground: #0b1f3a;
+  --destructive-foreground: #ff9b93;
   --foreground: #edf2f9;
   --info: #8fb8ff;
-  --info-foreground: #0b1f3a;
+  --info-foreground: #8fb8ff;
   --input: #2c5286;
   --muted: #1c3e6e;
   --muted-foreground: #9faec6;
@@ -209,9 +250,9 @@ input:-webkit-autofill:active {
   --secondary: #1c3e6e;
   --secondary-foreground: #edf2f9;
   --success: #5bd69b;
-  --success-foreground: #0b1f3a;
+  --success-foreground: #5bd69b;
   --warning: #f5b700;
-  --warning-foreground: #0b1f3a;
+  --warning-foreground: #f5b700;
   --chart-1: var(--color-blue-700);
   --chart-2: var(--color-emerald-500);
   --chart-3: var(--color-amber-500);
@@ -224,7 +265,9 @@ input:-webkit-autofill:active {
   --sidebar-foreground: #edf2f9;
   --sidebar-primary: #f5b700;
   --sidebar-primary-foreground: #0b1f3a;
-  --sidebar-accent: #ffffff;
+  /* See the `:root` block's note on `--sidebar-accent` (Codex round-2 finding 2) — same
+     bug, same fix. `#1c3e6e` is already this mode's OWN `--accent`/`--muted`/`--secondary`. */
+  --sidebar-accent: #1c3e6e;
   --sidebar-accent-foreground: #edf2f9;
   --sidebar-border: #ffffff;
   --sidebar-ring: #f5b700;
@@ -292,6 +335,19 @@ input:-webkit-autofill:active {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* Checkbox/radio LABELS (Codex round-2 finding 4, mirroring the rule
+     `app/src/index.css`'s Codex round-1 fix added in the Operon repository): the native
+     control above is deliberately left at its own size, but the `<label>` wrapping it —
+     the REAL clickable hit area, since clicking anywhere inside a `<label>` toggles the
+     input it wraps — was never covered by the rule above at all. `:has()` is supported by
+     every engine this app ships to. */
+  label:has(> input[type="checkbox"]):not([data-touch-compact]),
+  label:has(> input[type="radio"]):not([data-touch-compact]) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
 }
 

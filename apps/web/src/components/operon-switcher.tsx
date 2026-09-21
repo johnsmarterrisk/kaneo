@@ -264,7 +264,12 @@ export function OperonSwitcher() {
               key={module.key}
               {...shared}
               href={moduleHref(apex, module.key)}
-              style={{ color: OPERON_COLORS.textMuted }}
+              // Full white, not `textMuted` (Codex round-2 finding 3): §4a.1 gives the navy
+              // ground exactly two ink values — white and signal yellow — and says
+              // hierarchy comes from weight and the active module's fill, never dimming.
+              // Round 1 already fixed this for Operon's own `Sidebar.tsx` (finding 15); this
+              // injected switcher is the mirror of that same rail and had the same bug.
+              style={{ color: OPERON_COLORS.textPrimary }}
             >
               {module.icon} {module.label}
             </a>
