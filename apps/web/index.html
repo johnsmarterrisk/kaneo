@@ -34,6 +34,47 @@
   <link rel="canonical" href="https://kaneo.app">
 
   <script>
+    // Pre-paint theme resolution (Codex round-1 finding 12, manager ruling; mirrors
+    // `app/index.html`'s pre-paint script in the Operon repository, GUI pass task 1).
+    // Runs synchronously, before React mounts, so the first frame already carries the
+    // right class instead of painting a persisted Kaneo theme and flashing to Operon's
+    // choice once `ThemeProvider`'s effect (GUI pass task 4b) runs. Never throws: a
+    // blocked storage API or a malformed cookie must still let the page paint.
+    //
+    // Order: the operon_theme cookie (GUI pass task 4b's handoff) beats this store's own
+    // persisted `user-preferences` record beats the store's own default ("dark").
+    (function () {
+      var OPERON_TO_KANEO = { navy: 'dark', light: 'light', dark: 'dark' };
+      function fromOperonCookie() {
+        var match = document.cookie.match(/(?:^|;\s*)operon_theme=([^;]+)/);
+        if (!match) return null;
+        try {
+          return OPERON_TO_KANEO[decodeURIComponent(match[1])] || null;
+        } catch (e) {
+          return null;
+        }
+      }
+      function fromStore() {
+        try {
+          var raw = window.localStorage.getItem('user-preferences');
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          var stored = parsed && parsed.state && parsed.state.theme;
+          if (stored === 'light' || stored === 'dark') return stored;
+          if (stored === 'system') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+      var theme = fromOperonCookie() || fromStore() || 'dark';
+      document.documentElement.classList.add(theme);
+    })();
+  </script>
+
+  <script>
     if (window.location.hostname === 'demo.kaneo.app') {
       const script = document.createElement('script');
       script.defer = true;

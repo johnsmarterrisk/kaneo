@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
 /**
@@ -32,19 +32,35 @@ function readOperonThemeCookie(): "light" | "dark" | null {
     new RegExp(`(?:^|; )${OPERON_THEME_COOKIE}=([^;]*)`),
   );
   if (!match) return null;
-  const value = decodeURIComponent(match[1]);
-  return OPERON_TO_KANEO_THEME[value] ?? null;
+  // Guarded (Codex round-1 finding 21): a cookie value this reader cannot decode must not
+  // throw out of the effect — the theme handoff is cosmetic and never worth breaking
+  // Initiative's own mount over, the same reasoning Operon's own cookie writer/reader give.
+  try {
+    const value = decodeURIComponent(match[1]);
+    return OPERON_TO_KANEO_THEME[value] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useUserPreferencesStore();
 
+  // `useLayoutEffect`, not `useEffect` (Codex round-1 finding 12): the pre-paint script in
+  // `index.html` already stamped the correct class before React mounted, but a PLAIN
+  // `useEffect` here would only correct the STORE after the browser had already painted
+  // one frame at the store's persisted (pre-cookie) theme via the effect below — a second,
+  // React-caused flash the pre-paint script cannot prevent on its own. A layout effect
+  // runs synchronously after DOM mutations but before the browser paints, so `setTheme`
+  // here (when it fires) triggers React's synchronous re-render-before-paint path: the
+  // paint effect below only ever runs once, already reading the corrected value.
+  //
   // Reads `useUserPreferencesStore.getState()` fresh rather than the render-scope
   // `theme`/`setTheme` above, so this effect closes over no reactive value at all and a
   // `[]` dependency array is exactly correct — not a suppressed lint. That is also what
   // makes it run genuinely ONCE, on mount, per the file doc comment: no destructured
   // value from this render can be stale here because none is read.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mapped = readOperonThemeCookie();
     if (!mapped) return;
     const store = useUserPreferencesStore.getState();

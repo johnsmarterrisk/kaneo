@@ -7,6 +7,7 @@ import PageTitle from "@/components/page-title";
 import MembersTable from "@/components/team/members-table";
 import { Badge } from "@/components/ui/badge";
 import useGetFullWorkspace from "@/hooks/queries/workspace/use-get-full-workspace";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 
 export const Route = createFileRoute(
   "/_layout/_authenticated/dashboard/workspace/$workspaceId/members",
@@ -33,11 +34,19 @@ export const Route = createFileRoute(
  * that one hash and landing on the Settings module — `SettingsView.tsx` already defaults
  * an admin session to its "Users & Roles" tab, so no further tab-selecting fragment is
  * needed to reach Users specifically.
+ *
+ * The link itself is gated on `canInviteUsers()` (Codex round-1 finding 13): a non-admin
+ * who followed it would land on Operon Settings -> Account, not Users, because that is
+ * where `SettingsView.tsx` sends a non-admin session — a dead-end link pointing at UI the
+ * reader cannot reach either way. A non-admin sees the badge alone, which is still an
+ * accurate, non-actionable statement of who manages this roster.
  */
 function RouteComponent() {
   const { t } = useTranslation();
   const { workspaceId } = Route.useParams();
   const { data: workspace } = useGetFullWorkspace({ workspaceId });
+  const { canInviteUsers } = useWorkspacePermission();
+  const canInvite = Boolean(canInviteUsers());
 
   return (
     <>
@@ -52,13 +61,15 @@ function RouteComponent() {
             >
               Managed by Operon
             </Badge>
-            <a
-              href={`${apexUrl()}/#/settings`}
-              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground no-underline hover:text-foreground"
-            >
-              <ExternalLink className="w-3 h-3" />
-              {t("team:members.inviteMember")}
-            </a>
+            {canInvite ? (
+              <a
+                href={`${apexUrl()}/#/settings`}
+                className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground no-underline hover:text-foreground"
+              >
+                <ExternalLink className="w-3 h-3" />
+                {t("team:members.inviteMember")}
+              </a>
+            ) : null}
           </div>
         }
       >

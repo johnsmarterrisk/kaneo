@@ -88,4 +88,15 @@ describe("ThemeProvider, Operon-mode cookie handoff", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
+
+  it("does not throw and leaves the store alone on a cookie value decodeURIComponent cannot decode (finding 21)", () => {
+    useUserPreferencesStore.setState({ theme: "light" });
+    // biome-ignore lint/suspicious/noDocumentCookie: test harness — jsdom has no Cookie Store
+    document.cookie = "operon_theme=%; Path=/";
+
+    expect(() => render(<ThemeProvider>child</ThemeProvider>)).not.toThrow();
+
+    expect(document.documentElement.classList.contains("light")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
 });

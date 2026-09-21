@@ -105,6 +105,24 @@ input:-webkit-autofill:active {
   }
 }
 
+/*
+ * Re-tinted to Operon's Option B palette (`docs/design/theme-proposal.md` §4/§4a in the
+ * Operon repository, the same values `app/src/index.css`'s `.light`/`.dark` blocks carry
+ * there as RGB triples) — GUI pass Codex round-1 finding 2, manager ruling: DO the
+ * proposal's planned re-tint rather than add a third Kaneo theme. `--font-sans`,
+ * `--font-heading`, `--font-mono` and `--radius` are UNCHANGED (Geist stays Geist,
+ * 0.625rem stays 0.625rem) — the ruling scopes this to colour, not typography, and this
+ * file's own font/radius pair is not on `docs/fork-discipline.md`'s touch list at all.
+ * `--chart-1..5` (task-board chart colours, not part of the brand palette) are also
+ * unchanged; nothing here reads them for chrome. `--code`/`--code-foreground`/
+ * `--code-highlight` map onto `--card`/`--foreground`/`--accent` respectively, the same
+ * relationship the original color-mix expressions had to `--background`/`--foreground`.
+ *
+ * Kaneo has no navy mode of its own — the fork's `ThemeProvider` (GUI pass task 4b) maps
+ * Operon's `navy` onto THIS `.dark` block, so re-tinting dark to B's navy-700 ground and
+ * signal-yellow primary is what makes "Initiative follows Operon's navy theme" true rather
+ * than "Initiative goes generic dark".
+ */
 :root {
   --font-sans:
     "Geist Variable",
@@ -123,107 +141,96 @@ input:-webkit-autofill:active {
     "Courier New",
     monospace;
   --radius: 0.625rem;
-  --accent: --alpha(var(--color-black) / 4%);
-  --accent-foreground: var(--color-neutral-800);
-  --background: var(--color-white);
-  --border: --alpha(var(--color-black) / 8%);
-  --card: var(--color-white);
-  --card-foreground: var(--color-neutral-800);
-  --destructive: var(--color-red-500);
-  --destructive-foreground: var(--color-red-700);
-  --foreground: var(--color-neutral-800);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-700);
-  --input: --alpha(var(--color-black) / 10%);
-  --muted: --alpha(var(--color-black) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
-  --popover: var(--color-white);
-  --popover-foreground: var(--color-neutral-800);
-  --primary: var(--color-neutral-800);
-  --primary-foreground: var(--color-neutral-50);
-  --ring: var(--color-neutral-400);
-  --secondary: --alpha(var(--color-black) / 4%);
-  --secondary-foreground: var(--color-neutral-800);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
+  --accent: #f2efe8;
+  --accent-foreground: #0b1f3a;
+  --background: #faf8f4;
+  --border: #ded9ce;
+  --card: #ffffff;
+  --card-foreground: #0b1f3a;
+  --destructive: #c0362c;
+  --destructive-foreground: #ffffff;
+  --foreground: #0b1f3a;
+  --info: #2d4592;
+  --info-foreground: #ffffff;
+  --input: #ded9ce;
+  --muted: #f2efe8;
+  --muted-foreground: #5a6577;
+  --popover: #ffffff;
+  --popover-foreground: #0b1f3a;
+  --primary: #15315a;
+  --primary-foreground: #ffffff;
+  --ring: #15315a;
+  --secondary: #f2efe8;
+  --secondary-foreground: #0b1f3a;
+  --success: #167a4b;
+  --success-foreground: #ffffff;
+  --warning: #8a5a00;
+  --warning-foreground: #ffffff;
   --chart-1: var(--color-orange-600);
   --chart-2: var(--color-teal-600);
   --chart-3: var(--color-cyan-900);
   --chart-4: var(--color-amber-400);
   --chart-5: var(--color-amber-500);
-  --sidebar: var(--color-neutral-50);
-  --sidebar-foreground: color-mix(
-    in srgb,
-    var(--color-neutral-800) 64%,
-    var(--sidebar)
-  );
-  --sidebar-primary: var(--color-neutral-800);
-  --sidebar-primary-foreground: var(--color-neutral-50);
-  --sidebar-accent: --alpha(var(--color-black) / 4%);
-  --sidebar-accent-foreground: var(--color-neutral-800);
-  --sidebar-border: --alpha(var(--color-black) / 6%);
-  --sidebar-ring: var(--color-neutral-400);
-  --code: var(--color-white);
+  /* B's mapping: "--sidebar -> navy in BOTH themes" — a permanent navy rail with a paper
+     content area in light mode (theme-proposal.md §4, "Mapping across the two surfaces"). */
+  --sidebar: #15315a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #f5b700;
+  --sidebar-primary-foreground: #0b1f3a;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #ffffff;
+  --sidebar-ring: #f5b700;
+  --code: var(--card);
   --code-foreground: var(--foreground);
-  --code-highlight: --alpha(var(--color-black) / 4%);
+  --code-highlight: var(--accent);
 }
 
 .dark {
-  --accent: --alpha(var(--color-white) / 4%);
-  --accent-foreground: var(--color-neutral-100);
-  --background: color-mix(
-    in srgb,
-    var(--color-neutral-950) 96%,
-    var(--color-white)
-  );
-  --border: --alpha(var(--color-white) / 6%);
-  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --card-foreground: var(--color-neutral-100);
-  --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-  --destructive-foreground: var(--color-red-400);
-  --foreground: var(--color-neutral-100);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-400);
-  --input: --alpha(var(--color-white) / 8%);
-  --muted: --alpha(var(--color-white) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --popover-foreground: var(--color-neutral-100);
-  --primary: var(--color-neutral-100);
-  --primary-foreground: var(--color-neutral-800);
-  --ring: var(--color-neutral-500);
-  --secondary: --alpha(var(--color-white) / 4%);
-  --secondary-foreground: var(--color-neutral-100);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-400);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-400);
+  --accent: #1c3e6e;
+  --accent-foreground: #edf2f9;
+  --background: #0e2546;
+  --border: #2c5286;
+  --card: #15315a;
+  --card-foreground: #edf2f9;
+  --destructive: #ff9b93;
+  --destructive-foreground: #0b1f3a;
+  --foreground: #edf2f9;
+  --info: #8fb8ff;
+  --info-foreground: #0b1f3a;
+  --input: #2c5286;
+  --muted: #1c3e6e;
+  --muted-foreground: #9faec6;
+  --popover: #15315a;
+  --popover-foreground: #edf2f9;
+  --primary: #f5b700;
+  --primary-foreground: #0b1f3a;
+  --ring: #f5b700;
+  --secondary: #1c3e6e;
+  --secondary-foreground: #edf2f9;
+  --success: #5bd69b;
+  --success-foreground: #0b1f3a;
+  --warning: #f5b700;
+  --warning-foreground: #0b1f3a;
   --chart-1: var(--color-blue-700);
   --chart-2: var(--color-emerald-500);
   --chart-3: var(--color-amber-500);
   --chart-4: var(--color-purple-500);
   --chart-5: var(--color-rose-500);
-  --sidebar: color-mix(
-    in srgb,
-    var(--color-neutral-950) 97%,
-    var(--color-white)
-  );
-  --sidebar-foreground: color-mix(
-    in srgb,
-    var(--color-neutral-100) 64%,
-    var(--sidebar)
-  );
-  --sidebar-primary: var(--color-neutral-100);
-  --sidebar-primary-foreground: var(--color-neutral-800);
-  --sidebar-accent: --alpha(var(--color-white) / 4%);
-  --sidebar-accent-foreground: var(--color-neutral-100);
-  --sidebar-border: --alpha(var(--color-white) / 5%);
-  --sidebar-ring: var(--color-neutral-400);
-  --code: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  /* Option B's OWN dark mapping (`app/src/index.css`'s `.dark` block, not `.navy`):
+     the rail is navy-600, one step lighter than the navy-700 background, so it still
+     reads as a panel elevated off the ground rather than fusing with it. */
+  --sidebar: #15315a;
+  --sidebar-foreground: #edf2f9;
+  --sidebar-primary: #f5b700;
+  --sidebar-primary-foreground: #0b1f3a;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #edf2f9;
+  --sidebar-border: #ffffff;
+  --sidebar-ring: #f5b700;
+  --code: var(--card);
   --code-foreground: var(--foreground);
-  --code-highlight: --alpha(var(--color-white) / 4%);
+  --code-highlight: var(--accent);
 }
 
 @layer base {
@@ -253,6 +260,38 @@ input:-webkit-autofill:active {
 
   *::-webkit-scrollbar-track {
     @apply bg-transparent;
+  }
+
+  /* Touch targets (Codex round-1 finding 6, manager ruling; mirrors the equivalent rule in
+     `app/src/index.css` in the Operon repository, GUI pass task 3): a 44x44 minimum hit
+     area for `button`, `a`, `input`, `select`, `textarea` and `[role="button"]`. Checkbox/
+     radio/file/hidden inputs keep their native control size, the same reason the Operon
+     side excludes them. `<a>` is deliberately NOT switched to `inline-flex` here (unlike
+     the Operon rule): Kaneo renders arbitrary rich text through TipTap — task
+     descriptions, comments, mentions — where a link is routinely mid-sentence, and forcing
+     every one into a block-scale box would break that prose far more often than in
+     Operon's own, much narrower set of UI strings. `min-width`/`min-height` already do not
+     apply to a non-replaced inline element (CSS2.1 10.3.1/10.6.1), so a prose link stays
+     exactly as wide as its own text either way — this rule reaches every `<a>` that ALREADY
+     has (or gets, from its own component) a non-inline display, which is every standalone
+     action control. Escape hatch: `data-touch-compact`. */
+  button:not([data-touch-compact]),
+  a:not([data-touch-compact]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+      [type="hidden"]
+    ):not([data-touch-compact]),
+  select:not([data-touch-compact]),
+  textarea:not([data-touch-compact]),
+  [role="button"]:not([data-touch-compact]) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  button:not([data-touch-compact]),
+  [role="button"]:not([data-touch-compact]) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }
 

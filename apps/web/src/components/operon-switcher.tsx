@@ -35,13 +35,20 @@ import { useUserWebSocket } from "@/hooks/use-user-websocket";
 /**
  * Operon's chrome colours, replicated from `app/src/shell/branding.ts` (`BRANDING_COLORS`).
  * Applied as inline styles rather than Tailwind classes for the reason given above.
+ *
+ * Re-tinted at the Codex round-1 gate (finding 2): these five values had never moved off
+ * the pre-GUI-pass slate hex (`#1e293b`/`#334155`/`#f1f5f9`/`#94a3b8`) while `BRANDING_COLORS`
+ * itself was re-tinted to navy/signal-yellow in GUI pass task 2 — so the injected bar kept
+ * rendering the OLD chrome regardless of which theme Operon was actually in. Values below
+ * are `BRANDING_COLORS`'s CURRENT navy values, copied verbatim (`background`/`surface` are
+ * the same hex in navy mode, so one `surface` constant still covers both).
  */
 export const OPERON_COLORS = {
-  surface: "#1e293b",
-  surfaceActive: "#334155",
-  border: "#334155",
-  textPrimary: "#f1f5f9",
-  textMuted: "#94a3b8",
+  surface: "#081a33",
+  surfaceActive: "#f5b700",
+  border: "rgba(255, 255, 255, 0.1)",
+  textPrimary: "#ffffff",
+  textMuted: "rgba(255, 255, 255, 0.7)",
 } as const;
 
 export type OperonModuleKey =

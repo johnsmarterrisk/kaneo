@@ -3,7 +3,6 @@ import type * as React from "react";
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
 import { OperonSwitcher } from "@/components/operon-switcher";
-import { ThemeToggleDropdown } from "@/components/theme-toggle-dropdown";
 import { TrialCard } from "@/components/trial-card";
 import {
   Sidebar,
@@ -53,9 +52,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <TrialCard />
-        <div className="flex items-center justify-between">
+        {/*
+          Operon mode (Codex round-1 finding 11, manager ruling): NO independent theme
+          control here. `ThemeToggleDropdown` used to update `useUserPreferencesStore`
+          on its own, diverging from whatever Operon's Settings -> Theme switch had just
+          set the `operon_theme` cookie to — Operon Settings is the single control, and
+          the cookie handoff (GUI pass task 4b, `providers/theme-provider/index.tsx`) is
+          deliberately one-way, read once on arrival, not synced back from here.
+        */}
+        <div className="flex items-center justify-end">
           <VersionDisplay />
-          <ThemeToggleDropdown />
         </div>
       </SidebarFooter>
     </Sidebar>
