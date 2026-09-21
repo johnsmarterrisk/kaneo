@@ -295,7 +295,11 @@ export function OperonRailHeader() {
         Operon
       </h1>
       <div className="flex shrink-0 items-center gap-1">
-        <NotificationDropdown />
+        {/* `groundContext` (John, fix brief): this header sits directly on the navy
+            ground, not a white card — the bell was invisible at rest because the ghost
+            Button variant's default `text-card-foreground` is navy ink, correct on a
+            card, navy-on-navy here. See NotificationDropdownProps' doc comment. */}
+        <NotificationDropdown groundContext />
         <div className="h-8 w-8 shrink-0">
           <UserAvatar />
         </div>

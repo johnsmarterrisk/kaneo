@@ -196,222 +196,246 @@ export function getNotificationContent(
   return notification.content ?? "";
 }
 
-const NotificationDropdown = forwardRef<NotificationDropdownRef>(
-  (_props, ref) => {
-    const { t } = useTranslation();
-    const navigate = useNavigate();
-    const { data: notifications } = useGetNotifications();
-    const [isOpen, setIsOpen] = useState(false);
-    const [showClearDialog, setShowClearDialog] = useState(false);
+export type NotificationDropdownProps = {
+  /**
+   * True when this trigger sits directly on the navy GROUND rather than a white card
+   * (John, fix brief: the bell was invisible at rest in the Operon rail header). The
+   * `ghost` Button variant (`ui/button.tsx`) is `text-card-foreground` — correct for
+   * upstream's own header, which is a white surface — but navy-on-navy where
+   * `OperonRailHeader` mounts this component directly on the ground. Defaults to false so
+   * every other mount (upstream's own header, `activity/index.tsx`, settings) is
+   * unchanged.
+   */
+  groundContext?: boolean;
+};
 
-    const { mutate: markAllAsRead } = useMarkAllNotificationsAsRead();
-    const { mutate: clearAll } = useClearNotifications();
-    const { mutate: markAsRead } = useMarkNotificationAsRead();
+const NotificationDropdown = forwardRef<
+  NotificationDropdownRef,
+  NotificationDropdownProps
+>(({ groundContext = false }, ref) => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { data: notifications } = useGetNotifications();
+  const [isOpen, setIsOpen] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
 
-    const handleNotificationClick = useCallback(
-      (notification: Notification) => {
-        if (!notification.isRead) {
-          markAsRead(notification.id);
-        }
+  const { mutate: markAllAsRead } = useMarkAllNotificationsAsRead();
+  const { mutate: clearAll } = useClearNotifications();
+  const { mutate: markAsRead } = useMarkNotificationAsRead();
 
-        const ed = getEventDataRecord(notification.eventData);
-        const workspaceId =
-          typeof ed?.workspaceId === "string" ? ed.workspaceId : null;
-        const projectId =
-          typeof ed?.projectId === "string" ? ed.projectId : null;
-        const taskId = notification.resourceId ?? null;
+  const handleNotificationClick = useCallback(
+    (notification: Notification) => {
+      if (!notification.isRead) {
+        markAsRead(notification.id);
+      }
 
-        if (
-          notification.resourceType === "task" &&
-          workspaceId &&
-          projectId &&
-          taskId
-        ) {
-          navigate({
-            to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
-            params: { workspaceId, projectId, taskId },
-          });
-        }
+      const ed = getEventDataRecord(notification.eventData);
+      const workspaceId =
+        typeof ed?.workspaceId === "string" ? ed.workspaceId : null;
+      const projectId = typeof ed?.projectId === "string" ? ed.projectId : null;
+      const taskId = notification.resourceId ?? null;
+
+      if (
+        notification.resourceType === "task" &&
+        workspaceId &&
+        projectId &&
+        taskId
+      ) {
+        navigate({
+          to: "/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId",
+          params: { workspaceId, projectId, taskId },
+        });
+      }
+    },
+    [markAsRead, navigate],
+  );
+
+  const unreadNotifications = notifications?.filter((n) => !n.isRead) || [];
+  const hasNotifications = notifications && notifications.length > 0;
+
+  useImperativeHandle(ref, () => ({
+    toggle: () => setIsOpen(!isOpen),
+  }));
+
+  const handleClearAll = () => {
+    clearAll();
+    setShowClearDialog(false);
+  };
+
+  useRegisterShortcuts({
+    sequentialShortcuts: {
+      [shortcuts.notification.prefix]: {
+        [shortcuts.notification.open]: () => setIsOpen(!isOpen),
       },
-      [markAsRead, navigate],
-    );
+    },
+  });
 
-    const unreadNotifications = notifications?.filter((n) => !n.isRead) || [];
-    const hasNotifications = notifications && notifications.length > 0;
-
-    useImperativeHandle(ref, () => ({
-      toggle: () => setIsOpen(!isOpen),
-    }));
-
-    const handleClearAll = () => {
-      clearAll();
-      setShowClearDialog(false);
-    };
-
-    useRegisterShortcuts({
-      sequentialShortcuts: {
-        [shortcuts.notification.prefix]: {
-          [shortcuts.notification.open]: () => setIsOpen(!isOpen),
-        },
-      },
-    });
-
-    return (
-      <>
-        <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-4 w-4" />
-                    {unreadNotifications.length > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-sidebar transition-[scale,opacity] duration-200 ease-out starting:scale-75 starting:opacity-0 motion-reduce:starting:scale-100">
-                        {unreadNotifications.length > 99
-                          ? "99+"
-                          : unreadNotifications.length}
-                      </span>
-                    )}
-                    <span className="sr-only">
-                      {t("navigation:notifications")}
+  return (
+    <>
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "relative",
+                    // Ground-relative override (see NotificationDropdownProps' doc
+                    // comment): white at rest, a subtle white fill on hover — the same
+                    // pair Sidebar.tsx's own rail items use on the Operon side.
+                    groundContext &&
+                      "text-sidebar-foreground hover:bg-sidebar-accent/10 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadNotifications.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-sidebar transition-[scale,opacity] duration-200 ease-out starting:scale-75 starting:opacity-0 motion-reduce:starting:scale-100">
+                      {unreadNotifications.length > 99
+                        ? "99+"
+                        : unreadNotifications.length}
                     </span>
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="flex items-center gap-2">
-                  <KbdSequence
-                    keys={[
-                      shortcuts.notification.prefix,
-                      shortcuts.notification.open,
-                    ]}
-                    description={t("notifications:shortcuts.open")}
-                  />
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                  )}
+                  <span className="sr-only">
+                    {t("navigation:notifications")}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="flex items-center gap-2">
+                <KbdSequence
+                  keys={[
+                    shortcuts.notification.prefix,
+                    shortcuts.notification.open,
+                  ]}
+                  description={t("notifications:shortcuts.open")}
+                />
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-          <DropdownMenuContent align="end" className="w-88 p-0">
-            <div className="overflow-hidden rounded-lg">
-              <div className="flex h-10 items-center justify-between border-border/50 border-b pr-2 pl-3">
-                <h3 className="font-medium text-sm">
-                  {t("notifications:title")}
-                </h3>
-                {unreadNotifications.length > 0 && (
-                  <DropdownMenuItem
-                    closeOnClick={false}
-                    onClick={() => markAllAsRead()}
-                    className="min-h-0 w-auto cursor-pointer rounded-md px-1.5 py-1 text-muted-foreground text-xs sm:min-h-0 sm:text-xs data-highlighted:text-foreground"
-                  >
-                    {t("common:actions.markAllRead")}
-                  </DropdownMenuItem>
-                )}
-              </div>
-
-              <div className="relative max-h-80 overflow-y-auto p-1">
-                {!hasNotifications ? (
-                  <div className="flex flex-col items-center gap-1 py-10 text-center">
-                    <Bell className="mb-1 size-5 text-muted-foreground/40" />
-                    <p className="text-muted-foreground text-sm">
-                      {t("notifications:emptyTitle")}
-                    </p>
-                    <p className="text-muted-foreground/60 text-xs">
-                      {t("notifications:emptySubtitle")}
-                    </p>
-                  </div>
-                ) : (
-                  notifications.map((notification) => {
-                    const content = getNotificationContent(notification, t);
-                    return (
-                      <DropdownMenuItem
-                        key={notification.id}
-                        onClick={() => handleNotificationClick(notification)}
-                        className="cursor-pointer items-start rounded-md px-2.5 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                "truncate text-sm transition-colors duration-150",
-                                notification.isRead
-                                  ? "text-muted-foreground"
-                                  : "font-medium text-foreground",
-                              )}
-                            >
-                              {getNotificationTitle(notification, t)}
-                            </span>
-                            <span className="ml-auto shrink-0 text-[11px] text-muted-foreground/70">
-                              {formatRelativeTime(notification.createdAt)}
-                            </span>
-                            {!notification.isRead && (
-                              <span className="size-1.5 shrink-0 rounded-full bg-info" />
-                            )}
-                          </div>
-                          {content && (
-                            <p
-                              className={cn(
-                                "mt-0.5 line-clamp-1 text-xs transition-colors duration-150",
-                                notification.isRead
-                                  ? "text-muted-foreground/60"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {content}
-                            </p>
-                          )}
-                        </div>
-                      </DropdownMenuItem>
-                    );
-                  })
-                )}
-              </div>
-              {hasNotifications && (
-                <div className="border-border/50 border-t p-1">
-                  <DropdownMenuItem
-                    onClick={() => setShowClearDialog(true)}
-                    className="min-h-0 cursor-pointer justify-center rounded-md px-2 py-1 text-muted-foreground/70 text-xs sm:min-h-0 sm:text-xs data-highlighted:text-destructive"
-                  >
-                    {t("notifications:clearAll")}
-                  </DropdownMenuItem>
-                </div>
+        <DropdownMenuContent align="end" className="w-88 p-0">
+          <div className="overflow-hidden rounded-lg">
+            <div className="flex h-10 items-center justify-between border-border/50 border-b pr-2 pl-3">
+              <h3 className="font-medium text-sm">
+                {t("notifications:title")}
+              </h3>
+              {unreadNotifications.length > 0 && (
+                <DropdownMenuItem
+                  closeOnClick={false}
+                  onClick={() => markAllAsRead()}
+                  className="min-h-0 w-auto cursor-pointer rounded-md px-1.5 py-1 text-muted-foreground text-xs sm:min-h-0 sm:text-xs data-highlighted:text-foreground"
+                >
+                  {t("common:actions.markAllRead")}
+                </DropdownMenuItem>
               )}
             </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
-        <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("notifications:clearDialogTitle")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("notifications:clearDialogDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogClose render={<Button variant="outline" size="sm" />}>
-                {t("common:actions.cancel")}
-              </AlertDialogClose>
-              <AlertDialogClose
-                render={
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleClearAll}
-                  />
-                }
-              >
-                {t("common:actions.clearAll")}
-              </AlertDialogClose>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </>
-    );
-  },
-);
+            <div className="relative max-h-80 overflow-y-auto p-1">
+              {!hasNotifications ? (
+                <div className="flex flex-col items-center gap-1 py-10 text-center">
+                  <Bell className="mb-1 size-5 text-muted-foreground/40" />
+                  <p className="text-muted-foreground text-sm">
+                    {t("notifications:emptyTitle")}
+                  </p>
+                  <p className="text-muted-foreground/60 text-xs">
+                    {t("notifications:emptySubtitle")}
+                  </p>
+                </div>
+              ) : (
+                notifications.map((notification) => {
+                  const content = getNotificationContent(notification, t);
+                  return (
+                    <DropdownMenuItem
+                      key={notification.id}
+                      onClick={() => handleNotificationClick(notification)}
+                      className="cursor-pointer items-start rounded-md px-2.5 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "truncate text-sm transition-colors duration-150",
+                              notification.isRead
+                                ? "text-muted-foreground"
+                                : "font-medium text-foreground",
+                            )}
+                          >
+                            {getNotificationTitle(notification, t)}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground/70">
+                            {formatRelativeTime(notification.createdAt)}
+                          </span>
+                          {!notification.isRead && (
+                            <span className="size-1.5 shrink-0 rounded-full bg-info" />
+                          )}
+                        </div>
+                        {content && (
+                          <p
+                            className={cn(
+                              "mt-0.5 line-clamp-1 text-xs transition-colors duration-150",
+                              notification.isRead
+                                ? "text-muted-foreground/60"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {content}
+                          </p>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </div>
+            {hasNotifications && (
+              <div className="border-border/50 border-t p-1">
+                <DropdownMenuItem
+                  onClick={() => setShowClearDialog(true)}
+                  className="min-h-0 cursor-pointer justify-center rounded-md px-2 py-1 text-muted-foreground/70 text-xs sm:min-h-0 sm:text-xs data-highlighted:text-destructive"
+                >
+                  {t("notifications:clearAll")}
+                </DropdownMenuItem>
+              </div>
+            )}
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("notifications:clearDialogTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("notifications:clearDialogDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" size="sm" />}>
+              {t("common:actions.cancel")}
+            </AlertDialogClose>
+            <AlertDialogClose
+              render={
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleClearAll}
+                />
+              }
+            >
+              {t("common:actions.clearAll")}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+});
 
 NotificationDropdown.displayName = "NotificationDropdown";
 
