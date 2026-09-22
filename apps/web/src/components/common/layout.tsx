@@ -1,6 +1,6 @@
 import { useLocation } from "@tanstack/react-router";
 import type React from "react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
@@ -63,7 +63,25 @@ function useSyncedIsMobile(): boolean {
     wrapping its own `<Layout>` — so state that must survive a navigation cannot live on
     `Layout`'s own instance. See `store/phone-nav.ts`'s own doc comment for the repro. */
 export function usePhoneNav(): { openPhoneNav: () => void } {
-  const openPhoneNav = usePhoneNavStore((state) => state.openPhoneNav);
+  const open = usePhoneNavStore((state) => state.openPhoneNav);
+  /* Codex r1 #1: the back arrow PUSHES a history entry as well as flipping the store, so
+     the arrow and the browser's own Back are one mechanism. The entry is stamped so the
+     `popstate` listener in `Layout` can tell a Navigate entry from a route entry; the URL
+     is left exactly as it is, because Navigate is a screen over the current route, not a
+     place of its own. Already-open is a no-op rather than a second entry, or repeated taps
+     would bury the Work screen under duplicates. */
+  const openPhoneNav = useCallback(() => {
+    const current = window.history.state as {
+      initiativePhoneNav?: boolean;
+    } | null;
+    if (!current?.initiativePhoneNav) {
+      window.history.pushState(
+        { ...(current ?? {}), initiativePhoneNav: true },
+        "",
+      );
+    }
+    open();
+  }, [open]);
   return { openPhoneNav };
 }
 
@@ -77,7 +95,11 @@ function LayoutHeader({ children, className }: HeaderProps) {
         // rather than replaces the desktop declaration above, so nothing here has to
         // move or be duplicated for md and up; it simply loses to the base rule at
         // 768px and wider, Tailwind's normal cascade order.
-        "max-md:h-14 max-md:min-h-0 max-md:border-0 max-md:bg-sidebar max-md:text-sidebar-foreground max-md:px-2 max-md:py-0",
+        // Codex r1 #9: 56px of CONTENT plus the inset, not 56px including it. Under
+        // border-box sizing `h-14` with the inset as padding made the notch eat into the
+        // bar, compressing the 44px controls inside it. The inset is now `pt-` ADDED to a
+        // fixed-height row, the same correction `MobileWork.tsx` carries on the Operon side.
+        "max-md:h-auto max-md:min-h-0 max-md:border-0 max-md:bg-sidebar max-md:text-sidebar-foreground max-md:px-2 max-md:py-0 max-md:pt-[env(safe-area-inset-top)] max-md:[&>*]:h-14",
         className,
       )}
     >
@@ -110,6 +132,7 @@ function Layout({ children, className }: LayoutProps) {
   const location = useLocation();
   const isPhoneNavOpen = usePhoneNavStore((state) => state.isPhoneNavOpen);
   const closePhoneNav = usePhoneNavStore((state) => state.closePhoneNav);
+  const openPhoneNav = usePhoneNavStore((state) => state.openPhoneNav);
   const lastSeenPathname = usePhoneNavStore((state) => state.lastSeenPathname);
   const setLastSeenPathname = usePhoneNavStore(
     (state) => state.setLastSeenPathname,
@@ -117,17 +140,10 @@ function Layout({ children, className }: LayoutProps) {
 
   useUserPreferencesEffects();
 
-  // Piece B's two-screen model has no route of its own — Navigate is a SCREEN STATE, not
-  // a URL, because every Work screen underneath it (project list, board, task detail) is
-  // already a real Kaneo route with its own data fetching. Landing state is Navigate
-  // (`usePhoneNavStore`'s own default `true`); a route change while on a Work screen means
-  // a Navigate-panel row was tapped (`NavMain`/`NavProjects` both `navigate()` internally,
-  // see their own files) and never needs a second signal to close Navigate — watching
-  // `location.pathname` catches every caller at once instead of threading an `onNavigate`
-  // callback through both. The FIRST pathname seen is the mount itself, not a navigation,
-  // so `lastSeenPathname === null` guards against closing Navigate on initial load; it
-  // lives in the same store as `isPhoneNavOpen`, for the same reason (survives `Layout`
-  // remounting across routes — see `store/phone-nav.ts`'s own doc comment).
+  // A route change while on a Work screen means a Navigate-panel row was tapped
+  // (`NavMain`/`NavProjects` both `navigate()` internally), which closes Navigate. The
+  // FIRST pathname seen is the mount itself, not a navigation, so `lastSeenPathname ===
+  // null` guards against closing Navigate on initial load.
   useEffect(() => {
     if (!isMobile) return;
     if (lastSeenPathname !== null && lastSeenPathname !== location.pathname) {
@@ -143,6 +159,28 @@ function Layout({ children, className }: LayoutProps) {
     closePhoneNav,
     setLastSeenPathname,
   ]);
+
+  /**
+   * Codex r1 #1: NAVIGATE/WORK ARE HISTORY ENTRIES, not private state.
+   *
+   * The back arrow used to flip Zustand only, so browser Back did something else entirely —
+   * it changed ROUTE, and the effect above then closed Navigate again, leaving the reader on
+   * a Work screen they had just tried to leave. The two mechanisms have to be the same one.
+   * Opening Navigate over a Work route now pushes an entry stamped `initiativePhoneNav`, and
+   * `popstate` reads that stamp back, so the arrow, the browser button and the OS gesture all
+   * traverse one stack. A route change (tapping a row) leaves no Navigate entry behind,
+   * because the route push itself is the entry.
+   */
+  useEffect(() => {
+    if (!isMobile) return;
+    function onPopState(event: PopStateEvent) {
+      const state = event.state as { initiativePhoneNav?: boolean } | null;
+      if (state?.initiativePhoneNav) openPhoneNav();
+      else closePhoneNav();
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isMobile, openPhoneNav, closePhoneNav]);
 
   return (
     <div className="flex w-full bg-background">

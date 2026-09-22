@@ -89,12 +89,16 @@ export default function TaskDetailsContent({
         </p>
         <TaskTitle taskId={taskId} />
         {/* Assignee + due row (Piece B, Asana IMG_2123) — phone task detail only. Sits
-            directly beneath the title, matching the reference's header block; the full
-            properties panel (`TaskPropertiesSidebar`, every field including these two)
-            still also renders below via `task-layout.tsx`'s existing `lg:hidden` block,
-            UNCHANGED per the brief's own instruction not to touch the `lg:` split — so on
-            a 768-1023px tablet this row and the full panel both show, which is accepted
-            redundancy rather than a second edit to code outside this brief's scope. */}
+            directly beneath the title, matching the reference's header block.
+
+            Codex r1 #15 — WHAT THE CODE ACTUALLY DOES, correcting the claim that used to
+            sit here. This row is `md:hidden`, so it is gone at 768px and above. The full
+            properties panel (`TaskPropertiesSidebar`) renders below the content via
+            `task-layout.tsx`'s `lg:hidden` block, so it shows below 1024px. The two
+            therefore never overlap: under 768px the reader gets this row and the panel
+            beneath it, and from 768-1023px they get the panel alone, with no compact row.
+            The earlier note claimed both showed together on a tablet as "accepted
+            redundancy" — that was never true, and the `lg:` split is still untouched. */}
         {task && (
           <div className="flex md:hidden items-center gap-3 text-sm">
             <TaskAssigneePopover task={task} workspaceId={workspaceId}>

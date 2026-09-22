@@ -27,9 +27,32 @@ type PhoneNavStore = {
   setLastSeenPathname: (pathname: string) => void;
 };
 
+/**
+ * Which screen a COLD mount opens, from the route alone (Codex r1 #2).
+ *
+ * Initialising unconditionally to Navigate meant every deep link hid the thing it pointed
+ * at: opening a project or task URL — from a notification, a pasted link, or Operon's own
+ * cross-origin hop — painted the Navigate list over the Work screen the address had just
+ * asked for, and the reader had to find their way back to it by hand. Route DEPTH answers
+ * this without a route table: the workspace landing is where Navigate belongs, and
+ * anything deeper (a project, a board, a task) is a Work screen the address named
+ * explicitly. `/dashboard/workspace/<id>` is the landing; `/dashboard/workspace/<id>/...`
+ * is not.
+ */
+export function phoneNavOpenForPath(pathname: string): boolean {
+  const workspace = pathname.match(/^\/dashboard\/workspace\/[^/]+(\/.*)?$/);
+  if (!workspace) return true;
+  const rest = workspace[1];
+  return rest === undefined || rest === "" || rest === "/";
+}
+
 export const usePhoneNavStore = create<PhoneNavStore>((set) => ({
-  // Landing state is Navigate (spec: "Where you land after login").
-  isPhoneNavOpen: true,
+  // Codex r1 #2: from the route, not a constant — a deep link must open its own Work
+  // screen. Read once, at store creation, which is the cold mount.
+  isPhoneNavOpen:
+    typeof window === "undefined"
+      ? true
+      : phoneNavOpenForPath(window.location.pathname),
   openPhoneNav: () => set({ isPhoneNavOpen: true }),
   closePhoneNav: () => set({ isPhoneNavOpen: false }),
   lastSeenPathname: null,

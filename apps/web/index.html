@@ -29,7 +29,12 @@
   <meta name="apple-mobile-web-app-title" content="Initiative" />
   <link rel="manifest" href="/site.webmanifest" />
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- `viewport-fit=cover` (Codex r1 #8): without it iOS reports every
+       `env(safe-area-inset-*)` as 0, so the phone shell's safe-area padding — the
+       top bar inset, the pinned Settings tile, the footer — silently does nothing on
+       exactly the notched devices it exists for. Operon's own `app/index.html`
+       carries the same attribute and the same guard test. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="application-name" content="Initiative">
   <link rel="canonical" href="https://kaneo.app">
 
@@ -144,8 +149,15 @@
     the equivalent of "React replaces it automatically" for a codebase whose entry point
     requires `#root` to start genuinely empty. -->
   <style>
+    /* Codex r1 #13: the silhouette is a PHONE first paint. Shown at desktop widths it
+       contradicts "desktop loading is unchanged" — a desktop reader in navy mode got a
+       64px strip and list-panel bars where the rail and card used to be. Gated to the
+       same 768px the shell's own phone branch uses, so desktop's first paint is the plain
+       navy ground it has always been. */
     #operon-skeleton { display: none; }
-    html.navy #operon-skeleton { display: flex; }
+    @media (max-width: 767px) {
+      html.navy #operon-skeleton { display: flex; }
+    }
   </style>
   <div id="operon-skeleton" aria-hidden="true"
     style="position:fixed;inset:0;background:#081a33;">

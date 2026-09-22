@@ -29,6 +29,15 @@
 
 const PHONE_BREAKPOINT_PX = 768;
 
+/** The one viewport read this module owns, exported so `main.tsx` can scope the router's
+    pending TIMING to phones with the same breakpoint the component itself branches on
+    (Codex r1 #7) — two places reading 768 independently is how they drift. */
+export function isPhoneViewport(): boolean {
+  return (
+    typeof window !== "undefined" && window.innerWidth < PHONE_BREAKPOINT_PX
+  );
+}
+
 /** The skeleton `index.html` paints before any script, redrawn as markup so the SAME navy
     silhouette survives the hand-off from pre-paint to React instead of blinking out of
     existence at mount. Colours are the literal values the pre-paint uses, not tokens: this
@@ -72,9 +81,6 @@ export function PhoneNavySkeleton() {
 }
 
 export default function RoutePending() {
-  const isPhone =
-    typeof window !== "undefined" && window.innerWidth < PHONE_BREAKPOINT_PX;
-
-  if (!isPhone) return null;
+  if (!isPhoneViewport()) return null;
   return <PhoneNavySkeleton />;
 }

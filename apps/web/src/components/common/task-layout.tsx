@@ -176,11 +176,17 @@ export default function TaskLayout({
         </Layout.Header>
 
         <Layout.Content>
+          {/* Codex r1 #10: TASK CONTENT FIRST on a phone. Below `lg` the properties panel
+              was `order-1` and the task itself `order-2`, so opening a task on a phone
+              showed a block of metadata before its own title — the Asana reference
+              (IMG_2123) is the opposite: title, then the assignee/due row, then the rest.
+              `order-first`/`order-last` are dropped entirely below `lg`, leaving source
+              order (content, then properties), and the `lg:` split is untouched. */}
           <div className="flex h-full min-h-0 flex-col overflow-hidden lg:flex-row">
-            <div className="order-2 min-h-0 flex-1 overflow-y-auto overscroll-contain lg:order-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:order-1">
               {children}
             </div>
-            <div className="order-1 border-b border-border/80 lg:order-2 lg:hidden">
+            <div className="border-t border-border/80 lg:order-2 lg:hidden">
               {rightSidebar}
             </div>
           </div>
