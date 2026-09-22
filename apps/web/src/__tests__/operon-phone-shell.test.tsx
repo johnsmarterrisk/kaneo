@@ -57,6 +57,10 @@ vi.mock("@/components/common/operon-phone-navigate", () => ({
 // choice, not the open/close transition (that behaviour belongs with whatever test covers
 // the back-arrow / route-change close, out of this file's scope).
 vi.mock("@/store/phone-nav", () => ({
+  // `layout.tsx` also seeds the history stack from this helper (Codex r2 #1); the mock has
+  // to carry it or the seeding effect throws on mount. Navigate is the answer for every
+  // path here, which matches this file's "Navigate stays open" fixture.
+  phoneNavOpenForPath: () => true,
   usePhoneNavStore: (
     selector: (state: {
       isPhoneNavOpen: boolean;

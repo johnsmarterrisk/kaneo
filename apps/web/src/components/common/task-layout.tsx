@@ -182,8 +182,14 @@ export default function TaskLayout({
               (IMG_2123) is the opposite: title, then the assignee/due row, then the rest.
               `order-first`/`order-last` are dropped entirely below `lg`, leaving source
               order (content, then properties), and the `lg:` split is untouched. */}
-          <div className="flex h-full min-h-0 flex-col overflow-hidden lg:flex-row">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:order-1">
+          {/* Codex r2 #2: ONE scroll container on a phone, not two nested ones.
+              Below `lg` this column was `overflow-hidden` while the content inside it
+              scrolled on its own, so the properties panel rendered after that content had
+              no way to be reached — the column clipped it and nothing scrolled to it. The
+              phone column now scrolls as a single surface (content, then properties) and
+              the `lg:` split keeps the independent panes it has always had. */}
+          <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain lg:flex-row lg:overflow-hidden">
+            <div className="min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:order-1">
               {children}
             </div>
             <div className="border-t border-border/80 lg:order-2 lg:hidden">

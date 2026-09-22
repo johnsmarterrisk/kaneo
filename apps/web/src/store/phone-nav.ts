@@ -25,6 +25,13 @@ type PhoneNavStore = {
       as the old `useState` did. */
   lastSeenPathname: string | null;
   setLastSeenPathname: (pathname: string) => void;
+  /** True for exactly one route effect after a Back/Forward. In the STORE and not a
+      component ref because `Layout` is re-instantiated on every route change — a ref is
+      born `false` in the new instance, so the effect treated the traversal as a fresh row
+      tap, closed Navigate again and re-stamped the entry it had just returned to as Work.
+      Same reason `isPhoneNavOpen` lives here. */
+  traversing: boolean;
+  setTraversing: (value: boolean) => void;
 };
 
 /**
@@ -57,4 +64,6 @@ export const usePhoneNavStore = create<PhoneNavStore>((set) => ({
   closePhoneNav: () => set({ isPhoneNavOpen: false }),
   lastSeenPathname: null,
   setLastSeenPathname: (pathname) => set({ lastSeenPathname: pathname }),
+  traversing: false,
+  setTraversing: (value) => set({ traversing: value }),
 }));

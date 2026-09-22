@@ -1,6 +1,12 @@
 import { useLocation } from "@tanstack/react-router";
 import type React from "react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
@@ -8,7 +14,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { isDemoMode } from "@/constants/urls";
 import { useUserPreferencesEffects } from "@/hooks/use-user-preferences-effects";
 import { cn } from "@/lib/cn";
-import { usePhoneNavStore } from "@/store/phone-nav";
+import { phoneNavOpenForPath, usePhoneNavStore } from "@/store/phone-nav";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
 type LayoutProps = {
@@ -63,25 +69,21 @@ function useSyncedIsMobile(): boolean {
     wrapping its own `<Layout>` — so state that must survive a navigation cannot live on
     `Layout`'s own instance. See `store/phone-nav.ts`'s own doc comment for the repro. */
 export function usePhoneNav(): { openPhoneNav: () => void } {
-  const open = usePhoneNavStore((state) => state.openPhoneNav);
-  /* Codex r1 #1: the back arrow PUSHES a history entry as well as flipping the store, so
-     the arrow and the browser's own Back are one mechanism. The entry is stamped so the
-     `popstate` listener in `Layout` can tell a Navigate entry from a route entry; the URL
-     is left exactly as it is, because Navigate is a screen over the current route, not a
-     place of its own. Already-open is a no-op rather than a second entry, or repeated taps
-     would bury the Work screen under duplicates. */
+  /**
+   * Codex r2 #1: THE BACK ARROW TRAVERSES HISTORY, it does not push.
+   *
+   * The round-1 version pushed a Navigate entry ON TOP of the Work entry, which inverted
+   * the stack: Navigate then sat above the route it was covering, so the browser's own Back
+   * walked into router entries underneath and could close Navigate again or leave the app
+   * from what looked like the first screen. Work is the PUSHED state and Navigate is what
+   * lies beneath it — the same model `AppShell.tsx` uses on the Operon side — so the arrow
+   * is exactly `history.back()` and the `popstate` listener in `Layout` is the only thing
+   * that moves the screen. One mechanism, so the arrow, the browser button and the OS
+   * gesture cannot disagree.
+   */
   const openPhoneNav = useCallback(() => {
-    const current = window.history.state as {
-      initiativePhoneNav?: boolean;
-    } | null;
-    if (!current?.initiativePhoneNav) {
-      window.history.pushState(
-        { ...(current ?? {}), initiativePhoneNav: true },
-        "",
-      );
-    }
-    open();
-  }, [open]);
+    window.history.back();
+  }, []);
   return { openPhoneNav };
 }
 
@@ -134,6 +136,8 @@ function Layout({ children, className }: LayoutProps) {
   const closePhoneNav = usePhoneNavStore((state) => state.closePhoneNav);
   const openPhoneNav = usePhoneNavStore((state) => state.openPhoneNav);
   const lastSeenPathname = usePhoneNavStore((state) => state.lastSeenPathname);
+  const traversing = usePhoneNavStore((state) => state.traversing);
+  const setTraversing = usePhoneNavStore((state) => state.setTraversing);
   const setLastSeenPathname = usePhoneNavStore(
     (state) => state.setLastSeenPathname,
   );
@@ -146,8 +150,32 @@ function Layout({ children, className }: LayoutProps) {
   // null` guards against closing Navigate on initial load.
   useEffect(() => {
     if (!isMobile) return;
+    if (traversing) {
+      // This pathname change came from Back/Forward, not from tapping a row: the popstate
+      // listener has already set the screen from the entry's own state. The flag is
+      // cleared only once the NEW pathname has actually arrived — the traversal and the
+      // route change are two renders apart, and a remount sits between them, so clearing
+      // it on the first render back would hand the fresh instance an unguarded effect and
+      // it would undo the traversal it was supposed to honour.
+      if (lastSeenPathname !== location.pathname) {
+        setTraversing(false);
+        setLastSeenPathname(location.pathname);
+      }
+      return;
+    }
     if (lastSeenPathname !== null && lastSeenPathname !== location.pathname) {
       closePhoneNav();
+      // Codex r2 #1: stamp the entry the ROUTER just pushed as Work. The router creates
+      // the entry (tapping a row is a real navigation), so the screen flag is added to it
+      // rather than pushed as an entry of its own — that is what keeps exactly one entry
+      // per Work screen and lets Back/Forward restore the right screen on each.
+      const current = (window.history.state ?? {}) as Record<string, unknown>;
+      if (current.initiativePhoneScreen !== "work") {
+        window.history.replaceState(
+          { ...current, initiativePhoneScreen: "work" },
+          "",
+        );
+      }
     }
     if (lastSeenPathname !== location.pathname) {
       setLastSeenPathname(location.pathname);
@@ -158,29 +186,64 @@ function Layout({ children, className }: LayoutProps) {
     lastSeenPathname,
     closePhoneNav,
     setLastSeenPathname,
+    traversing,
+    setTraversing,
   ]);
 
   /**
-   * Codex r1 #1: NAVIGATE/WORK ARE HISTORY ENTRIES, not private state.
+   * Codex r2 #1: the screen is DERIVED from the entry the browser moved to.
    *
-   * The back arrow used to flip Zustand only, so browser Back did something else entirely —
-   * it changed ROUTE, and the effect above then closed Navigate again, leaving the reader on
-   * a Work screen they had just tried to leave. The two mechanisms have to be the same one.
-   * Opening Navigate over a Work route now pushes an entry stamped `initiativePhoneNav`, and
-   * `popstate` reads that stamp back, so the arrow, the browser button and the OS gesture all
-   * traverse one stack. A route change (tapping a row) leaves no Navigate entry behind,
-   * because the route push itself is the entry.
+   * `work` shows Work, anything else shows Navigate — including an entry this shell never
+   * stamped, which is the safe direction because Navigate is always reachable and never
+   * traps the reader.
    */
   useEffect(() => {
     if (!isMobile) return;
     function onPopState(event: PopStateEvent) {
-      const state = event.state as { initiativePhoneNav?: boolean } | null;
-      if (state?.initiativePhoneNav) openPhoneNav();
-      else closePhoneNav();
+      // A traversal also changes `location.pathname`, which the route effect below reads.
+      // Without this flag that effect treats Back as "a row was tapped", closes Navigate
+      // again and re-stamps the entry it just returned to as Work — so Back moved the URL
+      // and left the screen exactly where it was. The traversal owns the screen; the route
+      // effect must stand down for the render it triggers.
+      setTraversing(true);
+      const state = event.state as { initiativePhoneScreen?: string } | null;
+      if (state?.initiativePhoneScreen === "work") closePhoneNav();
+      else openPhoneNav();
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [isMobile, openPhoneNav, closePhoneNav]);
+  }, [isMobile, openPhoneNav, closePhoneNav, setTraversing]);
+
+  /**
+   * Codex r2 #1: SEED THE STACK ONCE, at the cold mount, so one Back always reaches
+   * Navigate.
+   *
+   * A workspace landing stamps its own entry as Navigate and stops there. A DEEP LINK — a
+   * project or task URL arrived at directly, which is every hop from Operon into a specific
+   * screen — has no Navigate entry beneath it at all, so Back would leave the document from
+   * what the reader experiences as the first screen. Stamping the current entry Navigate and
+   * then pushing a Work entry at the SAME url manufactures that missing step: Back lands on
+   * Navigate over the same route, and a second Back leaves to the previous document, which
+   * is Operon. The url never changes, because Navigate is a screen over the current route
+   * rather than a place of its own.
+   */
+  const seededHistory = useRef(false);
+  useEffect(() => {
+    if (!isMobile || seededHistory.current) return;
+    seededHistory.current = true;
+    const current = (window.history.state ?? {}) as Record<string, unknown>;
+    if (current.initiativePhoneScreen) return;
+    window.history.replaceState(
+      { ...current, initiativePhoneScreen: "navigate" },
+      "",
+    );
+    if (!phoneNavOpenForPath(window.location.pathname)) {
+      window.history.pushState(
+        { ...current, initiativePhoneScreen: "work" },
+        "",
+      );
+    }
+  }, [isMobile]);
 
   return (
     <div className="flex w-full bg-background">
