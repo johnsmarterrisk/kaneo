@@ -1,12 +1,6 @@
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import type React from "react";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
@@ -14,7 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { isDemoMode } from "@/constants/urls";
 import { useUserPreferencesEffects } from "@/hooks/use-user-preferences-effects";
 import { cn } from "@/lib/cn";
-import { phoneNavOpenForPath, usePhoneNavStore } from "@/store/phone-nav";
+import { phoneBackTarget, phoneScreenForPath } from "@/store/phone-nav";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
 type LayoutProps = {
@@ -68,23 +62,38 @@ function useSyncedIsMobile(): boolean {
     change — the router swaps `WorkspaceLayout`/`ProjectLayout`/`TaskLayout`, each
     wrapping its own `<Layout>` — so state that must survive a navigation cannot live on
     `Layout`'s own instance. See `store/phone-nav.ts`'s own doc comment for the repro. */
-export function usePhoneNav(): { openPhoneNav: () => void } {
+export function usePhoneNav(): { goBack: () => void } {
+  const navigate = useNavigate();
+  const location = useLocation();
   /**
-   * Codex r2 #1: THE BACK ARROW TRAVERSES HISTORY, it does not push.
+   * The back arrow, and every X, is ONE STEP UP THE ROUTE — a plain router navigation.
    *
-   * The round-1 version pushed a Navigate entry ON TOP of the Work entry, which inverted
-   * the stack: Navigate then sat above the route it was covering, so the browser's own Back
-   * walked into router entries underneath and could close Navigate again or leave the app
-   * from what looked like the first screen. Work is the PUSHED state and Navigate is what
-   * lies beneath it — the same model `AppShell.tsx` uses on the Operon side — so the arrow
-   * is exactly `history.back()` and the `popstate` listener in `Layout` is the only thing
-   * that moves the screen. One mechanism, so the arrow, the browser button and the OS
-   * gesture cannot disagree.
+   * It used to be `history.back()` paired with a `popstate` listener and seeded entries.
+   * On a real iPhone that could loop and hang Safari hard enough to need force-quitting
+   * (John, 2026-09-22); headless WebKit never reproduced it. Navigating to the parent
+   * route needs no interception at all, and Safari's own Back button then just follows the
+   * router's history like it does on any other page.
    */
-  const openPhoneNav = useCallback(() => {
-    window.history.back();
-  }, []);
-  return { openPhoneNav };
+  const goBack = useCallback(() => {
+    const target = phoneBackTarget(location.pathname);
+    if ("apex" in target) {
+      // The one location assignment left in the fork's phone code, and it is a FORWARD
+      // navigation to another origin rather than a traversal of this one.
+      //
+      // Imported dynamically, not statically: `operon-switcher` drags the permissions
+      // package into whatever imports it, and that package cannot resolve under vitest on
+      // this branch (a pre-existing `better-auth/plugins/access` failure). A static import
+      // here would have taken `layout.tsx` — and every test that mounts it — down with it.
+      // Deferring also means the switcher is not in the bundle's critical path.
+      void import("@/components/operon-switcher").then(({ apexUrl }) => {
+        window.location.assign(apexUrl());
+      });
+      return;
+    }
+    navigate({ to: target.to });
+  }, [navigate, location.pathname]);
+
+  return { goBack };
 }
 
 function LayoutHeader({ children, className }: HeaderProps) {
@@ -132,129 +141,16 @@ function Layout({ children, className }: LayoutProps) {
   const { sidebarDefaultOpen } = useUserPreferencesStore();
   const isMobile = useSyncedIsMobile();
   const location = useLocation();
-  const isPhoneNavOpen = usePhoneNavStore((state) => state.isPhoneNavOpen);
-  const closePhoneNav = usePhoneNavStore((state) => state.closePhoneNav);
-  const openPhoneNav = usePhoneNavStore((state) => state.openPhoneNav);
-  const lastSeenPathname = usePhoneNavStore((state) => state.lastSeenPathname);
-  const traversing = usePhoneNavStore((state) => state.traversing);
-  const setTraversing = usePhoneNavStore((state) => state.setTraversing);
-  const setLastSeenPathname = usePhoneNavStore(
-    (state) => state.setLastSeenPathname,
-  );
 
   useUserPreferencesEffects();
 
-  // A route change while on a Work screen means a Navigate-panel row was tapped
-  // (`NavMain`/`NavProjects` both `navigate()` internally), which closes Navigate. The
-  // FIRST pathname seen is the mount itself, not a navigation, so `lastSeenPathname ===
-  // null` guards against closing Navigate on initial load.
-  useEffect(() => {
-    if (!isMobile) return;
-    if (traversing) {
-      // This pathname change came from Back/Forward, not from tapping a row: the popstate
-      // listener has already set the screen from the entry's own state. The flag is
-      // cleared only once the NEW pathname has actually arrived — the traversal and the
-      // route change are two renders apart, and a remount sits between them, so clearing
-      // it on the first render back would hand the fresh instance an unguarded effect and
-      // it would undo the traversal it was supposed to honour.
-      if (lastSeenPathname !== location.pathname) {
-        setTraversing(false);
-        setLastSeenPathname(location.pathname);
-      }
-      return;
-    }
-    if (lastSeenPathname !== null && lastSeenPathname !== location.pathname) {
-      closePhoneNav();
-      // Codex r2 #1: stamp the entry the ROUTER just pushed as Work. The router creates
-      // the entry (tapping a row is a real navigation), so the screen flag is added to it
-      // rather than pushed as an entry of its own — that is what keeps exactly one entry
-      // per Work screen and lets Back/Forward restore the right screen on each.
-      const current = (window.history.state ?? {}) as Record<string, unknown>;
-      if (current.initiativePhoneScreen !== "work") {
-        window.history.replaceState(
-          { ...current, initiativePhoneScreen: "work" },
-          "",
-        );
-      }
-    }
-    if (lastSeenPathname !== location.pathname) {
-      setLastSeenPathname(location.pathname);
-    }
-  }, [
-    isMobile,
-    location.pathname,
-    lastSeenPathname,
-    closePhoneNav,
-    setLastSeenPathname,
-    traversing,
-    setTraversing,
-  ]);
-
   /**
-   * Codex r2 #1: the screen is DERIVED from the entry the browser moved to.
-   *
-   * `work` shows Work, anything else shows Navigate — including an entry this shell never
-   * stamped, which is the safe direction because Navigate is always reachable and never
-   * traps the reader.
+   * THE SCREEN IS THE ROUTE. No store, no history entries, no `popstate` listener, no
+   * `traversing` flag — all of which existed only to keep a second copy of this fact in
+   * sync with the URL, and which together could loop on real iOS Safari (see
+   * `store/phone-nav.ts`). A URL already says which screen belongs on it.
    */
-  useEffect(() => {
-    if (!isMobile) return;
-    function onPopState(event: PopStateEvent) {
-      // A traversal MAY also change `location.pathname`, which the route effect below
-      // reads. When it does, that effect would treat Back as "a row was tapped", close
-      // Navigate again and re-stamp the entry it just returned to as Work — so Back moved
-      // the URL and left the screen exactly where it was. The flag makes it stand down for
-      // the render the traversal triggers.
-      //
-      // Codex verify #1: ONLY WHEN THE PATH ACTUALLY MOVES. A same-path Back — which is
-      // every Back onto the seeded Navigate entry of a deep link, since that entry shares
-      // its url with the Work entry above it — produces no pathname change for the
-      // deferred clear to wait for, so the flag stayed set forever and the NEXT row tap
-      // was swallowed as "still traversing": the reader tapped a project and Navigate just
-      // sat there. `location` is already updated when `popstate` fires, so comparing it to
-      // the last pathname this shell saw is enough to tell the two cases apart.
-      const samePath =
-        usePhoneNavStore.getState().lastSeenPathname ===
-        window.location.pathname;
-      setTraversing(!samePath);
-      const state = event.state as { initiativePhoneScreen?: string } | null;
-      if (state?.initiativePhoneScreen === "work") closePhoneNav();
-      else openPhoneNav();
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [isMobile, openPhoneNav, closePhoneNav, setTraversing]);
-
-  /**
-   * Codex r2 #1: SEED THE STACK ONCE, at the cold mount, so one Back always reaches
-   * Navigate.
-   *
-   * A workspace landing stamps its own entry as Navigate and stops there. A DEEP LINK — a
-   * project or task URL arrived at directly, which is every hop from Operon into a specific
-   * screen — has no Navigate entry beneath it at all, so Back would leave the document from
-   * what the reader experiences as the first screen. Stamping the current entry Navigate and
-   * then pushing a Work entry at the SAME url manufactures that missing step: Back lands on
-   * Navigate over the same route, and a second Back leaves to the previous document, which
-   * is Operon. The url never changes, because Navigate is a screen over the current route
-   * rather than a place of its own.
-   */
-  const seededHistory = useRef(false);
-  useEffect(() => {
-    if (!isMobile || seededHistory.current) return;
-    seededHistory.current = true;
-    const current = (window.history.state ?? {}) as Record<string, unknown>;
-    if (current.initiativePhoneScreen) return;
-    window.history.replaceState(
-      { ...current, initiativePhoneScreen: "navigate" },
-      "",
-    );
-    if (!phoneNavOpenForPath(window.location.pathname)) {
-      window.history.pushState(
-        { ...current, initiativePhoneScreen: "work" },
-        "",
-      );
-    }
-  }, [isMobile]);
+  const isPhoneNavOpen = phoneScreenForPath(location.pathname) === "navigate";
 
   return (
     <div className="flex w-full bg-background">

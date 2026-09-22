@@ -56,27 +56,12 @@ vi.mock("@/components/common/operon-phone-navigate", () => ({
 // Navigate stays open for every case here: this file tests the phone/desktop BRANCH
 // choice, not the open/close transition (that behaviour belongs with whatever test covers
 // the back-arrow / route-change close, out of this file's scope).
+
+// The phone screen is a pure function of the route now — no store to stub. The workspace
+// ROOT is Navigate, which is the fixture this file has always used.
 vi.mock("@/store/phone-nav", () => ({
-  // `layout.tsx` also seeds the history stack from this helper (Codex r2 #1); the mock has
-  // to carry it or the seeding effect throws on mount. Navigate is the answer for every
-  // path here, which matches this file's "Navigate stays open" fixture.
-  phoneNavOpenForPath: () => true,
-  usePhoneNavStore: (
-    selector: (state: {
-      isPhoneNavOpen: boolean;
-      openPhoneNav: () => void;
-      closePhoneNav: () => void;
-      lastSeenPathname: string | null;
-      setLastSeenPathname: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      isPhoneNavOpen: true,
-      openPhoneNav: vi.fn(),
-      closePhoneNav: vi.fn(),
-      lastSeenPathname: null,
-      setLastSeenPathname: vi.fn(),
-    }),
+  phoneScreenForPath: () => "navigate",
+  phoneBackTarget: () => ({ apex: true }),
 }));
 
 type Slot = { children?: React.ReactNode; className?: string };

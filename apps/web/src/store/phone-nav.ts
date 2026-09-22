@@ -1,69 +1,67 @@
-import { create } from "zustand";
+/**
+ * The fork's phone Navigate/Work model — **derived from the route, and nothing else**.
+ *
+ * WHY THE HISTORY STACK IS GONE (John, real iPhone, 2026-09-22). The previous model made
+ * Navigate/Work a browser-history concern: the back arrow called `history.back()`, a
+ * `popstate` listener read a stamped entry back, a cold mount seeded entries with
+ * `replaceState` + `pushState`, and a `traversing` flag suppressed the route effect for one
+ * render. On a real iPhone that combination could LOOP — the intercepted `popstate` and the
+ * `replaceState` that followed it kept re-entering — and Safari hung hard enough that John
+ * had to kill the app. Headless WebKit never reproduced it, which is exactly why it shipped.
+ *
+ * The replacement has no state to desync and nothing to intercept. A URL already says which
+ * screen belongs on it, so the screen is read from the URL; the back arrow is an ordinary
+ * router navigation to the parent route; and Safari's own Back button then simply follows
+ * the router's history like any other link. There is no `pushState`, no `popstate`
+ * listener and no `history.back()` anywhere in the fork's phone code.
+ */
+
+/** Which of the two phone screens a path belongs to. */
+export type PhoneScreen = "navigate" | "work";
+
+const WORKSPACE_ROOT = /^\/dashboard\/workspace\/([^/]+)\/?$/;
+const WORKSPACE_ANY = /^\/dashboard\/workspace\/([^/]+)(?:\/(.*))?$/;
+const TASK_ROUTE =
+  /^\/dashboard\/workspace\/([^/]+)\/project\/([^/]+)\/task\/[^/]+\/?$/;
+const PROJECT_ROUTE =
+  /^\/dashboard\/workspace\/([^/]+)\/project\/([^/]+)(?:\/.*)?$/;
 
 /**
- * The fork's phone Navigate/Work screen state (Piece B, Round 2 mobile-nav brief).
- *
- * MUST be a module-level store, not component state. The two-screen split lives in
- * `common/layout.tsx`, but `Layout` is re-instantiated on every route change — the router
- * swaps `WorkspaceLayout`/`ProjectLayout`/`TaskLayout`, each of which wraps its OWN
- * `<Layout>`, so a `useState` inside `Layout` resets to its initial value on every
- * navigation instead of surviving it (caught live: tapping a project from Navigate landed
- * on the project's Work screen's URL while still SHOWING Navigate, because the fresh
- * `Layout` mount re-initialised to "Navigate open"). A Zustand store is the same
- * module-singleton pattern `store/project.ts`/`store/bulk-selection.ts` already use for
- * state that must outlive a single route component's lifetime.
+ * The workspace ROOT is the list — Navigate. Anything deeper (a project, a board, a task)
+ * is a thing the address named, so it is Work. A path outside the workspace tree
+ * (settings, onboarding) has no Work screen of its own and falls back to Navigate, which is
+ * always reachable and never traps the reader.
  */
-type PhoneNavStore = {
-  isPhoneNavOpen: boolean;
-  openPhoneNav: () => void;
-  closePhoneNav: () => void;
-  /** The last `location.pathname` `Layout`'s route-change effect has seen, so it can tell
-      a genuine navigation (close Navigate) from its own first mount at a URL it has never
-      seen before (do nothing) — `null` means "not seen one yet". Lives here rather than a
-      `useRef` in `Layout` for the exact same reason `isPhoneNavOpen` does: `useRef` is
-      also per-component-instance state, and would reset to `null` on every remount just
-      as the old `useState` did. */
-  lastSeenPathname: string | null;
-  setLastSeenPathname: (pathname: string) => void;
-  /** True for exactly one route effect after a Back/Forward. In the STORE and not a
-      component ref because `Layout` is re-instantiated on every route change — a ref is
-      born `false` in the new instance, so the effect treated the traversal as a fresh row
-      tap, closed Navigate again and re-stamped the entry it had just returned to as Work.
-      Same reason `isPhoneNavOpen` lives here. */
-  traversing: boolean;
-  setTraversing: (value: boolean) => void;
-};
-
-/**
- * Which screen a COLD mount opens, from the route alone (Codex r1 #2).
- *
- * Initialising unconditionally to Navigate meant every deep link hid the thing it pointed
- * at: opening a project or task URL — from a notification, a pasted link, or Operon's own
- * cross-origin hop — painted the Navigate list over the Work screen the address had just
- * asked for, and the reader had to find their way back to it by hand. Route DEPTH answers
- * this without a route table: the workspace landing is where Navigate belongs, and
- * anything deeper (a project, a board, a task) is a Work screen the address named
- * explicitly. `/dashboard/workspace/<id>` is the landing; `/dashboard/workspace/<id>/...`
- * is not.
- */
-export function phoneNavOpenForPath(pathname: string): boolean {
-  const workspace = pathname.match(/^\/dashboard\/workspace\/[^/]+(\/.*)?$/);
-  if (!workspace) return true;
-  const rest = workspace[1];
-  return rest === undefined || rest === "" || rest === "/";
+export function phoneScreenForPath(pathname: string): PhoneScreen {
+  if (WORKSPACE_ROOT.test(pathname)) return "navigate";
+  return WORKSPACE_ANY.test(pathname) ? "work" : "navigate";
 }
 
-export const usePhoneNavStore = create<PhoneNavStore>((set) => ({
-  // Codex r1 #2: from the route, not a constant — a deep link must open its own Work
-  // screen. Read once, at store creation, which is the cold mount.
-  isPhoneNavOpen:
-    typeof window === "undefined"
-      ? true
-      : phoneNavOpenForPath(window.location.pathname),
-  openPhoneNav: () => set({ isPhoneNavOpen: true }),
-  closePhoneNav: () => set({ isPhoneNavOpen: false }),
-  lastSeenPathname: null,
-  setLastSeenPathname: (pathname) => set({ lastSeenPathname: pathname }),
-  traversing: false,
-  setTraversing: (value) => set({ traversing: value }),
-}));
+/** Kept for the callers that only ask "is the list showing". */
+export function phoneNavOpenForPath(pathname: string): boolean {
+  return phoneScreenForPath(pathname) === "navigate";
+}
+
+/**
+ * Where the back arrow (and every X) goes: one step up the route, never `history.back()`.
+ *
+ * `{ to }` is a router navigation. `{ apex: true }` means the reader is already at the
+ * workspace root, where "back" leaves Initiative for the Operon apex — the only place the
+ * fork's phone code performs a location assignment, and it is a forward navigation to
+ * another origin rather than a traversal of this one's history.
+ */
+export function phoneBackTarget(
+  pathname: string,
+): { to: string } | { apex: true } {
+  const task = TASK_ROUTE.exec(pathname);
+  if (task) {
+    return { to: `/dashboard/workspace/${task[1]}/project/${task[2]}/board` };
+  }
+  const project = PROJECT_ROUTE.exec(pathname);
+  if (project) return { to: `/dashboard/workspace/${project[1]}` };
+  const workspace = WORKSPACE_ANY.exec(pathname);
+  if (workspace && workspace[2]) {
+    return { to: `/dashboard/workspace/${workspace[1]}` };
+  }
+  return { apex: true };
+}

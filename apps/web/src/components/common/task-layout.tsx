@@ -91,7 +91,7 @@ export default function TaskLayout({
                 type="button"
                 data-testid="phone-back-to-navigate"
                 aria-label="Back to Navigate"
-                onClick={() => phoneNav?.openPhoneNav()}
+                onClick={() => phoneNav?.goBack()}
                 className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
               >
                 <ArrowLeft className="size-5" aria-hidden="true" />
