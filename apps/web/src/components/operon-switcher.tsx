@@ -65,6 +65,11 @@ export const OPERON_COLORS = {
       mockup's own `rgba(255,255,255,.10)` active-row spec (theme-proposal.md, fix brief
       panel-anatomy section) are the SAME value; one constant covers both. */
   groundAccent10: "rgba(255, 255, 255, 0.10)",
+  /** The phone module strip's ACTIVE tile fill (`MobileNavigate.tsx`'s own
+      `bg-sidebar-accent/20`, Operon repo, Piece B) — twice `groundAccent10` because a
+      tile's icon glyph needs more separation from the ground than a text row's inset bar
+      already gives it. */
+  groundAccent20: "rgba(255, 255, 255, 0.20)",
   activeBar: "#f5b700",
   border: "rgba(255, 255, 255, 0.1)",
   textPrimary: "#ffffff",
@@ -374,11 +379,116 @@ export function OperonModuleNav({ variant }: { variant: "top" | "settings" }) {
 }
 
 /**
+ * The phone Navigate screen's 64px module strip (Piece B, Round 2 mobile-nav brief) —
+ * Discord IMG_2121's server rail, reproduced to match the Operon shell's own
+ * `MobileNavigate.tsx` (`app/src/shell/MobileNavigate.tsx`) shape, spacing and tokens: one
+ * 48x48 rounded tile per module, Settings pinned to the bottom in its OWN group so a future
+ * sixth module scrolls without carrying Settings off the bottom with it.
+ *
+ * A NEW export rather than a THIRD `OperonModuleNav` variant, because the two render
+ * fundamentally different markup (tiles vs. text rows) — but it still reuses everything
+ * `OperonModuleNav`/`ModuleRow` already established rather than re-deriving it: the same
+ * `OPERON_MODULES` order, the same `moduleHref`/`apexUrl` addressing, the same
+ * current-module-is-a-`<span>`-not-an-`<a>` rule, and `OPERON_COLORS` for every colour.
+ */
+export function OperonPhoneModuleStrip() {
+  const apex = apexUrl();
+  const appModules = OPERON_MODULES.filter(
+    (module) => module.key !== "settings",
+  );
+  const settingsModule = OPERON_MODULES.find(
+    (module) => module.key === "settings",
+  );
+
+  const renderTile = (module: OperonModule) => {
+    const isCurrent = module.key === CURRENT_MODULE;
+    const shared = {
+      key: module.key,
+      "data-testid": `phone-module-${module.key}`,
+      "data-module": module.key,
+      "data-external": isCurrent ? "false" : "true",
+      "aria-current": isCurrent ? ("page" as const) : undefined,
+      "aria-label": module.label,
+      className:
+        "relative w-12 h-12 shrink-0 flex items-center justify-center rounded-2xl",
+    };
+    const inner = (
+      <>
+        {/* The active bar sits OUTSIDE the tile's own rounded box (Discord draws it
+            against the strip, not inset into the icon) — a sibling, not a border on the
+            tile itself, exactly matching `MobileNavigate.tsx`'s own `renderTile`. */}
+        {isCurrent && (
+          <span
+            aria-hidden="true"
+            className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r"
+            style={{ backgroundColor: OPERON_COLORS.activeBar }}
+          />
+        )}
+        <span
+          aria-hidden="true"
+          className="w-12 h-12 flex items-center justify-center rounded-2xl text-xl"
+          style={{
+            backgroundColor: isCurrent
+              ? OPERON_COLORS.groundAccent20
+              : OPERON_COLORS.groundAccent10,
+          }}
+        >
+          {module.icon}
+        </span>
+      </>
+    );
+
+    return isCurrent ? (
+      <span {...shared}>{inner}</span>
+    ) : (
+      <a {...shared} href={moduleHref(apex, module.key)}>
+        {inner}
+      </a>
+    );
+  };
+
+  return (
+    <nav
+      aria-label="Modules"
+      data-testid="phone-module-strip"
+      className="w-16 shrink-0 flex flex-col items-center py-3 h-full"
+      style={{ backgroundColor: OPERON_COLORS.ground }}
+    >
+      {/* `px-2` on the scrolling group only (`MobileNavigate.tsx`'s own reasoning,
+          reproduced verbatim): `overflow-y-auto` makes this box a clipping context on
+          BOTH axes, and the active tile's yellow bar is drawn at `-left-2`, OUTSIDE the
+          48px tile — without the matching 8px padding the group clips the bar away. */}
+      <div
+        data-testid="phone-module-strip-apps"
+        className="px-2 flex flex-col items-center gap-2 min-h-0 overflow-y-auto"
+      >
+        {appModules.map(renderTile)}
+      </div>
+      <div
+        data-testid="phone-module-strip-settings"
+        className="mt-auto pt-2 pb-[env(safe-area-inset-bottom)] flex flex-col items-center"
+      >
+        {settingsModule && renderTile(settingsModule)}
+      </div>
+    </nav>
+  );
+}
+
+/**
  * The rail's bottom: user name + Sign out, matching `Sidebar.tsx`'s own footer markup
  * (`p-3 border-t`, a plain name span and a button — not `UserAvatar`'s dropdown menu, which
  * hides both behind a click and stays in the header row for that reason).
+ *
+ * `phone` (default `false`, Piece B): the phone Navigate screen's footer additionally
+ * carries a presence dot + "Online" and the notification bell (Discord IMG_2121's footer),
+ * which the desktop rail footer never has — those live in `OperonRailHeader` there (see
+ * this file's own header comment on why). Kaneo has no connection/presence concept to
+ * report — unlike Operon's own relay, which can genuinely be connecting or offline, a
+ * signed-in fork session has exactly one state — so "Online" is a static label, not a
+ * second data source pretending to be live. Gated on a prop rather than always rendering,
+ * so the desktop rail's own test (`OperonRailFooter` with no props) stays byte-identical.
  */
-export function OperonRailFooter() {
+export function OperonRailFooter({ phone = false }: { phone?: boolean } = {}) {
   const { user } = useAuth();
   const { data: config } = useGetConfig();
   const { mutateAsync: signOut } = useSignOut(config?.customOAuthLogoutUrl);
@@ -392,22 +502,44 @@ export function OperonRailFooter() {
         borderColor: OPERON_COLORS.border,
       }}
     >
-      <span
-        className="truncate text-xs"
-        style={{ color: OPERON_COLORS.textPrimary }}
-      >
-        {user?.name ?? ""}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          void signOut();
-        }}
-        className="min-h-[44px] rounded px-2 text-xs"
-        style={{ color: OPERON_COLORS.textPrimary }}
-      >
-        Sign out
-      </button>
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="truncate text-xs"
+          style={{ color: OPERON_COLORS.textPrimary }}
+        >
+          {user?.name ?? ""}
+        </span>
+        {phone && (
+          <span
+            data-testid="operon-rail-footer-presence"
+            className="flex shrink-0 items-center gap-1 text-[10px]"
+            style={{ color: OPERON_COLORS.textPrimary }}
+          >
+            <span
+              aria-hidden="true"
+              className="w-1.5 h-1.5 rounded-full bg-success"
+            />
+            Online
+          </span>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {phone && (
+          <span className="min-w-[44px] min-h-[44px] flex items-center justify-center">
+            <NotificationDropdown groundContext />
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            void signOut();
+          }}
+          className="min-h-[44px] rounded px-2 text-xs"
+          style={{ color: OPERON_COLORS.textPrimary }}
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }

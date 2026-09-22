@@ -75,6 +75,7 @@ vi.mock("@/hooks/queries/config/use-get-config", () => ({
 
 const {
   OperonModuleNav,
+  OperonPhoneModuleStrip,
   OperonRailFooter,
   OPERON_MODULES,
   apexUrl,
@@ -258,6 +259,71 @@ describe("OperonRailFooter", () => {
     // A visible action, not a dropdown trigger: clicking it must not throw even with the
     // sign-out mutation mocked to a no-op.
     expect(() => fireEvent.click(signOut)).not.toThrow();
+  });
+
+  it("phone variant adds the presence dot/Online label and the bell, default does not", () => {
+    render(<OperonRailFooter phone />);
+
+    expect(
+      screen.getByTestId("operon-rail-footer-presence").textContent,
+    ).toContain("Online");
+    expect(screen.getByTestId("notification-dropdown")).toBeTruthy();
+
+    cleanup();
+    render(<OperonRailFooter />);
+    expect(screen.queryByTestId("operon-rail-footer-presence")).toBeNull();
+    expect(screen.queryByTestId("notification-dropdown")).toBeNull();
+  });
+});
+
+describe("OperonPhoneModuleStrip", () => {
+  it("renders Stream/Telegraph/Initiative/Stash in order, Settings pinned in its own group, never mixed into the app tiles", () => {
+    render(<OperonPhoneModuleStrip />);
+
+    const appsGroup = screen.getByTestId("phone-module-strip-apps");
+    const appTiles = Array.from(
+      appsGroup.querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
+    );
+    expect(appTiles.map((tile) => tile.dataset.module)).toEqual([
+      "signals",
+      "telegraph",
+      "initiative",
+      "files",
+    ]);
+    // Settings never appears in the scrolling apps group.
+    expect(appsGroup.querySelector('[data-module="settings"]')).toBeNull();
+
+    const settingsGroup = screen.getByTestId("phone-module-strip-settings");
+    const settingsTiles = Array.from(
+      settingsGroup.querySelectorAll(
+        "[data-module]",
+      ) as NodeListOf<HTMLElement>,
+    );
+    expect(settingsTiles.map((tile) => tile.dataset.module)).toEqual([
+      "settings",
+    ]);
+  });
+
+  it("marks Initiative as the current tile (a span, aria-current=page) and links every other tile via moduleHref", () => {
+    vi.stubEnv("VITE_OPERON_APEX_URL", "https://apex.phone.test:9443/");
+    render(<OperonPhoneModuleStrip />);
+
+    const initiative = screen.getByTestId("phone-module-initiative");
+    expect(initiative.tagName).toBe("SPAN");
+    expect(initiative.getAttribute("aria-current")).toBe("page");
+    expect(initiative.getAttribute("href")).toBeNull();
+
+    const telegraph = screen.getByTestId("phone-module-telegraph");
+    expect(telegraph.tagName).toBe("A");
+    expect(telegraph.getAttribute("href")).toBe(
+      "https://apex.phone.test:9443/#/telegraph",
+    );
+
+    const settings = screen.getByTestId("phone-module-settings");
+    expect(settings.tagName).toBe("A");
+    expect(settings.getAttribute("href")).toBe(
+      "https://apex.phone.test:9443/#/settings",
+    );
   });
 });
 
