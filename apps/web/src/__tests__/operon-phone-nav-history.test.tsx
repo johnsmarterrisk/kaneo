@@ -250,4 +250,44 @@ describe("a deep link cold-mounts on Work with Navigate beneath it (Codex r2 #1)
     expect(visibleScreen()).toBe("navigate");
     pushSpy.mockRestore();
   });
+
+  it("and the NEXT row tap still opens Work (Codex verify #1)", () => {
+    // THE REPRODUCTION. A Back onto a deep link's seeded Navigate entry is a SAME-PATH
+    // traversal — that entry shares its url with the Work entry above it — so there is no
+    // pathname change for the deferred clear to wait for. The `traversing` flag stayed set
+    // forever and the route effect swallowed the next real navigation as "still
+    // traversing": the reader tapped a project and Navigate just sat there.
+    pathname = "/dashboard/workspace/w1/project/p1/board";
+    window.history.replaceState(null, "", pathname);
+    usePhoneNavStore.setState({
+      isPhoneNavOpen: false,
+      lastSeenPathname: null,
+      traversing: false,
+    });
+
+    const { unmount } = render(
+      <Layout>
+        <div data-testid="work-content">board</div>
+      </Layout>,
+    );
+    expect(visibleScreen()).toBe("work");
+
+    // Back onto the seeded Navigate entry — same url, so `location.pathname` does not move.
+    traverseTo({ initiativePhoneScreen: "navigate" });
+    expect(visibleScreen()).toBe("navigate");
+    // The flag must already be clear: nothing is coming that could clear it later.
+    expect(usePhoneNavStore.getState().traversing).toBe(false);
+
+    // Now tap another project. The router pushes a real route, Layout remounts at it.
+    unmount();
+    pathname = "/dashboard/workspace/w1/project/p2/board";
+    render(
+      <Layout>
+        <div data-testid="work-content">other board</div>
+      </Layout>,
+    );
+
+    expect(visibleScreen()).toBe("work");
+    expect(screen.getByTestId("work-content").textContent).toBe("other board");
+  });
 });

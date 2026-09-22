@@ -188,11 +188,19 @@ export default function TaskLayout({
               no way to be reached — the column clipped it and nothing scrolled to it. The
               phone column now scrolls as a single surface (content, then properties) and
               the `lg:` split keeps the independent panes it has always had. */}
+          {/* Codex verify #2: below `lg` NEITHER CHILD MAY SHRINK. The column is a
+              fixed-height flex container, so a flex item's default `min-height: auto` /
+              `flex-shrink: 1` let tall task content be compressed into the space left over
+              — content overflowing into, or clipped behind, the properties panel under it.
+              `shrink-0` with no `min-h-0` below `lg` means each child takes its natural
+              height and the COLUMN scrolls past both. `min-h-0` is what a scrolling flex
+              child needs, so it is restored at `lg`, where the panes scroll individually
+              again and the split is untouched. */}
           <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain lg:flex-row lg:overflow-hidden">
-            <div className="min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:order-1">
+            <div className="shrink-0 lg:min-h-0 lg:shrink lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:order-1">
               {children}
             </div>
-            <div className="border-t border-border/80 lg:order-2 lg:hidden">
+            <div className="shrink-0 border-t border-border/80 lg:order-2 lg:hidden">
               {rightSidebar}
             </div>
           </div>

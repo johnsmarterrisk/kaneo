@@ -78,20 +78,10 @@ describe("the phone task-detail layout (Codex r1 #10, #15)", () => {
     expect(TASK_LAYOUT).toContain("lg:order-2");
   });
 
-  it("gives the phone column ONE scroll container, so the last property row is reachable", () => {
-    // Codex r2 #2: below `lg` the column was `overflow-hidden` while the content inside it
-    // scrolled independently, so the properties panel rendered AFTER that content was
-    // clipped with nothing able to scroll to it — a scroll trap, not a style nit. The phone
-    // column scrolls as one surface now; the `lg:` split keeps its independent panes.
-    expect(TASK_LAYOUT).toContain(
-      "overflow-y-auto overscroll-contain lg:flex-row lg:overflow-hidden",
-    );
-    // The inner content pane must NOT scroll on its own below `lg` — that is the nesting.
-    expect(TASK_LAYOUT).not.toMatch(
-      /className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:order-1"/,
-    );
-    expect(TASK_LAYOUT).toContain("lg:overflow-y-auto lg:overscroll-contain");
-  });
+  // Codex verify #4: the sizing/scroll claim moved to `operon-phone-task-scroll.test.tsx`,
+  // which MOUNTS the column and measures it. Asserting class strings here proved a class
+  // had been written, not that the last property row was reachable — precisely the kind of
+  // test that stays green while the layout is broken.
 
   it("states the tablet behaviour the code actually has", () => {
     // The compact assignee/due row is `md:hidden`, so it cannot be showing at 768-1023px

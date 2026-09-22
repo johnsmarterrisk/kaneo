@@ -200,12 +200,23 @@ function Layout({ children, className }: LayoutProps) {
   useEffect(() => {
     if (!isMobile) return;
     function onPopState(event: PopStateEvent) {
-      // A traversal also changes `location.pathname`, which the route effect below reads.
-      // Without this flag that effect treats Back as "a row was tapped", closes Navigate
-      // again and re-stamps the entry it just returned to as Work — so Back moved the URL
-      // and left the screen exactly where it was. The traversal owns the screen; the route
-      // effect must stand down for the render it triggers.
-      setTraversing(true);
+      // A traversal MAY also change `location.pathname`, which the route effect below
+      // reads. When it does, that effect would treat Back as "a row was tapped", close
+      // Navigate again and re-stamp the entry it just returned to as Work — so Back moved
+      // the URL and left the screen exactly where it was. The flag makes it stand down for
+      // the render the traversal triggers.
+      //
+      // Codex verify #1: ONLY WHEN THE PATH ACTUALLY MOVES. A same-path Back — which is
+      // every Back onto the seeded Navigate entry of a deep link, since that entry shares
+      // its url with the Work entry above it — produces no pathname change for the
+      // deferred clear to wait for, so the flag stayed set forever and the NEXT row tap
+      // was swallowed as "still traversing": the reader tapped a project and Navigate just
+      // sat there. `location` is already updated when `popstate` fires, so comparing it to
+      // the last pathname this shell saw is enough to tell the two cases apart.
+      const samePath =
+        usePhoneNavStore.getState().lastSeenPathname ===
+        window.location.pathname;
+      setTraversing(!samePath);
       const state = event.state as { initiativePhoneScreen?: string } | null;
       if (state?.initiativePhoneScreen === "work") closePhoneNav();
       else openPhoneNav();
