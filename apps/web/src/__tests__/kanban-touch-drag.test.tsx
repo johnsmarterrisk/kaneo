@@ -284,13 +284,29 @@ describe("the phone board shows one column at a time", () => {
     expect(BOARD).toContain("max-md:snap-start");
     expect(BOARD).toContain("max-md:snap-x");
     expect(BOARD).toContain("max-md:snap-mandatory");
-    // The desktop min/max widths must not apply on a phone, or the column cannot shrink.
+    // The desktop min width must not apply on a phone, or the column cannot shrink.
+    // `max-md:max-w-none` is gone WITH the base `max-w-96` it used to cancel — see the
+    // next test.
     expect(BOARD).toContain("max-md:min-w-0");
-    expect(BOARD).toContain("max-md:max-w-none");
   });
 
-  it("keeps the multi-column desktop board unchanged above md", () => {
-    expect(BOARD).toContain("max-w-96 min-w-80");
+  // Stage 1, 0.2 (item 10, third report): this test used to assert `max-w-96 min-w-80`
+  // under the title "unchanged above md" — which enshrined the actual regression. Cards
+  // fill a column, so a column capped at 384px (`max-w-96`) IS every desktop card capped
+  // at 384px, with wasted board width beside it, `shrink-0` on top so it could not even be
+  // talked out of that cap by a crowded row. Neither class existed before the
+  // phone-columns commit; they were meant for the `max-md:` phone strip, and nothing
+  // scoped them to it. The loading skeleton a few dozen lines above this same file was
+  // never touched by that commit and still reads `min-w-80 w-full flex-1` — the exact
+  // pattern restored here.
+  it("lets each desktop column grow to fill its share of the board, unbounded above md", () => {
+    // The column's OWN className, matched exactly — not a substring check, so a
+    // reintroduced `max-w-96`/`shrink-0` anywhere in this string fails the match even
+    // though both words appear elsewhere in this file (the phone tab strip, the loading
+    // skeleton's header) for reasons unrelated to this column's width.
+    expect(BOARD).toContain(
+      'className="h-full min-w-80 w-full flex-1 max-md:mx-4 max-md:w-[calc(100%-2rem)] max-md:flex-none max-md:min-w-0 max-md:snap-start"',
+    );
     expect(BOARD).toContain("gap-3 p-3");
   });
 

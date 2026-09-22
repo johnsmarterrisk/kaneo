@@ -381,7 +381,18 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
               <div
                 key={column.id}
                 data-column-id={column.id}
-                className="h-full max-w-96 min-w-80 shrink-0 flex-1 max-md:mx-4 max-md:w-[calc(100%-2rem)] max-md:flex-none max-md:max-w-none max-md:min-w-0 max-md:snap-start"
+                // Stage 1, 0.2 (item 10, third report): `max-w-96 … shrink-0` capped every
+                // column at 384px on `md` and up, which is the desktop "fixed narrow width"
+                // regression — the loading skeleton a few dozen lines above was never
+                // touched by the same commit and still reads `min-w-80 w-full flex-1`,
+                // which is the pattern being restored here. `max-w-96` did not exist before
+                // the phone-columns commit (fea006b) added it; it was meant to bound the
+                // PHONE strip alongside `max-md:w-[calc(100%-2rem)]`, but `max-md:` only
+                // ever overrides BELOW `md`, so the base `max-w-96`/`shrink-0` leaked into
+                // the desktop board it was never meant to touch. `max-md:max-w-none` is
+                // dropped as dead weight — nothing at the base sets a max-width for it to
+                // cancel any more.
+                className="h-full min-w-80 w-full flex-1 max-md:mx-4 max-md:w-[calc(100%-2rem)] max-md:flex-none max-md:min-w-0 max-md:snap-start"
               >
                 <Column column={column} disableDragDrop={disableDragDrop} />
               </div>
