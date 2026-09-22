@@ -4,6 +4,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import useSignOut from "@/hooks/mutations/use-sign-out";
 import useGetConfig from "@/hooks/queries/config/use-get-config";
 import { useUserWebSocket } from "@/hooks/use-user-websocket";
+import { useVersionStampText } from "@/lib/version-check";
 
 /**
  * operon-switcher.tsx — the Operon rail chrome injected into the Initiative fork (spec
@@ -302,6 +303,7 @@ function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
 export function OperonRailHeader() {
   // Re-mounted from `WorkspaceSwitcher`, which no longer renders — see the file header.
   useUserWebSocket();
+  const versionStamp = useVersionStampText();
 
   return (
     <div
@@ -335,6 +337,19 @@ export function OperonRailHeader() {
       >
         Operon
       </h1>
+      {/* Task 0.5: the version stamp, top-right of the desktop rail — the fork's half of
+          "in both desktop rails" (Operon's own copy is `Sidebar.tsx`'s `VersionStamp`).
+          Placed before the bell/avatar group rather than after: those two are account
+          chrome carried over from `WorkspaceSwitcher` (see the file header's note on why
+          they still live here), and the stamp is rail-identity chrome, closer in kind to
+          the mark and name beside it. */}
+      <span
+        data-testid="version-stamp"
+        className="shrink-0 truncate text-[9px] opacity-60"
+        style={{ color: OPERON_COLORS.textPrimary }}
+      >
+        {versionStamp}
+      </span>
       <div className="flex shrink-0 items-center gap-1">
         {/* `groundContext` (John, fix brief): this header sits directly on the navy
             ground, not a white card — the bell was invisible at rest because the ghost

@@ -8,6 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { isDemoMode } from "@/constants/urls";
 import { useUserPreferencesEffects } from "@/hooks/use-user-preferences-effects";
 import { cn } from "@/lib/cn";
+import { useVersionStampText } from "@/lib/version-check";
 import { phoneBackTarget, phoneScreenForPath } from "@/store/phone-nav";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
@@ -90,6 +91,8 @@ export function usePhoneNav(): { goBack: () => void } {
 }
 
 function LayoutHeader({ children, className }: HeaderProps) {
+  const versionStamp = useVersionStampText();
+
   return (
     <header
       className={cn(
@@ -104,10 +107,27 @@ function LayoutHeader({ children, className }: HeaderProps) {
         // bar, compressing the 44px controls inside it. The inset is now `pt-` ADDED to a
         // fixed-height row, the same correction `MobileWork.tsx` carries on the Operon side.
         "max-md:h-auto max-md:min-h-0 max-md:border-0 max-md:bg-sidebar max-md:text-sidebar-foreground max-md:px-2 max-md:py-0 max-md:pt-[env(safe-area-inset-top)] max-md:[&>*]:h-14",
+        // Task 0.5: `relative` ONLY below 768px, so the version stamp below can be
+        // `absolute` WITHOUT taking part in every caller's own `justify-between` row
+        // (`project-layout.tsx` and friends each supply a full-width flex row as
+        // `children` — editing every one of them to make room for a stamp was the
+        // alternative, and this is the header's own concern, not each page's).
+        "max-md:relative",
         className,
       )}
     >
       {children}
+      {/* Task 0.5: the version stamp, top-right of the phone Work top bar (Operon's own
+          copy of this surface is `MobileWork.tsx`'s `VersionStamp`). `md:hidden` because
+          desktop's `LayoutHeader` is a per-page bar, not the rail — `OperonRailHeader`
+          already carries the desktop stamp. `pointer-events-none` so it never intercepts
+          a tap meant for the back arrow/title/actions `children` already renders. */}
+      <span
+        data-testid="version-stamp"
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 truncate text-[9px] text-sidebar-foreground/60 md:hidden"
+      >
+        {versionStamp}
+      </span>
     </header>
   );
 }

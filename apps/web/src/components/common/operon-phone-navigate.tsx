@@ -7,6 +7,7 @@ import {
   OperonRailFooter,
 } from "@/components/operon-switcher";
 import Search from "@/components/search";
+import { useVersionStampText } from "@/lib/version-check";
 
 /**
  * The fork's phone Navigate screen (Piece B, Round 2 mobile-nav brief) — mounted by
@@ -31,6 +32,7 @@ function OperonPhoneNavigate() {
   const currentModuleLabel =
     OPERON_MODULES.find((module) => module.key === "initiative")?.label ??
     "Initiative";
+  const versionStamp = useVersionStampText();
 
   return (
     <div
@@ -44,13 +46,23 @@ function OperonPhoneNavigate() {
       <OperonPhoneModuleStrip />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="px-3 pt-3 pb-2 flex items-center justify-between shrink-0">
+        <div className="px-3 pt-3 pb-2 flex items-center justify-between shrink-0 gap-2">
           <h1 className="text-[16.5px] font-bold truncate">
             {currentModuleLabel}
           </h1>
-          <span aria-hidden="true" className="text-sidebar-foreground/60">
-            ›
-          </span>
+          {/* Task 0.5: the version stamp beside the chevron — same pairing as the Operon
+              shell's own `MobileNavigate.tsx` header row. */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              data-testid="version-stamp"
+              className="truncate text-[9px] text-sidebar-foreground/60"
+            >
+              {versionStamp}
+            </span>
+            <span aria-hidden="true" className="text-sidebar-foreground/60">
+              ›
+            </span>
+          </div>
         </div>
 
         {/* `!justify-start` on every row in the list panel. `index.css`'s own base rule

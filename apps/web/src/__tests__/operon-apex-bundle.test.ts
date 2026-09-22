@@ -57,6 +57,10 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
             // from; `useSignOut`/`useGetConfig` are default imports, already covered by
             // `export default {}` above.
             "export const useAuth = () => ({ user: null });",
+            // Task 0.5's version stamp (`OperonRailHeader`'s new call): a plain function
+            // stub is enough — nothing in this suite renders the component, it only calls
+            // `apexUrl` after `load()`, so the stub is never actually invoked either.
+            "export const useVersionStampText = () => '';",
           ].join("\n"),
           loader: "js",
         }));

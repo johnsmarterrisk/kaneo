@@ -87,3 +87,52 @@ find /usr/share/nginx/html -type f \( -name "*.js" -o -name "*.css" \) \
   -exec sed -i -E 's#[`"'"'"']KANEO_TURNSTILE_SITE_KEY[`"'"'"']#""#g' {} +
 
 echo "✅ Environment variable replacement complete"
+
+# ─── version.json (Operon stabilization plan tasks 0.5/0.6, decision D4) ──────────
+#
+# WRITTEN HERE, AT CONTAINER START, NOT AT BUILD TIME. This container's OWN config is a
+# runtime value — everything substituted above (KANEO_API_URL, KANEO_CLIENT_URL,
+# OPERON_APEX_URL) is baked into the ALREADY-BUILT bundle by this script, not by
+# `pnpm run build`. That is the mirror image of `app/vite.config.ts`'s
+# `versionStampPlugin` on the Operon side, which writes Operon's OWN version.json at BUILD
+# time because Operon's config IS build-time (task 0.4's row states this contrast
+# explicitly). `useVersionCheck.ts`/`version-check.ts` (task 0.6) on both sides compare a
+# document against ITS OWN origin's version.json — the two files never need to agree with
+# each other, only to describe the container/bundle that is actually running.
+#
+# `VERSION_RELEASE`/`VERSION_OPERON_SHA`/`VERSION_FORK_SHA` are plain runtime environment
+# variables (docker-compose.yml, docker-compose.prod.yml), never substituted into the JS
+# bundle — version.json is a fresh static file this script writes, not a placeholder this
+# script replaces. Left unset they default to 'unknown', the same "honest unknown rather
+# than a guess" contract `docker/web/Dockerfile`'s three new build args use when their
+# ARGs are absent — assigning a REAL release id/SHA pair at deploy time is a
+# deploy-pipeline follow-up neither side builds today.
+echo "Writing version.json..."
+VERSION_RELEASE="${VERSION_RELEASE:-unknown}"
+VERSION_OPERON_SHA="${VERSION_OPERON_SHA:-unknown}"
+VERSION_FORK_SHA="${VERSION_FORK_SHA:-unknown}"
+
+# `config_hash` = sha256 of the SAME THREE runtime values substituted above, in the SAME
+# order every time. Newline-separated, not concatenated bare: none of the three can
+# contain a literal newline (they are URLs), so this cannot collide the way plain
+# concatenation could (`https://ainitiative.example` + `` vs `https://a` +
+# `initiative.example`). `scripts/build/version-stamp.mjs`'s `computeConfigHash` on the
+# Operon side uses the analogous separated-join for the analogous reason — the two are
+# independent computations over different values (task 0.4's own note: Operon's config is
+# its three `VITE_*` build values, the fork's is these three runtime ones) and are never
+# compared to each other, so the two need not use the identical separator, only each be
+# internally collision-safe.
+CONFIG_HASH=$(printf '%s\n%s\n%s' "${KANEO_API_URL:-}" "${KANEO_CLIENT_URL:-}" "${OPERON_APEX_URL:-}" | sha256sum | cut -d' ' -f1)
+BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+cat > /usr/share/nginx/html/version.json <<VERSIONJSON
+{
+  "release": "${VERSION_RELEASE}",
+  "operon_sha": "${VERSION_OPERON_SHA}",
+  "fork_sha": "${VERSION_FORK_SHA}",
+  "config_hash": "${CONFIG_HASH}",
+  "built_at": "${BUILT_AT}"
+}
+VERSIONJSON
+
+echo "✅ version.json written (release=${VERSION_RELEASE}, config_hash=${CONFIG_HASH})"
