@@ -7,9 +7,7 @@ import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import queryClient from "@/query-client";
 import "@/index.css";
-import RoutePending, {
-  isPhoneViewport,
-} from "@/components/common/route-pending";
+import RoutePending from "@/components/common/route-pending";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import { KeyboardShortcutsHelp } from "./components/keyboard-shortcuts-help";
 import AuthProvider from "./components/providers/auth-provider";
@@ -60,7 +58,11 @@ const router = createRouter({
   // which this build is not allowed to touch. Above 768px the defaults are left alone by
   // passing `undefined`, which is how the router reads "not configured".
   defaultPendingComponent: RoutePending,
-  ...(isPhoneViewport() ? { defaultPendingMs: 0, defaultPendingMinMs: 0 } : {}),
+  // `defaultPendingMs` left at the router's default (John, real iPhone 2026-09-22: the fork
+  // felt laggy and unstable). Zero meant the navy skeleton replaced the current screen on
+  // EVERY navigation however fast it resolved — a full-screen flash between every tap and
+  // its result, which reads as jank rather than as progress. The skeleton is still the
+  // pending component; it now appears only once a navigation is genuinely slow.
   context: {
     user: null,
     queryClient,

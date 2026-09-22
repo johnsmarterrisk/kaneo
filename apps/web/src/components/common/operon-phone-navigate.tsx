@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
 import {
@@ -26,7 +27,7 @@ import Search from "@/components/search";
  * `OPERON_MODULES` label this file's module strip and the desktop rail both already use,
  * so a future rename only ever happens in one place.
  */
-export default function OperonPhoneNavigate() {
+function OperonPhoneNavigate() {
   const currentModuleLabel =
     OPERON_MODULES.find((module) => module.key === "initiative")?.label ??
     "Initiative";
@@ -71,3 +72,12 @@ export default function OperonPhoneNavigate() {
     </div>
   );
 }
+
+/**
+ * Memoised (John, real iPhone 2026-09-22: the fork felt laggy). This subtree is the whole
+ * Navigate screen — the module strip, Kaneo's nav, the project list and the footer — and it
+ * takes no props, so every re-render of `Layout` above it rebuilt all of that for nothing.
+ * `Layout` re-renders on each route change and on each viewport event, which on a phone is
+ * often.
+ */
+export default memo(OperonPhoneNavigate);
