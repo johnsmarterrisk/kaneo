@@ -93,16 +93,15 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
     useSensor(MouseSensor, {
       activationConstraint: { distance: disableDragDrop ? 999999 : 8 },
     }),
-    // The long press that starts a touch drag. Tolerance is how far the finger may move
-    // during the delay before the press is abandoned as a scroll — 8px, tightened from 10
-    // so a deliberate flick of the column is read as a scroll rather than hovering on the
-    // edge of becoming a drag. The sensor has always been here; what was missing until
-    // 2026-09-22 was `touch-action: none` on the drag handle, without which Safari claimed
-    // the gesture before this delay could elapse (see `task-card.tsx`).
+    // The long press that starts a touch drag. The sensor has always been here; what was
+    // missing until 2026-09-22 was `touch-action: none` on the drag handle, without which
+    // Safari claimed the gesture before this delay could elapse (see `task-card.tsx`).
+    // Tolerance stays at the established 10px (Codex r1 #16): tightening it was unrelated
+    // to the `touch-action` fault and only makes jitter cancel more drags.
     useSensor(TouchSensor, {
       activationConstraint: {
         delay: disableDragDrop ? 999999 : 250,
-        tolerance: 8,
+        tolerance: 10,
       },
     }),
     useSensor(KeyboardSensor),

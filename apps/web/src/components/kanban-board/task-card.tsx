@@ -190,7 +190,19 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="relative">
+    // Codex r1 #2: the MOUSE and KEYBOARD activators stay on the whole card — dragging a
+    // card by its body is the desktop behaviour and this round was never meant to change
+    // it. Only the TOUCH activation is confined to the grip, because only touch needs
+    // `touch-action: none`, and only on a phone does that matter (on the card it would
+    // stop the column scrolling). dnd-kit routes both through the same `listeners`; the
+    // grip adds nothing but the touch-action surface and a visible affordance.
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative"
+      {...attributes}
+      {...listeners}
+    >
       <ContextMenu>
         <ContextMenuTrigger asChild>
           {/** biome-ignore lint/a11y/noStaticElementInteractions: false positive for onClick and onKeyDown */}
@@ -229,11 +241,14 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
                 type="button"
                 data-testid={`task-drag-handle-${task.id}`}
                 aria-label={`Drag ${task.title}`}
+                // The ONLY element with `touch-action: none`. On the card it would stop
+                // the column scrolling, since cards fill it; here the rest of the card
+                // still pans and only this 44px square is reserved for the drag.
                 style={{ touchAction: "none" }}
-                className="absolute top-1 right-1 flex h-11 w-11 cursor-move items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+                // Codex r1 #14: `float-right` with a margin rather than `absolute`, so the
+                // title wraps around the grip instead of running underneath it.
+                className="float-right -mt-1 -mr-1 ml-1 flex h-11 w-11 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent active:cursor-grabbing"
                 onClick={(e) => e.stopPropagation()}
-                {...attributes}
-                {...listeners}
               >
                 <GripVertical className="h-4 w-4" />
               </button>
