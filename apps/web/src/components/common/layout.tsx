@@ -8,7 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { isDemoMode } from "@/constants/urls";
 import { useUserPreferencesEffects } from "@/hooks/use-user-preferences-effects";
 import { cn } from "@/lib/cn";
-import { useVersionStampText } from "@/lib/version-check";
+import { useVersionCheck, useVersionStampText } from "@/lib/version-check";
 import { phoneBackTarget, phoneScreenForPath } from "@/store/phone-nav";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
@@ -156,6 +156,15 @@ function Layout({ children, className }: LayoutProps) {
   const location = useLocation();
 
   useUserPreferencesEffects();
+  // Task 0.6: `Layout` is the highest DECLARED mount point available to this task
+  // (`docs/fork-discipline.md` row 2's Stabilization Stage 1 note names `layout.tsx` and
+  // `operon-phone-navigate.tsx` only). It is not a true singleton — the router swaps
+  // `WorkspaceLayout`/`ProjectLayout`/`TaskLayout`, each with its OWN `<Layout>`, so most
+  // navigations remount it and re-arm the check (a fresh `sessionStorage`-bound attempt
+  // count survives that, since it lives outside the component; a live "deferred" toast
+  // does not, and can repeat on the next navigation while still protected — a UX
+  // nit, not a correctness gap).
+  useVersionCheck();
 
   /**
    * THE SCREEN IS THE ROUTE. No store, no history entries, no `popstate` listener, no

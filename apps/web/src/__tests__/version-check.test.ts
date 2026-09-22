@@ -1,11 +1,30 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Hoisted so `vi.mock` factories below (themselves hoisted above these imports at
+// execution time) can close over a MUTABLE mutation count each `useVersionCheck` test
+// controls directly, instead of re-mocking the module per test.
+const queryMock = vi.hoisted(() => ({ mutationCount: 0 }));
+vi.mock("@tanstack/react-query", () => ({
+  useIsMutating: () => queryMock.mutationCount,
+}));
+
+const toastMock = vi.hoisted(() => ({ info: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toastMock }));
+
 import {
+  CHECK_INTERVAL_MS,
+  DRAIN_POLL_MS,
   fetchVersionJson,
   formatStamp,
   getLoadedVersion,
+  isReloadScheduled,
+  MAX_RELOAD_ATTEMPTS_PER_VERSION,
+  RELOAD_ATTEMPTS_STORAGE_KEY,
   resetLoadedVersionForTests,
+  resetReloadScheduledForTests,
   sha7,
+  useVersionCheck,
   useVersionStampText,
   type VersionInfo,
   versionKey,
@@ -40,10 +59,20 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   resetLoadedVersionForTests();
+  resetReloadScheduledForTests();
+  queryMock.mutationCount = 0;
+  toastMock.info.mockReset();
+  sessionStorage.clear();
+  Object.defineProperty(navigator, "onLine", {
+    value: true,
+    configurable: true,
+  });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetReloadScheduledForTests();
+  sessionStorage.clear();
 });
 
 describe("fetchVersionJson", () => {
@@ -121,5 +150,166 @@ describe("useVersionStampText", () => {
     });
 
     expect(result.current).toBe("v2026.09.22-4 · a1b2c3d/f4e5d6c");
+  });
+});
+
+describe("useVersionCheck", () => {
+  async function mountWithLoaded(loaded: VersionInfo, reloader: () => void) {
+    fetchMock.mockResolvedValueOnce(jsonResponse(loaded)); // getLoadedVersion()
+    const result = renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return result;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("no mismatch: never reloads", async () => {
+    const reloader = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(reloader).not.toHaveBeenCalled();
+  });
+
+  it("mismatch, no mutation in flight: reloads exactly once", async () => {
+    const reloader = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(reloader).toHaveBeenCalledTimes(1);
+  });
+
+  it("mismatch while a mutation is in flight (useIsMutating > 0): defers, schedules, toasts", async () => {
+    queryMock.mutationCount = 1;
+    const reloader = vi.fn();
+    await mountWithLoaded(VALID, reloader);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
+    });
+
+    expect(reloader).not.toHaveBeenCalled();
+    expect(isReloadScheduled()).toBe(true);
+    expect(toastMock.info).toHaveBeenCalledTimes(1);
+  });
+
+  it("mutation drains: the deferred reload fires on the next drain poll", async () => {
+    queryMock.mutationCount = 1;
+    const reloader = vi.fn();
+    const { rerender } = await mountWithLoaded(VALID, reloader);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
+    });
+    expect(reloader).not.toHaveBeenCalled();
+
+    // `useIsMutating()` is a SUBSCRIPTION in production — react-query re-renders every
+    // subscriber when the mutation finishes, which is what actually refreshes
+    // `mutationCountRef.current`. The mock above is a static function, so this test
+    // stands in for that re-render the same way real "the mutation finished" would
+    // trigger one.
+    queryMock.mutationCount = 0;
+    rerender();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    });
+    expect(reloader).toHaveBeenCalledTimes(1);
+  });
+
+  it("malformed version.json: no reload, no throw", async () => {
+    const reloader = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ release: VALID.release }));
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(reloader).not.toHaveBeenCalled();
+  });
+
+  it("offline: skips before even fetching a baseline — no reload", async () => {
+    const reloader = vi.fn();
+    Object.defineProperty(navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(reloader).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("no loop: a mismatch already at the attempt bound in sessionStorage is not retried", async () => {
+    const reloader = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    const targetKey = `${VALID.release}::hash-2`;
+    sessionStorage.setItem(
+      RELOAD_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify({
+        key: targetKey,
+        count: MAX_RELOAD_ATTEMPTS_PER_VERSION,
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(reloader).not.toHaveBeenCalled();
+  });
+
+  it("writes the bumped attempt count to sessionStorage before reloading", async () => {
+    const reloader = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse(VALID));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const stored = JSON.parse(
+      sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null",
+    );
+    expect(stored).toEqual({ key: `${VALID.release}::hash-2`, count: 1 });
   });
 });

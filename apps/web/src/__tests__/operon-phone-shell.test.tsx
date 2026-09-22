@@ -78,6 +78,18 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarInset: slot("sidebar-inset"),
 }));
 
+// Task 0.6: `useVersionCheck` reads TanStack Query's `useIsMutating()`, which throws
+// without a `QueryClientProvider` — exactly the "mocked to a marker or a no-op" treatment
+// this file's own doc comment already gives every dependency outside `Layout`'s own
+// branching (React Query is "exercised elsewhere," per that same comment).
+// `useVersionStampText` is left REAL: it touches no React Query hook, and this file
+// already tolerates its harmless `fetch('/version.json')` going unmocked (a rejection
+// `fetchVersionJson` swallows, same as any other dependency this suite doesn't stub).
+vi.mock("@/lib/version-check", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/version-check")>();
+  return { ...actual, useVersionCheck: () => {} };
+});
+
 const { default: Layout, usePhoneNav } = await import(
   "@/components/common/layout"
 );
