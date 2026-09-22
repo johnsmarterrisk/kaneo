@@ -7,6 +7,7 @@ import { useUpdateTaskTitle } from "@/hooks/mutations/task/use-update-task-title
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import debounce from "@/lib/debounce";
+import { registerDirtyEditor } from "@/lib/version-check";
 
 type TaskTitleProps = {
   taskId: string;
@@ -21,11 +22,20 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
   const isInitializedRef = useRef(false);
   const taskRef = useRef(task);
   const updateTaskRef = useRef(updateTaskTitle);
+  /**
+   * Stage 1 round-1 finding 6: true from the moment a keystroke changes the title until
+   * the 800 ms debounce hands the save off to `useUpdateTaskTitle` — the window
+   * `useIsMutating()` alone cannot see, because nothing is mutating YET. Registered below
+   * so a version-mismatch reload defers rather than discarding a title edit mid-debounce.
+   */
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     taskRef.current = task;
     updateTaskRef.current = updateTaskTitle;
   }, [task, updateTaskTitle]);
+
+  useEffect(() => registerDirtyEditor(() => dirtyRef.current), []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: taskId is not needed here
   useEffect(() => {
@@ -54,6 +64,9 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
       if (!currentTask || !updateTaskFn) return;
 
       try {
+        // Handing off to the mutation now — `useIsMutating()` covers it from here, so the
+        // dirty predicate's job (bridging the gap BEFORE this point) is done.
+        dirtyRef.current = false;
         await updateTaskFn({
           ...currentTask,
           title,
@@ -69,6 +82,7 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
     (value: string) => {
       if (!isInitializedRef.current) return;
 
+      dirtyRef.current = true;
       debouncedUpdate(value);
     },
     [debouncedUpdate],

@@ -14,6 +14,15 @@ const sentryProject = process.env.SENTRY_PROJECT;
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
+    // Stage 1 round-1 finding 4: a literal placeholder baked into the bundle at BUILD
+    // time, the same mechanism `KANEO_API_URL` etc. already use — `env.sh` substitutes the
+    // real, computed `version.json` payload into this exact string at CONTAINER START (see
+    // its own comment, and `src/lib/version-check.ts`'s `getLoadedVersion` for why this
+    // document's own "loaded" identity must be baked into the bundle's bytes rather than
+    // fetched from the same resource the freshness check fetches fresh).
+    __KANEO_LOADED_VERSION_JSON__: JSON.stringify(
+      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
+    ),
   },
   base: "/",
   plugins: [

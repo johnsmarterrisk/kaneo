@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { DIAGNOSTIC_CATALOGUE, redactEvent, sha1Hash8 } from "./instrument";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  DIAGNOSTIC_CATALOGUE,
+  redactEvent,
+  releaseIdentity,
+  sha1Hash8,
+} from "./instrument";
 
 /**
  * instrument.ts — Stage 1 task 0.7's own assertions (Operon stabilization plan §3 row 0.7;
@@ -83,5 +88,127 @@ describe("redactEvent", () => {
       const result = await redactEvent(event as any);
       expect(result.exception?.values?.[0]?.value).toBe(message);
     }
+  });
+
+  it("a top-level message (an event with no exception) is redacted the same way (finding 2)", async () => {
+    const sensitive = "draft: call jane@example.com about SECRETVALUE123";
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent({ message: sensitive } as any);
+    expect(result.message).toMatch(/^redacted:[0-9a-f]{8}$/);
+    expect(JSON.stringify(result)).not.toContain("jane@example.com");
+  });
+
+  it("an arbitrary/spoofed exception type is normalized, never forwarded raw (finding 2)", async () => {
+    const spoofed = "jane@example.com leaked here";
+    const event = {
+      exception: { values: [{ type: spoofed, value: "Failed to fetch" }] },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent(event as any);
+    expect(result.exception?.values?.[0]?.type).toBe("Error");
+    expect(JSON.stringify(result)).not.toContain("jane@example.com");
+  });
+
+  it("a known exception type is forwarded verbatim", async () => {
+    const event = {
+      exception: { values: [{ type: "RangeError", value: "Failed to fetch" }] },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent(event as any);
+    expect(result.exception?.values?.[0]?.type).toBe("RangeError");
+  });
+
+  it("a stack frame's tokenized query string is stripped, the path kept for symbolication (finding 2)", async () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            value: "Failed to fetch",
+            stacktrace: {
+              frames: [
+                {
+                  filename: "/assets/index-abc.js?token=FAKE_TOKEN",
+                  lineno: 1,
+                  colno: 2,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent(event as any);
+    const frame = result.exception?.values?.[0]?.stacktrace?.frames?.[0];
+    expect(frame?.filename).toBe("/assets/index-abc.js");
+    expect(JSON.stringify(result)).not.toContain("FAKE_TOKEN");
+  });
+
+  it("a request URL's query string is stripped, never forwarded with its tokenized value (finding 2)", async () => {
+    const event = {
+      request: { url: "https://operon.example/t?token=SECRETVALUE123" },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent(event as any);
+    expect(result.request?.url).toBe("https://operon.example/t");
+    expect(JSON.stringify(result)).not.toContain("SECRETVALUE123");
+  });
+
+  it("breadcrumbs and extras are dropped entirely — no allowlist exists to sanitize them (finding 2)", async () => {
+    const event = {
+      exception: { values: [{ value: "Failed to fetch" }] },
+      breadcrumbs: [
+        { message: "user typed jane@example.com into the composer" },
+      ],
+      extra: { draft: "sensitive text" },
+      contexts: { state: { pendingMessage: "sensitive text" } },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
+    const result = await redactEvent(event as any);
+    expect(JSON.stringify(result)).not.toContain("jane@example.com");
+    expect(JSON.stringify(result)).not.toContain("sensitive text");
+    expect((result as { breadcrumbs?: unknown }).breadcrumbs).toBeUndefined();
+    expect((result as { extra?: unknown }).extra).toBeUndefined();
+    expect((result as { contexts?: unknown }).contexts).toBeUndefined();
+  });
+});
+
+describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("carries both deployment SHAs from the embedded loaded-version identity, not just the package version", () => {
+    vi.stubGlobal(
+      "__KANEO_LOADED_VERSION_JSON__",
+      JSON.stringify({
+        release: "2026.09.22-4",
+        operon_sha: "a".repeat(40),
+        fork_sha: "b".repeat(40),
+        config_hash: "deadbeef",
+        built_at: "2026-09-22T00:00:00.000Z",
+      }),
+    );
+    expect(releaseIdentity()).toBe(
+      `2026.09.22-4+${"a".repeat(7)}.${"b".repeat(7)}`,
+    );
+  });
+
+  it("falls back to the package version alone when the placeholder was never substituted (a dev build)", () => {
+    vi.stubGlobal(
+      "__KANEO_LOADED_VERSION_JSON__",
+      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
+    );
+    expect(releaseIdentity()).toBe("unknown"); // __APP_VERSION__ is also undefined in this test env
+  });
+
+  it("falls back on malformed embedded JSON, never throws", () => {
+    vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", "not json");
+    expect(() => releaseIdentity()).not.toThrow();
+  });
+
+  it("falls back when the embedded constant is entirely absent", () => {
+    vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", undefined);
+    expect(() => releaseIdentity()).not.toThrow();
   });
 });

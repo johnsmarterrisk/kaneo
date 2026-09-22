@@ -112,17 +112,29 @@ VERSION_RELEASE="${VERSION_RELEASE:-unknown}"
 VERSION_OPERON_SHA="${VERSION_OPERON_SHA:-unknown}"
 VERSION_FORK_SHA="${VERSION_FORK_SHA:-unknown}"
 
-# `config_hash` = sha256 of the SAME THREE runtime values substituted above, in the SAME
-# order every time. Newline-separated, not concatenated bare: none of the three can
-# contain a literal newline (they are URLs), so this cannot collide the way plain
-# concatenation could (`https://ainitiative.example` + `` vs `https://a` +
-# `initiative.example`). `scripts/build/version-stamp.mjs`'s `computeConfigHash` on the
-# Operon side uses the analogous separated-join for the analogous reason — the two are
-# independent computations over different values (task 0.4's own note: Operon's config is
-# its three `VITE_*` build values, the fork's is these three runtime ones) and are never
-# compared to each other, so the two need not use the identical separator, only each be
-# internally collision-safe.
-CONFIG_HASH=$(printf '%s\n%s\n%s' "${KANEO_API_URL:-}" "${KANEO_CLIENT_URL:-}" "${OPERON_APEX_URL:-}" | sha256sum | cut -d' ' -f1)
+# `config_hash` = sha256 of a CANONICAL ALLOWLIST of every effective substituted
+# frontend configuration value (Stage 1 round-1 finding 18) — not just the three named
+# URLs. The original computation hashed only `KANEO_API_URL`/`KANEO_CLIENT_URL`/
+# `OPERON_APEX_URL`, while the generic loop above (`for key in $(env | grep '^KANEO_'
+# ...)`) substitutes ANY other `KANEO_*`-prefixed var into the SAME bundle — a value
+# such as `KANEO_TURNSTILE_SITE_KEY` (or any future one) could change, changing the
+# bundle's actual bytes, with no corresponding change to this comparison key, which is
+# exactly the failure task 0.4 exists to prevent.
+#
+# `KEY=value` LINES, SORTED BY KEY, not a bare value list: sorting makes the hash
+# independent of `env`'s own (unspecified, and not guaranteed stable across shells or
+# container runtimes) ordering, and the `KEY=` prefix on each line is what lets an EMPTY
+# value differ from an ABSENT one (`KANEO_TURNSTILE_SITE_KEY=` vs no line at all) rather
+# than collide the way a bare, unlabelled value list could. `OPERON_APEX_URL` is not
+# `KANEO_`-prefixed (it has its own explicit substitution block above, not the generic
+# loop), so it is added by hand rather than picked up by the `grep '^KANEO_'` below.
+CONFIG_ALLOWLIST_INPUT=$(
+  {
+    printf 'OPERON_APEX_URL=%s\n' "${OPERON_APEX_URL:-}"
+    env | grep '^KANEO_' || true
+  } | sort
+)
+CONFIG_HASH=$(printf '%s' "${CONFIG_ALLOWLIST_INPUT}" | sha256sum | cut -d' ' -f1)
 BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
 cat > /usr/share/nginx/html/version.json <<VERSIONJSON
@@ -136,3 +148,42 @@ cat > /usr/share/nginx/html/version.json <<VERSIONJSON
 VERSIONJSON
 
 echo "✅ version.json written (release=${VERSION_RELEASE}, config_hash=${CONFIG_HASH})"
+
+# ─── Embed the SAME identity into the bundle itself (Stage 1 round-1 finding 4) ───
+#
+# `src/lib/version-check.ts`'s `getLoadedVersion()` used to answer "what did THIS
+# document load with" by fetching `/version.json` above — the exact resource
+# `fetchVersionJson()` fetches fresh to find the LATEST version, which let old, cached
+# JavaScript fetch the new manifest as its own "loaded" answer and compare equal to
+# itself forever. `apps/web/vite.config.ts` bakes a literal placeholder string,
+# `KANEO_LOADED_VERSION_JSON_PLACEHOLDER`, into the bundle at BUILD time (the same
+# mechanism `KANEO_API_URL` etc. already use); this substitutes the ACTUAL payload —
+# byte-for-byte the same object just written to version.json, one minified line — into
+# every bundle file carrying that placeholder, at CONTAINER START.
+#
+# VALIDATED, NOT ESCAPED. The placeholder sits inside a JS string literal already
+# (`"KANEO_LOADED_VERSION_JSON_PLACEHOLDER"`, from `JSON.stringify(...)` at build time),
+# so a `"` or `\` in the substituted text would break out of it or corrupt the bundle.
+# `sed`'s own replacement-text escaping (`\"` and `\\` are NOT passed through as literal
+# backslash-quote/backslash-backslash — most `sed` implementations consume the backslash
+# and emit only the following character) makes a naive escape-then-substitute pipeline
+# actively WRONG here, not just unnecessary — it would emit a bare `"` for every escaped
+# quote, corrupting the JSON payload's own structural quotes into the bundle unescaped.
+# The four values are each structurally constrained instead (a release id, two hex git
+# SHAs, a hex sha256 digest, an ISO-8601 timestamp — `scripts/build/version-stamp.mjs`'s
+# own doc comment states the same shapes on the Operon side) and validated against that
+# shape; embedding is SKIPPED (not attempted with unsafe text) if any value fails, same
+# "fail loud rather than emit something broken" contract the rest of this script uses.
+case "${VERSION_RELEASE}${VERSION_OPERON_SHA}${VERSION_FORK_SHA}${CONFIG_HASH}${BUILT_AT}" in
+  *[!A-Za-z0-9._:-]*)
+    echo "⚠️  Skipped embedding loaded-version identity: a value contained an unexpected character" >&2
+    ;;
+  *)
+    echo "Embedding loaded-version identity into the bundle..."
+    LOADED_VERSION_JSON=$(printf '{"release":"%s","operon_sha":"%s","fork_sha":"%s","config_hash":"%s","built_at":"%s"}' \
+      "${VERSION_RELEASE}" "${VERSION_OPERON_SHA}" "${VERSION_FORK_SHA}" "${CONFIG_HASH}" "${BUILT_AT}")
+    find /usr/share/nginx/html -type f -name "*.js" -exec grep -l "KANEO_LOADED_VERSION_JSON_PLACEHOLDER" {} \; | \
+      xargs -r sed -i "s#KANEO_LOADED_VERSION_JSON_PLACEHOLDER#${LOADED_VERSION_JSON}#g"
+    echo "✅ Loaded-version identity embedded"
+    ;;
+esac

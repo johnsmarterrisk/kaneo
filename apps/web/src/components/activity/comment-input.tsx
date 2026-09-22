@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Paperclip } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CommentEditor from "@/components/activity/comment-editor";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import useCreateComment from "@/hooks/mutations/comment/use-create-comment";
 import { getModifierKeyText } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { registerDirtyEditor } from "@/lib/version-check";
 
 type CommentInputProps = {
   taskId: string;
@@ -26,6 +27,20 @@ export default function CommentInput({ taskId }: CommentInputProps) {
   const [attachAction, setAttachAction] = useState<(() => void) | null>(null);
   const { mutateAsync: createComment, isPending } = useCreateComment();
   const queryClient = useQueryClient();
+
+  /**
+   * Stage 1 round-1 finding 6: registers a non-empty draft as protected state, so a
+   * version-mismatch reload defers rather than discarding an unsent comment. The predicate
+   * reads `content` fresh on every check (a ref, updated every render) rather than closing
+   * over a stale snapshot, matching `app/src/shell/MessageComposer.tsx`'s equivalent
+   * registration on the Operon side.
+   */
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  useEffect(
+    () => registerDirtyEditor(() => contentRef.current.trim() !== ""),
+    [],
+  );
 
   const handleSubmit = useCallback(async () => {
     if (!content.trim()) {

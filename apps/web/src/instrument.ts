@@ -42,24 +42,166 @@ export async function sha1Hash8(input: string): Promise<string> {
     .slice(0, 8);
 }
 
-/** Redacts every exception value's `message` (Sentry's `event.exception.values[].value`)
-    IN PLACE against `DIAGNOSTIC_CATALOGUE`, mirroring `redact.js#classifyMessage` on the
-    Operon side. Applied to every event now, not only ones tagged `area: "auth.session"` —
-    see the note below on why that tag no longer decides drop-or-keep. */
+/** Mirrors `platform-service/src/client-errors/index.js`'s `KNOWN_ERROR_NAMES` — `Error`'s
+    `name`/`type` is a writable, arbitrary string, so only a fixed set of names the
+    platform/spec itself produces is forwarded verbatim; anything else becomes the generic
+    `'Error'` tag rather than passing arbitrary text through unvalidated (finding 2: an
+    unlisted type survived the old code untouched). */
+const KNOWN_ERROR_TYPES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "EvalError",
+  "URIError",
+  "AggregateError",
+  "DOMException",
+  "AbortError",
+  "ChunkLoadError",
+  "NetworkError",
+  "NotAllowedError",
+  "QuotaExceededError",
+  "TimeoutError",
+]);
+
+async function redactMessage(value: string): Promise<string> {
+  if (DIAGNOSTIC_CATALOGUE.has(value)) return value;
+  return `redacted:${await sha1Hash8(value)}`;
+}
+
+function normalizeType(type: string | undefined): string | undefined {
+  if (typeof type !== "string") return undefined;
+  return KNOWN_ERROR_TYPES.has(type) ? type : "Error";
+}
+
+/** Strips a query string/fragment off a stack-frame filename or a request URL — the same
+    leak channel `platform-service`'s `FRAME_RE`/`sanitizePath` close server-side (a token
+    or other page-specific content can ride along as `?token=...`). The path itself is kept
+    (not hashed) because it is needed for release-specific symbolication (finding 17) and a
+    bundle/source path is not user content. */
+function sanitizeUrlLike(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.split(/[?#]/, 1)[0].slice(0, 500);
+}
+
+async function sanitizeExceptionValue(
+  value: Sentry.Exception,
+): Promise<Sentry.Exception> {
+  const sanitized: Sentry.Exception = {
+    type: normalizeType(value.type),
+  };
+  if (typeof value.value === "string") {
+    sanitized.value = await redactMessage(value.value);
+  }
+  const frames = value.stacktrace?.frames;
+  if (frames) {
+    sanitized.stacktrace = {
+      frames: frames.map((frame) => ({
+        filename: sanitizeUrlLike(frame.filename),
+        function: frame.function,
+        lineno: frame.lineno,
+        colno: frame.colno,
+        in_app: frame.in_app,
+      })),
+    };
+  }
+  return sanitized;
+}
+
+/**
+ * Builds an ALLOWLISTED event — the same "construct the output, never patch the input"
+ * shape `platform-service/src/client-errors/index.js`'s `buildLogPayload` uses — instead of
+ * redacting `exception.values[].value` in place and letting every other field (top-level
+ * `message`, `breadcrumbs`, `request.url`, exception `type`, frame `filename`, `extra`,
+ * `contexts`) reach Sentry untouched (Stage 1 finding 2: a read-only probe found synthetic
+ * private text and tokenized URLs surviving in exactly those fields).
+ *
+ * `breadcrumbs`, `extra`, and `contexts` are dropped entirely rather than sanitized: unlike
+ * a message or a filename there is no fixed shape to validate them against, so "redact and
+ * forward" is not available and "drop" is the only safe default (mirrors platform-service's
+ * `buildLogPayload`, which never spreads the client body — it reads named fields only).
+ */
 export async function redactEvent(
   event: Sentry.ErrorEvent,
 ): Promise<Sentry.ErrorEvent> {
-  const values = event.exception?.values;
-  if (!values) return event;
-  for (const value of values) {
-    if (
-      typeof value.value === "string" &&
-      !DIAGNOSTIC_CATALOGUE.has(value.value)
-    ) {
-      value.value = `redacted:${await sha1Hash8(value.value)}`;
-    }
+  const sanitized: Sentry.ErrorEvent = {
+    event_id: event.event_id,
+    timestamp: event.timestamp,
+    platform: event.platform,
+    level: event.level,
+    release: event.release,
+    environment: event.environment,
+    tags: event.tags?.area ? { area: event.tags.area } : undefined,
+  };
+
+  if (typeof event.message === "string") {
+    sanitized.message = await redactMessage(event.message);
   }
-  return event;
+
+  if (event.exception?.values) {
+    sanitized.exception = {
+      values: await Promise.all(
+        event.exception.values.map(sanitizeExceptionValue),
+      ),
+    };
+  }
+
+  const url = sanitizeUrlLike(event.request?.url);
+  if (url) {
+    sanitized.request = { url };
+  }
+
+  return sanitized;
+}
+
+/** `apps/web/vite.config.ts`'s build-time placeholder, substituted by `env.sh` at
+    container start with the SAME identity `version.json` carries — see
+    `src/lib/version-check.ts`'s copy of this declaration for the full contract. Declared
+    here too rather than imported: this file and that one are declared independently in
+    `docs/fork-discipline.md` row 2, and neither currently depends on the other. */
+declare const __KANEO_LOADED_VERSION_JSON__: string;
+
+/**
+ * Stage 1 round-1 finding 17: `release: __APP_VERSION__` tagged every event with only
+ * upstream Kaneo's package version — the same string on every deploy of this fork,
+ * regardless of which Operon or fork commit actually produced the running bundle. A
+ * captured stack frame could never be matched back to the RIGHT source map for a
+ * multi-release history. This reads the SAME runtime-embedded identity
+ * `version-check.ts#getLoadedVersion` reads (both deployment SHAs, not just this
+ * package's own version), so a release tag on an event uniquely identifies the exact
+ * candidate image it came from. Falls back to `__APP_VERSION__` alone when the embedded
+ * constant is absent or still the un-substituted placeholder (a local `vite dev` run with
+ * no `env.sh`), so Sentry still receives SOME release value rather than `undefined`.
+ */
+export function releaseIdentity(): string {
+  try {
+    const raw =
+      typeof __KANEO_LOADED_VERSION_JSON__ === "string"
+        ? __KANEO_LOADED_VERSION_JSON__
+        : "";
+    if (raw && raw !== "KANEO_LOADED_VERSION_JSON_PLACEHOLDER") {
+      const info = JSON.parse(raw) as {
+        release?: string;
+        operon_sha?: string;
+        fork_sha?: string;
+      };
+      if (
+        typeof info.release === "string" &&
+        typeof info.operon_sha === "string" &&
+        typeof info.fork_sha === "string"
+      ) {
+        return `${info.release}+${info.operon_sha.slice(0, 7)}.${info.fork_sha.slice(0, 7)}`;
+      }
+    }
+  } catch {
+    // Malformed embedded constant — fall through to the package-version-only value below.
+  }
+  // `typeof` guard, not a bare reference: `__APP_VERSION__` is a Vite `define` (textual
+  // replacement at build time) with no runtime binding at all outside a Vite/Rollup
+  // build — a bare reference throws `ReferenceError` in, for one, this file's own test
+  // environment, which uses a separate `vitest.config.ts` with no `define` of its own.
+  return typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "unknown";
 }
 
 // skip init if env.sh never replaced the "KANEO_SENTRY_DSN" placeholder
@@ -67,7 +209,7 @@ if (dsn && !dsn.startsWith("KANEO_")) {
   Sentry.init({
     dsn,
     environment: import.meta.env.MODE,
-    release: __APP_VERSION__,
+    release: releaseIdentity(),
     sendDefaultPii: false,
     ignoreErrors: [
       // Thrown by Safari browser extensions on iOS 18+ injecting content scripts;
@@ -93,15 +235,15 @@ if (dsn && !dsn.startsWith("KANEO_")) {
     beforeSend(event) {
       return redactEvent(event);
     },
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      // Stage 1 task 0.7: session replay OFF. A replay is a recording of what the reader
-      // actually saw — draft message text, task titles, everything task 0.7's own
-      // allowlist exists to keep OUT of a third-party destination — and no `beforeSend`
-      // hook can redact a video. Dropping the integration is the only way to make that
-      // guarantee; `replaysSessionSampleRate`/`replaysOnErrorSampleRate` are removed with
-      // it below, since both are meaningless with no replay integration installed.
-    ],
-    tracesSampleRate: 0.1,
+    // Stage 1 finding 2 (round 1 review): `browserTracingIntegration()` ships transaction
+    // and span events on its OWN channel, `beforeSendTransaction` — a distinct pipe from
+    // `beforeSend`/`redactEvent` above, which only ever ran against error events. A
+    // transaction carries its own breadcrumb-shaped `request.url`/span descriptions with no
+    // allowlist over them, so leaving tracing on would reopen exactly the leak `redactEvent`
+    // closes, through a channel this file's `beforeSend` hook never touches. No integration
+    // is added here (task 0.7: session replay OFF, same reasoning — no safe sanitizer
+    // exists for either channel), and `tracesSampleRate` is omitted so no transaction is
+    // ever created to leak in the first place.
+    integrations: [],
   });
 }
