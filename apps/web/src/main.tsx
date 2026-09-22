@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import queryClient from "@/query-client";
 import "@/index.css";
+import RoutePending from "@/components/common/route-pending";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
 import { KeyboardShortcutsHelp } from "./components/keyboard-shortcuts-help";
 import AuthProvider from "./components/providers/auth-provider";
@@ -46,6 +47,15 @@ const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   defaultPreloadStaleTime: 0,
+  // Piece B: no frame between a tap and a settled route may be white or grey at phone
+  // width. Without a pending component the router painted whatever the tree rendered
+  // underneath a loading route, which on a phone was the desktop rail + white card.
+  // `defaultPendingMs: 0` so it covers the gap from the very first millisecond rather
+  // than after the router's default 1s grace, which is most of the gap on Slow 3G.
+  // `RoutePending` renders `null` above 768px, so desktop behaviour is unchanged.
+  defaultPendingComponent: RoutePending,
+  defaultPendingMs: 0,
+  defaultPendingMinMs: 0,
   context: {
     user: null,
     queryClient,
