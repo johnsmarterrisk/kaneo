@@ -55,13 +55,12 @@ function useSyncedIsMobile(): boolean {
   return isMobile;
 }
 
-/** Returns to the fork's Navigate screen (Piece B) — called by the Work screens' back
-    arrow (`workspace-layout.tsx`/`project-layout.tsx`/`task-layout.tsx`, phone width
-    only). Backed by `usePhoneNavStore` (a module-level Zustand store, not component
-    state or React Context) because `Layout` itself is re-instantiated on every route
-    change — the router swaps `WorkspaceLayout`/`ProjectLayout`/`TaskLayout`, each
-    wrapping its own `<Layout>` — so state that must survive a navigation cannot live on
-    `Layout`'s own instance. See `store/phone-nav.ts`'s own doc comment for the repro. */
+/** The phone back arrow and every X (Piece B): one step up the ROUTE, via the router.
+    There is deliberately no store, no history entry and no `popstate` listener behind
+    this — the screen is derived from the URL (`store/phone-nav.ts`) so a navigation can
+    never desync from it, and `Layout` being re-instantiated on every route change (the
+    router swaps `WorkspaceLayout`/`ProjectLayout`/`TaskLayout`, each with its own
+    `<Layout>`) is harmless because nothing here has to survive that remount. */
 export function usePhoneNav(): { goBack: () => void } {
   const navigate = useNavigate();
   const location = useLocation();
