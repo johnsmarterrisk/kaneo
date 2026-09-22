@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import RoutePending from "@/components/common/route-pending";
+import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 
 /**
  * The router's pending component (Piece B, Round 2 mobile-nav brief).
@@ -78,5 +79,36 @@ describe("RoutePending", () => {
     const { container } = render(<RoutePending />);
 
     expect(container.firstChild).toBeNull();
+  });
+});
+
+/**
+ * `AuthProvider`'s own loading state, which is the one that actually bit.
+ *
+ * `LoadingSkeleton` is a hard-coded desktop shape — a `w-64` rail beside a `bg-card`
+ * panel — and `AuthProvider` renders it while the session resolves, ABOVE the router. So
+ * it painted a full-width WHITE card for ~750ms of every phone hop into Initiative
+ * (measured on Slow 3G against the live container), and no `defaultPendingComponent`
+ * could cover it: a router-level pending component renders below the provider that was
+ * drawing it. This is the regression test for that window specifically.
+ */
+describe("LoadingSkeleton (AuthProvider's session-resolving state)", () => {
+  it("draws the navy phone silhouette below 768px, never the rail-and-white-card", () => {
+    setViewportWidth(375);
+    const { container } = render(<LoadingSkeleton />);
+
+    expect(screen.getByTestId("route-pending-phone")).toBeTruthy();
+    // The desktop shape's two giveaways must be absent.
+    expect(container.querySelector(".w-64")).toBeNull();
+    expect(container.querySelector(".bg-card")).toBeNull();
+  });
+
+  it("is unchanged at desktop width — same rail and card it always drew", () => {
+    setViewportWidth(1024);
+    const { container } = render(<LoadingSkeleton />);
+
+    expect(screen.queryByTestId("route-pending-phone")).toBeNull();
+    expect(container.querySelector(".w-64")).toBeTruthy();
+    expect(container.querySelector(".bg-card")).toBeTruthy();
   });
 });

@@ -33,7 +33,7 @@ const PHONE_BREAKPOINT_PX = 768;
     silhouette survives the hand-off from pre-paint to React instead of blinking out of
     existence at mount. Colours are the literal values the pre-paint uses, not tokens: this
     must be identical to a file that cannot import from the Tailwind theme. */
-function PhoneNavySkeleton() {
+export function PhoneNavySkeleton() {
   return (
     <div
       data-testid="route-pending-phone"
