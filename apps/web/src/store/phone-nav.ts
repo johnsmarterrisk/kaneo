@@ -17,6 +17,14 @@ type PhoneNavStore = {
   isPhoneNavOpen: boolean;
   openPhoneNav: () => void;
   closePhoneNav: () => void;
+  /** The last `location.pathname` `Layout`'s route-change effect has seen, so it can tell
+      a genuine navigation (close Navigate) from its own first mount at a URL it has never
+      seen before (do nothing) — `null` means "not seen one yet". Lives here rather than a
+      `useRef` in `Layout` for the exact same reason `isPhoneNavOpen` does: `useRef` is
+      also per-component-instance state, and would reset to `null` on every remount just
+      as the old `useState` did. */
+  lastSeenPathname: string | null;
+  setLastSeenPathname: (pathname: string) => void;
 };
 
 export const usePhoneNavStore = create<PhoneNavStore>((set) => ({
@@ -24,4 +32,6 @@ export const usePhoneNavStore = create<PhoneNavStore>((set) => ({
   isPhoneNavOpen: true,
   openPhoneNav: () => set({ isPhoneNavOpen: true }),
   closePhoneNav: () => set({ isPhoneNavOpen: false }),
+  lastSeenPathname: null,
+  setLastSeenPathname: (pathname) => set({ lastSeenPathname: pathname }),
 }));

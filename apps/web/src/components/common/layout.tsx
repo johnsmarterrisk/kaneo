@@ -1,6 +1,6 @@
 import { useLocation } from "@tanstack/react-router";
 import type React from "react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
@@ -109,8 +109,11 @@ function Layout({ children, className }: LayoutProps) {
   const isMobile = useSyncedIsMobile();
   const location = useLocation();
   const isPhoneNavOpen = usePhoneNavStore((state) => state.isPhoneNavOpen);
-  const openPhoneNav = usePhoneNavStore((state) => state.openPhoneNav);
   const closePhoneNav = usePhoneNavStore((state) => state.closePhoneNav);
+  const lastSeenPathname = usePhoneNavStore((state) => state.lastSeenPathname);
+  const setLastSeenPathname = usePhoneNavStore(
+    (state) => state.setLastSeenPathname,
+  );
 
   useUserPreferencesEffects();
 
@@ -122,19 +125,24 @@ function Layout({ children, className }: LayoutProps) {
   // see their own files) and never needs a second signal to close Navigate — watching
   // `location.pathname` catches every caller at once instead of threading an `onNavigate`
   // callback through both. The FIRST pathname seen is the mount itself, not a navigation,
-  // so the ref guards against closing Navigate on initial load. The ref (like the store)
-  // must survive `Layout` remounting across routes, so it is a MODULE-level ref, not a
-  // per-instance one — see the note below its declaration.
+  // so `lastSeenPathname === null` guards against closing Navigate on initial load; it
+  // lives in the same store as `isPhoneNavOpen`, for the same reason (survives `Layout`
+  // remounting across routes — see `store/phone-nav.ts`'s own doc comment).
   useEffect(() => {
     if (!isMobile) return;
-    if (
-      previousPathnameRef.value !== null &&
-      previousPathnameRef.value !== location.pathname
-    ) {
+    if (lastSeenPathname !== null && lastSeenPathname !== location.pathname) {
       closePhoneNav();
     }
-    previousPathnameRef.value = location.pathname;
-  }, [isMobile, location.pathname, closePhoneNav]);
+    if (lastSeenPathname !== location.pathname) {
+      setLastSeenPathname(location.pathname);
+    }
+  }, [
+    isMobile,
+    location.pathname,
+    lastSeenPathname,
+    closePhoneNav,
+    setLastSeenPathname,
+  ]);
 
   return (
     <div className="flex w-full bg-background">

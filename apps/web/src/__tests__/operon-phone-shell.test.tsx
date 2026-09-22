@@ -13,15 +13,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * `AppSidebar`/`OperonPhoneNavigate` never BOTH render, and that the phone branch renders
  * only the Navigate marker, never the sidebar one.
  *
- * Every dependency `layout.tsx` pulls in is mocked to a marker or a no-op: this is a unit
- * test of `Layout`'s own branching, not an integration test of the sidebar primitive,
- * i18n, or React Query — those are exercised elsewhere (`operon-switcher.test.tsx`,
- * `use-mobile`'s own coverage).
+ * `Layout` reads the viewport itself (`useSyncedIsMobile`, a LOCAL hook — deliberately not
+ * `@/hooks/use-mobile`'s shared `useIsMobile`, see that hook's own doc comment for why: the
+ * shared one's `undefined`-then-`useEffect` timing painted the DESKTOP chrome for one frame
+ * on every phone load, live-container repro), so this test drives it by setting
+ * `window.innerWidth` before each render rather than mocking a hook. jsdom implements
+ * neither `matchMedia` nor a resizable `innerWidth` (`theme-provider/index.test.tsx`
+ * already works around the same `matchMedia` gap for its own untouched effect), so both are
+ * stubbed per test.
+ *
+ * Every other dependency `layout.tsx` pulls in is mocked to a marker or a no-op: this is a
+ * unit test of `Layout`'s own branching, not an integration test of the sidebar primitive,
+ * i18n, or React Query — those are exercised elsewhere (`operon-switcher.test.tsx`).
  */
-
-vi.mock("@/hooks/use-mobile", () => ({
-  useIsMobile: vi.fn(),
-}));
 
 vi.mock("@tanstack/react-router", () => ({
   useLocation: () => ({ pathname: "/dashboard/workspace/w1" }),
@@ -49,6 +53,28 @@ vi.mock("@/components/common/operon-phone-navigate", () => ({
   default: () => <div data-testid="phone-navigate-marker" />,
 }));
 
+// Navigate stays open for every case here: this file tests the phone/desktop BRANCH
+// choice, not the open/close transition (that behaviour belongs with whatever test covers
+// the back-arrow / route-change close, out of this file's scope).
+vi.mock("@/store/phone-nav", () => ({
+  usePhoneNavStore: (
+    selector: (state: {
+      isPhoneNavOpen: boolean;
+      openPhoneNav: () => void;
+      closePhoneNav: () => void;
+      lastSeenPathname: string | null;
+      setLastSeenPathname: () => void;
+    }) => unknown,
+  ) =>
+    selector({
+      isPhoneNavOpen: true,
+      openPhoneNav: vi.fn(),
+      closePhoneNav: vi.fn(),
+      lastSeenPathname: null,
+      setLastSeenPathname: vi.fn(),
+    }),
+}));
+
 type Slot = { children?: React.ReactNode; className?: string };
 const slot =
   (testId: string) =>
@@ -59,16 +85,38 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarInset: slot("sidebar-inset"),
 }));
 
-const { useIsMobile } = await import("@/hooks/use-mobile");
 const { default: Layout } = await import("@/components/common/layout");
+
+function setViewportWidth(width: number): void {
+  Object.defineProperty(window, "innerWidth", {
+    writable: true,
+    configurable: true,
+    value: width,
+  });
+}
+
+beforeEach(() => {
+  // See this file's own doc comment: jsdom has neither API, and `useSyncedIsMobile`
+  // (mount-time initial read) plus the shared `use-mobile.ts` (still used elsewhere in
+  // this tree, e.g. `ui/sidebar.tsx`'s own `SidebarProvider`) both call `matchMedia`.
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+  );
+});
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("Layout — Operon-mode sheet suppression (Piece B)", () => {
   beforeEach(() => {
-    vi.mocked(useIsMobile).mockReturnValue(true);
+    setViewportWidth(390);
   });
 
   it("below 768px renders the phone Navigate screen, never AppSidebar (so ui/sidebar.tsx's Sheet never mounts)", () => {
@@ -98,7 +146,7 @@ describe("Layout — Operon-mode sheet suppression (Piece B)", () => {
 
 describe("Layout — desktop/tablet unchanged", () => {
   beforeEach(() => {
-    vi.mocked(useIsMobile).mockReturnValue(false);
+    setViewportWidth(1280);
   });
 
   it("at 768px and above still mounts AppSidebar inside SidebarInset, never the phone Navigate screen", () => {
