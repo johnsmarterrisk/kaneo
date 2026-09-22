@@ -52,7 +52,15 @@ export default function OperonPhoneNavigate() {
           </span>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* `!justify-start` on every row in the list panel. `index.css`'s own base rule
+            (`button:not([data-touch-compact])`, specificity (0,1,1)) centres EVERY button in
+            this app, and it outranks a bare utility class (0,1,0) — so Kaneo's reused
+            NavMain/NavProjects/Search rows rendered centred here, which is most of what
+            "Initiative is a little jumbled" looked like at 375px. Applied as a scoped
+            descendant variant rather than by editing the three Kaneo components, so the
+            desktop rail those same components draw is untouched. Operon's own
+            `Sidebar.tsx` records this identical trap and the identical fix. */}
+        <div className="flex-1 min-h-0 overflow-y-auto [&_button]:!justify-start [&_a]:!justify-start">
           <Search />
           <NavMain />
           <NavProjects />
