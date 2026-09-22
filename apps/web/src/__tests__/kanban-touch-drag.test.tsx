@@ -261,3 +261,42 @@ describe("the shipped card and board keep that contract", () => {
     expect(BOARD).toMatch(/tolerance: 10/);
   });
 });
+
+/**
+ * The phone board layout (John, real iPhone 2026-09-22: "cards squeezed").
+ *
+ * Read from source rather than measured: jsdom computes no layout, so a rendered column
+ * has no width to assert, and `calc(100vw - 2rem)` only becomes a number in a browser.
+ * What can regress here is the RULE, and the rule is the fix — one column per screen, the
+ * viewport minus its two 16px gutters, snapping between them, with the desktop board
+ * untouched above `md`.
+ */
+describe("the phone board shows one column at a time", () => {
+  it("sizes each column to the viewport minus its gutters, and snaps between them", () => {
+    // 100vw − 2rem is the viewport minus 16px of gutter on each side; `mx-4` is that
+    // gutter, so at 375px a column is 343px and the next one is fully off-screen.
+    expect(BOARD).toContain("max-md:w-[calc(100vw-2rem)]");
+    expect(BOARD).toContain("max-md:mx-4");
+    expect(BOARD).toContain("max-md:snap-start");
+    expect(BOARD).toContain("max-md:snap-x");
+    expect(BOARD).toContain("max-md:snap-mandatory");
+    // The desktop min/max widths must not apply on a phone, or the column cannot shrink.
+    expect(BOARD).toContain("max-md:min-w-0");
+    expect(BOARD).toContain("max-md:max-w-none");
+  });
+
+  it("keeps the multi-column desktop board unchanged above md", () => {
+    expect(BOARD).toContain("max-w-96 min-w-80");
+    expect(BOARD).toContain("gap-3 p-3");
+  });
+
+  it("gives the strip a tab row so the other columns are discoverable", () => {
+    // A snapping strip with nothing above it hides every column but one.
+    expect(BOARD).toContain('data-testid="phone-column-tabs"');
+    expect(BOARD).toContain("md:hidden");
+    expect(BOARD).toContain("min-h-[44px]");
+    // Throttled to a frame: a flick must not schedule a React render per scroll event.
+    expect(BOARD).toContain("requestAnimationFrame");
+    expect(BOARD).toContain("cancelAnimationFrame");
+  });
+});

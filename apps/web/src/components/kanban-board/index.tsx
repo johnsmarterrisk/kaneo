@@ -16,7 +16,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { produce } from "immer";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import useBulkSelectionStore from "@/store/bulk-selection";
@@ -30,6 +30,47 @@ type KanbanBoardProps = {
   project: ProjectWithTasks;
   disableDragDrop?: boolean;
 };
+
+/**
+ * The phone column indicator (John, real iPhone 2026-09-22). A snapping strip with nothing
+ * above it is a board whose other columns are invisible and undiscoverable; these tabs name
+ * every column, mark the one on screen and move to any of them on a tap. Phone only — the
+ * `md` board shows every column at once and needs no index.
+ */
+function PhoneColumnTabs({
+  columns,
+  activeId,
+  onSelect,
+}: {
+  columns: { id: string; name: string }[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (columns.length === 0) return null;
+  return (
+    <div
+      data-testid="phone-column-tabs"
+      className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-1 md:hidden"
+    >
+      {columns.map((column) => (
+        <button
+          key={column.id}
+          type="button"
+          data-testid={`phone-column-tab-${column.id}`}
+          aria-current={column.id === activeId ? "true" : undefined}
+          onClick={() => onSelect(column.id)}
+          className={`min-h-[44px] shrink-0 rounded-md px-3 text-sm whitespace-nowrap ${
+            column.id === activeId
+              ? "bg-accent font-medium text-accent-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          {column.name}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
   const queryClient = useQueryClient();
@@ -105,6 +146,56 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       },
     }),
     useSensor(KeyboardSensor),
+  );
+
+  /* Which column the snapping strip is showing, and how the tabs move it.
+     `scrollIntoView` rather than a controlled scrollLeft: the browser owns snap points and
+     fighting it with a pixel offset is what makes a snapping strip feel sticky. The scroll
+     handler is rAF-throttled so a flick cannot schedule a React render per frame. */
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [visibleColumnId, setVisibleColumnId] = useState<string | null>(null);
+  const scrollTick = useRef<number | null>(null);
+
+  const scrollToColumn = useCallback((id: string) => {
+    stripRef.current
+      ?.querySelector(`[data-column-id="${id}"]`)
+      ?.scrollIntoView({
+        behavior: "smooth",
+        inline: "start",
+        block: "nearest",
+      });
+  }, []);
+
+  const onStripScroll = useCallback(() => {
+    if (scrollTick.current !== null) return;
+    scrollTick.current = requestAnimationFrame(() => {
+      scrollTick.current = null;
+      const strip = stripRef.current;
+      if (!strip) return;
+      const mid = strip.scrollLeft + strip.clientWidth / 2;
+      let nearest: string | null = null;
+      for (const el of strip.querySelectorAll<HTMLElement>(
+        "[data-column-id]",
+      )) {
+        if (el.offsetLeft <= mid && el.offsetLeft + el.offsetWidth > mid) {
+          nearest = el.dataset.columnId ?? null;
+          break;
+        }
+      }
+      setVisibleColumnId((prev) => (prev === nearest ? prev : nearest));
+    });
+  }, []);
+
+  useEffect(() => {
+    const first = project.columns?.[0]?.id ?? null;
+    setVisibleColumnId((prev) => prev ?? first);
+  }, [project.columns]);
+
+  useEffect(
+    () => () => {
+      if (scrollTick.current !== null) cancelAnimationFrame(scrollTick.current);
+    },
+    [],
   );
 
   const dropAnimation: DropAnimation = {
@@ -254,12 +345,28 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       onDragEnd={handleDragEnd}
     >
       <div className="flex h-full w-full flex-col bg-background">
-        <div className="min-h-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-          <div className="flex h-full min-w-max gap-3 p-3">
+        {/* PHONE: one column at a time (John, real iPhone 2026-09-22 — "cards squeezed").
+            A 320px min-width column inside a 375px screen left the cards cramped and the
+            next column half-visible, so nothing was comfortable to read or to drop onto.
+            Below `md` each column is exactly the viewport minus the 16px gutters either
+            side and the strip snaps between them; `md` and up is unchanged. The tabs are
+            how a reader moves between columns without having to discover the swipe. */}
+        <PhoneColumnTabs
+          columns={project.columns ?? []}
+          activeId={visibleColumnId}
+          onSelect={scrollToColumn}
+        />
+        <div
+          ref={stripRef}
+          onScroll={onStripScroll}
+          className="min-h-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch] max-md:snap-x max-md:snap-mandatory"
+        >
+          <div className="flex h-full min-w-max gap-3 p-3 max-md:gap-0 max-md:p-0">
             {project.columns?.map((column) => (
               <div
                 key={column.id}
-                className="h-full max-w-96 min-w-80 shrink-0 flex-1"
+                data-column-id={column.id}
+                className="h-full max-w-96 min-w-80 shrink-0 flex-1 max-md:mx-4 max-md:w-[calc(100vw-2rem)] max-md:max-w-none max-md:min-w-0 max-md:snap-start"
               >
                 <Column column={column} disableDragDrop={disableDragDrop} />
               </div>
