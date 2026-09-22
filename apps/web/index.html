@@ -163,11 +163,18 @@
       <div style="width:100%;height:36px;border-radius:6px;background:rgba(255,255,255,.10);"></div>
     </div>
   </div>
+  <div id="root"></div>
   <script>
     // Removes the skeleton the moment #root gains its first real child — main.tsx's own
     // `if (!rootElement.innerHTML)` mount guard requires #root to still be genuinely empty
     // when it runs, so this observer (not a React effect) is what tears the skeleton down.
-    // Never throws: a missing #root/skeleton (a future markup change) must not block paint.
+    // MUST run after `#root` exists in the DOM (hence its position below the div, not
+    // above it): `document.getElementById('root')` returns null during parsing of
+    // anything earlier in the document, which silently no-ops the whole observer —
+    // exactly the second bug this markup already shipped once (manager catch, live-
+    // container repro: the skeleton stayed visible forever, covering a fully-mounted app
+    // underneath it, because this script used to sit ABOVE the `#root` div). Never
+    // throws: a missing #root/skeleton (a future markup change) must not block paint.
     (function () {
       try {
         var skeleton = document.getElementById('operon-skeleton');
@@ -185,7 +192,6 @@
       }
     })();
   </script>
-  <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 
