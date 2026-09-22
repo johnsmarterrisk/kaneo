@@ -1,5 +1,6 @@
+import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
-import Layout from "@/components/common/layout";
+import Layout, { usePhoneNav } from "@/components/common/layout";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -34,12 +35,28 @@ export default function WorkspaceLayout({
   className,
 }: WorkspaceLayoutProps) {
   const { data: workspace } = useActiveWorkspace();
+  const phoneNav = usePhoneNav();
 
   return (
     <Layout>
       <Layout.Header>
         <div className="flex items-center justify-between w-full">
-          <div className="flex min-w-0 items-center gap-1">
+          {/* Phone Work top bar (Piece B): back arrow + title only — the desktop
+              breadcrumb/sidebar-toggle block below is `hidden` at this width rather than
+              removed, so nothing about it needs to change for md and up. */}
+          <div className="flex md:hidden min-w-0 items-center gap-2">
+            <button
+              type="button"
+              data-testid="phone-back-to-navigate"
+              aria-label="Back to Navigate"
+              onClick={() => phoneNav?.openPhoneNav()}
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+            >
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </button>
+            <span className="truncate text-base font-bold">{title}</span>
+          </div>
+          <div className="hidden md:flex min-w-0 items-center gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

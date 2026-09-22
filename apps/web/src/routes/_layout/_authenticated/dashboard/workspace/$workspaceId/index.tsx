@@ -257,10 +257,13 @@ function RouteComponent() {
                 <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.title")}
                 </TableHead>
-                <TableHead className="text-card-foreground font-medium">
+                {/* Phone project list (Piece B): collapses to Title + Status —
+                    Progress/Target date hidden below 768px via Tailwind's own `md:`
+                    breakpoint, which is exactly this fork's phone/desktop split. */}
+                <TableHead className="hidden md:table-cell text-card-foreground font-medium">
                   {t("workspace:projects.progress")}
                 </TableHead>
-                <TableHead className="text-card-foreground font-medium">
+                <TableHead className="hidden md:table-cell text-card-foreground font-medium">
                   {t("workspace:projects.targetDate")}
                 </TableHead>
                 <TableHead className="text-card-foreground font-medium">
@@ -277,10 +280,10 @@ function RouteComponent() {
                       <Skeleton className="h-4 w-24" />
                     </div>
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="hidden md:table-cell py-3">
                     <Skeleton className="h-2 w-20" />
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="hidden md:table-cell py-3">
                     <Skeleton className="h-4 w-20" />
                   </TableCell>
                   <TableCell className="py-3">
@@ -379,10 +382,12 @@ function RouteComponent() {
                 <TableHead className="text-card-foreground font-medium">
                   {t("workspace:projects.title")}
                 </TableHead>
-                <TableHead className="text-card-foreground font-medium">
+                {/* Phone project list (Piece B): collapses to Title + Status — see the
+                    identical note on the skeleton table above. */}
+                <TableHead className="hidden md:table-cell text-card-foreground font-medium">
                   {t("workspace:projects.progress")}
                 </TableHead>
-                <TableHead className="text-card-foreground font-medium">
+                <TableHead className="hidden md:table-cell text-card-foreground font-medium">
                   {t("workspace:projects.dueDate")}
                 </TableHead>
                 <TableHead className="text-card-foreground font-medium">
@@ -438,7 +443,7 @@ function RouteComponent() {
                             <span className="font-medium">{project.name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-3">
+                        <TableCell className="hidden md:table-cell py-3">
                           <div className="flex items-center gap-2">
                             <Progress
                               value={project.statistics.completionPercentage}
@@ -449,7 +454,7 @@ function RouteComponent() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-3">
+                        <TableCell className="hidden md:table-cell py-3">
                           <span className="text-sm text-muted-foreground">
                             {project.statistics.dueDate
                               ? formatDateMedium(project.statistics.dueDate)

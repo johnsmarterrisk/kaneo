@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   CalendarDays,
   CalendarRange,
   SquareKanban,
@@ -7,10 +8,9 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import MobileProjectNav from "@/components/common/header/mobile-project-nav";
 import ProjectCrumbSelect from "@/components/common/header/project-crumb-select";
 import WorkspaceCrumbSelect from "@/components/common/header/workspace-crumb-select";
-import Layout from "@/components/common/layout";
+import Layout, { usePhoneNav } from "@/components/common/layout";
 import CreateProjectModal from "@/components/shared/modals/create-project-modal";
 import { Button } from "@/components/ui/button";
 import { KbdSequence } from "@/components/ui/kbd";
@@ -46,6 +46,7 @@ export default function ProjectLayout({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const phoneNav = usePhoneNav();
   const { data: project } = useGetProject({ id: projectId, workspaceId });
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] =
     useState(false);
@@ -111,7 +112,31 @@ export default function ProjectLayout({
     <Layout>
       <Layout.Header className="border-border px-4">
         <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {/* Phone Work top bar (Piece B): back arrow + project title only. Supersedes
+              `MobileProjectNav`'s old hamburger-style popover (project switch + view
+              select) at this width — the Navigate screen now owns project switching (its
+              project list, `NavProjects`), and a working hamburger left behind here would
+              contradict the two-screen model's own "no hamburger" rule. `MobileProjectNav`
+              itself is untouched and still declared; it is simply not called from this
+              width any more. Backlog/Calendar/Gantt on phones is unreached by this brief
+              (Piece B names project list, board/list view and task detail only) — filed as
+              an open item, not silently dropped. */}
+          <div className="flex md:hidden min-w-0 items-center gap-2">
+            <button
+              type="button"
+              data-testid="phone-back-to-navigate"
+              aria-label="Back to Navigate"
+              onClick={() => phoneNav?.openPhoneNav()}
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+            >
+              <ArrowLeft className="size-5" aria-hidden="true" />
+            </button>
+            <span className="truncate text-base font-bold">
+              {project?.name ?? t("navigation:sidebar.projects")}
+            </span>
+          </div>
+
+          <div className="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -133,27 +158,13 @@ export default function ProjectLayout({
 
             <div className="h-4 w-px shrink-0 bg-border/80" />
 
-            <div className="hidden min-w-0 items-center gap-1 md:flex">
+            <div className="flex min-w-0 items-center gap-1">
               <WorkspaceCrumbSelect />
               <span className="text-card-foreground/30 text-xs">/</span>
               <ProjectCrumbSelect
                 workspaceId={workspaceId}
                 projectId={projectId}
                 projectName={project?.name}
-                onSelectProject={handleProjectSwitch}
-                onAddProject={() => setIsCreateProjectModalOpen(true)}
-              />
-            </div>
-
-            <div className="md:hidden">
-              <MobileProjectNav
-                workspaceId={workspaceId}
-                projectId={projectId}
-                activeView={resolvedView}
-                onSelectBacklog={handleNavigateToBacklog}
-                onSelectBoard={handleNavigateToBoard}
-                onSelectCalendar={handleNavigateToCalendar}
-                onSelectGantt={handleNavigateToGantt}
                 onSelectProject={handleProjectSwitch}
                 onAddProject={() => setIsCreateProjectModalOpen(true)}
               />
