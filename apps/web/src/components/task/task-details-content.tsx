@@ -1,19 +1,25 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CalendarClock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import Activity from "@/components/activity";
 import CommentInput from "@/components/activity/comment-input";
 import { isCommentActivity } from "@/components/activity/utils";
 import { ExternalLinksAccordion } from "@/components/external-links/external-links-accordion";
 import useAuth from "@/components/providers/auth-provider/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Timeline } from "@/components/ui/timeline";
 import useGetActivitiesByTaskId from "@/hooks/queries/activity/use-get-activities-by-task-id";
 import useExternalLinks from "@/hooks/queries/external-link/use-external-links";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
+import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
+import { formatDateShort } from "@/lib/format";
+import { getInitials } from "@/lib/get-initials";
 import type { ExternalLink } from "@/types/external-link";
+import TaskAssigneePopover from "./task-assignee-popover";
 import TaskDescription from "./task-description";
+import TaskDueDatePopover from "./task-due-date-popover";
 import TaskRelations from "./task-relations";
 import TaskSubtasks from "./task-subtasks";
 import TaskTitle from "./task-title";
@@ -39,12 +45,17 @@ export default function TaskDetailsContent({
   const { data: externalLinks = [], isLoading: isLoadingExternalLinks } =
     useExternalLinks(taskId ?? "");
   const { data: relations = [] } = useGetTaskRelations(taskId ?? "");
+  const { data: workspaceUsers } = useGetActiveWorkspaceUsers(workspaceId);
   const { user } = useAuth();
 
   const parentRelation = relations.find(
     (rel) => rel.relationType === "subtask" && rel.targetTaskId === taskId,
   );
   const parentTask = parentRelation?.sourceTask;
+
+  const assignee = workspaceUsers?.members?.find(
+    (member) => member.userId === task?.userId,
+  );
 
   if (!taskId) return null;
 
@@ -77,6 +88,51 @@ export default function TaskDetailsContent({
           {project?.slug}-{task?.number}
         </p>
         <TaskTitle taskId={taskId} />
+        {/* Assignee + due row (Piece B, Asana IMG_2123) — phone task detail only. Sits
+            directly beneath the title, matching the reference's header block; the full
+            properties panel (`TaskPropertiesSidebar`, every field including these two)
+            still also renders below via `task-layout.tsx`'s existing `lg:hidden` block,
+            UNCHANGED per the brief's own instruction not to touch the `lg:` split — so on
+            a 768-1023px tablet this row and the full panel both show, which is accepted
+            redundancy rather than a second edit to code outside this brief's scope. */}
+        {task && (
+          <div className="flex md:hidden items-center gap-3 text-sm">
+            <TaskAssigneePopover task={task} workspaceId={workspaceId}>
+              <button
+                type="button"
+                data-testid="phone-task-assignee"
+                className="flex min-h-[32px] items-center gap-1.5 rounded-full bg-secondary px-2 py-1"
+              >
+                <Avatar className="h-5 w-5">
+                  <AvatarImage
+                    src={assignee?.user?.image ?? ""}
+                    alt={assignee?.user?.name || ""}
+                  />
+                  <AvatarFallback className="text-[9px] font-medium">
+                    {getInitials(assignee?.user?.name || task.assigneeName)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-medium text-card-foreground">
+                  {assignee?.user?.name ||
+                    task.assigneeName ||
+                    t("tasks:popover.assignee.unassigned")}
+                </span>
+              </button>
+            </TaskAssigneePopover>
+            <TaskDueDatePopover task={task}>
+              <button
+                type="button"
+                data-testid="phone-task-due-date"
+                className="flex min-h-[32px] items-center gap-1.5 rounded-full bg-secondary px-2 py-1 text-xs font-medium text-card-foreground"
+              >
+                <CalendarClock className="size-3.5" aria-hidden="true" />
+                {task.dueDate
+                  ? formatDateShort(task.dueDate)
+                  : t("tasks:backlog.filters.noDueDate")}
+              </button>
+            </TaskDueDatePopover>
+          </div>
+        )}
         <TaskDescription taskId={taskId} />
       </div>
       {!isLoadingExternalLinks && externalLinks.length > 0 && (
