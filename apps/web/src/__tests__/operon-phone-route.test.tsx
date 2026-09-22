@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { transformSync } from "@babel/core";
 import { describe, expect, it } from "vitest";
 
 import { phoneBackTarget, phoneScreenForPath } from "@/store/phone-nav";
@@ -66,33 +67,100 @@ describe("where back goes — one step up the route, never history.back()", () =
   });
 });
 
-describe("no history interception survives anywhere in the phone code", () => {
-  const files = [
-    "src/components/common/layout.tsx",
-    "src/store/phone-nav.ts",
-    "src/components/common/workspace-layout.tsx",
-    "src/components/common/project-layout.tsx",
-    "src/components/common/task-layout.tsx",
-  ];
+describe("route edge cases", () => {
+  it.each(["members", "settings", "search", "unknown/child"])(
+    "%s stays in Work and backs up to the workspace",
+    (suffix) => {
+      const path = `/dashboard/workspace/ws-1/${suffix}`;
+      expect(phoneScreenForPath(path)).toBe("work");
+      expect(phoneBackTarget(path)).toEqual({
+        to: "/dashboard/workspace/ws-1",
+      });
+    },
+  );
 
-  it("no pushState, replaceState, popstate listener or history.back() in executable code", () => {
-    for (const file of files) {
-      const source = readFileSync(join(process.cwd(), file), "utf8");
-      // Comments explaining the removal are expected and welcome; CODE is not. Strip block
-      // and line comments before looking.
-      const code = source
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
-      expect(code, `${file} still pushes history`).not.toMatch(
-        /history\.pushState/,
-      );
-      expect(code, `${file} still replaces history`).not.toMatch(
-        /history\.replaceState/,
-      );
-      expect(code, `${file} still goes back`).not.toMatch(/history\.back\(/);
-      expect(code, `${file} still listens for popstate`).not.toMatch(
-        /"popstate"|'popstate'/,
-      );
+  it.each([
+    "/",
+    "/unknown",
+    "/dashboard",
+    "/dashboard/settings/account",
+    "/dashboard/workspace/create",
+  ])("%s cannot leave for the apex", (path) =>
+    expect(phoneBackTarget(path)).toEqual({ to: "/dashboard" }),
+  );
+
+  it("preserves encoded ids and tolerates a trailing slash", () => {
+    expect(
+      phoneBackTarget("/dashboard/workspace/w%20s/project/p%20x/task/t/"),
+    ).toEqual({ to: "/dashboard/workspace/w%20s/project/p%20x/board" });
+    expect(phoneBackTarget("/dashboard/workspace/ws-1/")).toEqual({
+      apex: true,
+    });
+  });
+});
+
+// Compile away comments with a real parser, rather than deleting comment-like text
+// inside string literals. Scan all production web sources, including new phone files.
+function executable(source: string): string {
+  return (
+    transformSync(source, {
+      configFile: false,
+      babelrc: false,
+      comments: false,
+      parserOpts: { plugins: ["typescript", "jsx"] },
+    })?.code ?? ""
+  );
+}
+const historyInterception =
+  /\b(?:pushState|replaceState|popstate|onpopstate)\b|\bhistory\s*(?:\?\.)?\s*(?:\.\s*back|\[\s*["']back["']\s*\])/;
+function productionFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return productionFiles(path);
+    return /\.tsx?$/.test(path) &&
+      !/\.test\.|routeTree\.gen|\.d\.ts$/.test(path)
+      ? [path]
+      : [];
+  });
+}
+
+describe("no history interception in reachable web source", () => {
+  it("checks executable source, including new files and the Navigate subtree", () => {
+    for (const file of productionFiles(join(process.cwd(), "src"))) {
+      // This unused upstream component predates the phone fork and is outside the
+      // permitted edit fence. Keep it unreachable until its fallback is repaired.
+      if (file.endsWith("/components/settings-layout.tsx")) continue;
+      const code = executable(readFileSync(file, "utf8"));
+      expect(code, file).not.toMatch(historyInterception);
+      expect(
+        code,
+        `${file} imports the unused history-back component`,
+      ).not.toMatch(/["'][^"']*settings-layout(?:\.[tj]sx?)?["']/);
     }
+  });
+
+  it.each([
+    "window.history.pushState({}, '')",
+    "window.history /* comment */ .replaceState({}, '')",
+    "const { pushState } = window.history",
+    "window.history['back']()",
+    "window.addEventListener(`popstate`, handler)",
+    "const url = 'https://example.test'; window.history.back()",
+  ])("rejects a restored history operation: %s", (source) => {
+    expect(executable(source)).toMatch(historyInterception);
+  });
+
+  it("allows comments documenting the removed operations", () => {
+    expect(
+      executable("/* history.back(); popstate */ const x = 1; // pushState"),
+    ).not.toMatch(historyInterception);
+  });
+
+  it("keeps router pending delays at their defaults", () => {
+    const code = executable(
+      readFileSync(join(process.cwd(), "src/main.tsx"), "utf8"),
+    );
+    expect(code).toContain("defaultPendingComponent: RoutePending");
+    expect(code).not.toMatch(/\bdefaultPending(?:Min)?Ms\s*:/);
   });
 });

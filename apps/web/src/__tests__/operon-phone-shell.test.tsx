@@ -1,5 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type * as React from "react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -27,8 +34,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * i18n, or React Query — those are exercised elsewhere (`operon-switcher.test.tsx`).
  */
 
+const router = vi.hoisted(() => ({
+  pathname: "/dashboard/workspace/w1",
+  navigate: vi.fn(),
+}));
 vi.mock("@tanstack/react-router", () => ({
-  useLocation: () => ({ pathname: "/dashboard/workspace/w1" }),
+  useLocation: () => ({ pathname: router.pathname }),
+  useNavigate: () => router.navigate,
+}));
+vi.mock("@/components/operon-switcher", () => ({
+  apexUrl: () => "https://operon.example.test",
 }));
 
 vi.mock("@/store/user-preferences", () => ({
@@ -53,17 +68,6 @@ vi.mock("@/components/common/operon-phone-navigate", () => ({
   default: () => <div data-testid="phone-navigate-marker" />,
 }));
 
-// Navigate stays open for every case here: this file tests the phone/desktop BRANCH
-// choice, not the open/close transition (that behaviour belongs with whatever test covers
-// the back-arrow / route-change close, out of this file's scope).
-
-// The phone screen is a pure function of the route now — no store to stub. The workspace
-// ROOT is Navigate, which is the fixture this file has always used.
-vi.mock("@/store/phone-nav", () => ({
-  phoneScreenForPath: () => "navigate",
-  phoneBackTarget: () => ({ apex: true }),
-}));
-
 type Slot = { children?: React.ReactNode; className?: string };
 const slot =
   (testId: string) =>
@@ -74,7 +78,9 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarInset: slot("sidebar-inset"),
 }));
 
-const { default: Layout } = await import("@/components/common/layout");
+const { default: Layout, usePhoneNav } = await import(
+  "@/components/common/layout"
+);
 
 function setViewportWidth(width: number): void {
   Object.defineProperty(window, "innerWidth", {
@@ -85,6 +91,8 @@ function setViewportWidth(width: number): void {
 }
 
 beforeEach(() => {
+  router.pathname = "/dashboard/workspace/w1";
+  router.navigate.mockClear();
   // See this file's own doc comment: jsdom has neither API, and `useSyncedIsMobile`
   // (mount-time initial read) plus the shared `use-mobile.ts` (still used elsewhere in
   // this tree, e.g. `ui/sidebar.tsx`'s own `SidebarProvider`) both call `matchMedia`.
@@ -149,5 +157,79 @@ describe("Layout — desktop/tablet unchanged", () => {
     expect(screen.getByTestId("sidebar-inset")).toBeTruthy();
     expect(screen.getByTestId("work-content")).toBeTruthy();
     expect(screen.queryByTestId("phone-navigate-marker")).toBeNull();
+  });
+});
+
+function PhoneBack() {
+  const { goBack } = usePhoneNav();
+  return (
+    <button type="button" onClick={goBack}>
+      Back
+    </button>
+  );
+}
+
+describe("mounted phone route model", () => {
+  it("mounts, changes routes, and remounts without navigating from render or effects", () => {
+    setViewportWidth(390);
+    const tree = () => (
+      <StrictMode>
+        <Layout>
+          <PhoneBack />
+        </Layout>
+      </StrictMode>
+    );
+    const view = render(tree());
+    expect(screen.getByTestId("phone-navigate-marker")).toBeTruthy();
+    for (const path of [
+      "/dashboard/workspace/w1/project/p1/board",
+      "/dashboard/workspace/w1/project/p1/task/t1",
+      "/dashboard/workspace/w1/members",
+    ]) {
+      router.pathname = path;
+      view.rerender(tree());
+      expect(screen.queryByTestId("phone-navigate-marker")).toBeNull();
+      expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    }
+    router.pathname = "/dashboard/workspace/w1";
+    view.rerender(tree());
+    expect(screen.getByTestId("phone-navigate-marker")).toBeTruthy();
+    view.unmount();
+    render(tree());
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "/dashboard/workspace/w1/project/p1/task/t1",
+      "/dashboard/workspace/w1/project/p1/board",
+    ],
+    ["/dashboard/workspace/w1/project/p1/board", "/dashboard/workspace/w1"],
+    ["/dashboard/workspace/w1/members", "/dashboard/workspace/w1"],
+    ["/unknown", "/dashboard"],
+  ])("back from %s navigates once, only on click", (path, to) => {
+    router.pathname = path;
+    render(
+      <StrictMode>
+        <PhoneBack />
+      </StrictMode>,
+    );
+    expect(router.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(router.navigate).toHaveBeenCalledExactlyOnceWith({ to });
+  });
+
+  it("loads the apex helper only on a root back click", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", { location: { assign } });
+    render(<PhoneBack />);
+    expect(assign).not.toHaveBeenCalled();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Back" })),
+    );
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      "https://operon.example.test",
+    );
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 });

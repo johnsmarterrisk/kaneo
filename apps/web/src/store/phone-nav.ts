@@ -60,8 +60,13 @@ export function phoneBackTarget(
   const project = PROJECT_ROUTE.exec(pathname);
   if (project) return { to: `/dashboard/workspace/${project[1]}` };
   const workspace = WORKSPACE_ANY.exec(pathname);
-  if (workspace && workspace[2]) {
+  if (workspace?.[2]) {
     return { to: `/dashboard/workspace/${workspace[1]}` };
   }
-  return { apex: true };
+  if (WORKSPACE_ROOT.test(pathname) && workspace?.[1] !== "create") {
+    return { apex: true };
+  }
+  // Unknown and non-workspace routes stay in the app; /dashboard resolves the
+  // active workspace (or onboarding) through the router.
+  return { to: "/dashboard" };
 }

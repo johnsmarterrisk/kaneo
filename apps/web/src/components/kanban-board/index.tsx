@@ -148,38 +148,43 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
     useSensor(KeyboardSensor),
   );
 
-  /* Which column the snapping strip is showing, and how the tabs move it.
-     `scrollIntoView` rather than a controlled scrollLeft: the browser owns snap points and
-     fighting it with a pixel offset is what makes a snapping strip feel sticky. The scroll
-     handler is rAF-throttled so a flick cannot schedule a React render per frame. */
+  // Measure in viewport coordinates: offsetLeft may belong to an ancestor outside
+  // the strip. Pick the nearest centre even while the midpoint crosses a gutter.
   const stripRef = useRef<HTMLDivElement>(null);
   const [visibleColumnId, setVisibleColumnId] = useState<string | null>(null);
   const scrollTick = useRef<number | null>(null);
 
   const scrollToColumn = useCallback((id: string) => {
-    stripRef.current
-      ?.querySelector(`[data-column-id="${id}"]`)
-      ?.scrollIntoView({
-        behavior: "smooth",
-        inline: "start",
-        block: "nearest",
-      });
+    const column = Array.from(
+      stripRef.current?.querySelectorAll<HTMLElement>("[data-column-id]") ?? [],
+    ).find((element) => element.dataset.columnId === id);
+    column?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      inline: "start",
+      block: "nearest",
+    });
   }, []);
 
   const onStripScroll = useCallback(() => {
-    if (scrollTick.current !== null) return;
+    if (window.innerWidth >= 768 || scrollTick.current !== null) return;
     scrollTick.current = requestAnimationFrame(() => {
       scrollTick.current = null;
       const strip = stripRef.current;
       if (!strip) return;
-      const mid = strip.scrollLeft + strip.clientWidth / 2;
+      const bounds = strip.getBoundingClientRect();
+      const mid = bounds.left + strip.clientWidth / 2;
       let nearest: string | null = null;
+      let distance = Number.POSITIVE_INFINITY;
       for (const el of strip.querySelectorAll<HTMLElement>(
         "[data-column-id]",
       )) {
-        if (el.offsetLeft <= mid && el.offsetLeft + el.offsetWidth > mid) {
+        const rect = el.getBoundingClientRect();
+        const delta = Math.abs(rect.left + rect.width / 2 - mid);
+        if (delta < distance) {
           nearest = el.dataset.columnId ?? null;
-          break;
+          distance = delta;
         }
       }
       setVisibleColumnId((prev) => (prev === nearest ? prev : nearest));
@@ -187,16 +192,25 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
   }, []);
 
   useEffect(() => {
-    const first = project.columns?.[0]?.id ?? null;
-    setVisibleColumnId((prev) => prev ?? first);
-  }, [project.columns]);
+    // Columns can be removed/reordered by another client without a scroll event.
+    if (!project.columns) return;
+    onStripScroll();
+  }, [project.columns, onStripScroll]);
 
-  useEffect(
-    () => () => {
+  const hasColumns = project.columns !== undefined;
+  useEffect(() => {
+    if (!hasColumns) return;
+    const strip = stripRef.current;
+    const observer = new ResizeObserver(onStripScroll);
+    if (strip) observer.observe(strip);
+    window.addEventListener("resize", onStripScroll);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", onStripScroll);
       if (scrollTick.current !== null) cancelAnimationFrame(scrollTick.current);
-    },
-    [],
-  );
+      scrollTick.current = null;
+    };
+  }, [onStripScroll, hasColumns]);
 
   const dropAnimation: DropAnimation = {
     sideEffects: defaultDropAnimationSideEffects({
@@ -343,12 +357,13 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveId(null)}
     >
       <div className="flex h-full w-full flex-col bg-background">
         {/* PHONE: one column at a time (John, real iPhone 2026-09-22 — "cards squeezed").
             A 320px min-width column inside a 375px screen left the cards cramped and the
             next column half-visible, so nothing was comfortable to read or to drop onto.
-            Below `md` each column is exactly the viewport minus the 16px gutters either
+            Below `md` each column is exactly the strip width minus the 16px gutters either
             side and the strip snaps between them; `md` and up is unchanged. The tabs are
             how a reader moves between columns without having to discover the swipe. */}
         <PhoneColumnTabs
@@ -359,14 +374,14 @@ function KanbanBoard({ project, disableDragDrop = false }: KanbanBoardProps) {
         <div
           ref={stripRef}
           onScroll={onStripScroll}
-          className="min-h-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch] max-md:snap-x max-md:snap-mandatory"
+          className={`min-h-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch] max-md:scroll-px-4 ${activeId ? "max-md:snap-none" : "max-md:snap-x max-md:snap-mandatory"}`}
         >
-          <div className="flex h-full min-w-max gap-3 p-3 max-md:gap-0 max-md:p-0">
+          <div className="flex h-full min-w-max gap-3 p-3 max-md:min-w-0 max-md:w-full max-md:gap-0 max-md:p-0">
             {project.columns?.map((column) => (
               <div
                 key={column.id}
                 data-column-id={column.id}
-                className="h-full max-w-96 min-w-80 shrink-0 flex-1 max-md:mx-4 max-md:w-[calc(100vw-2rem)] max-md:max-w-none max-md:min-w-0 max-md:snap-start"
+                className="h-full max-w-96 min-w-80 shrink-0 flex-1 max-md:mx-4 max-md:w-[calc(100%-2rem)] max-md:flex-none max-md:max-w-none max-md:min-w-0 max-md:snap-start"
               >
                 <Column column={column} disableDragDrop={disableDragDrop} />
               </div>

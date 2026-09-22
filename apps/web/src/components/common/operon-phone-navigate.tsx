@@ -73,11 +73,6 @@ function OperonPhoneNavigate() {
   );
 }
 
-/**
- * Memoised (John, real iPhone 2026-09-22: the fork felt laggy). This subtree is the whole
- * Navigate screen — the module strip, Kaneo's nav, the project list and the footer — and it
- * takes no props, so every re-render of `Layout` above it rebuilt all of that for nothing.
- * `Layout` re-renders on each route change and on each viewport event, which on a phone is
- * often.
- */
+// Avoid parent-only renders while mounted. Router/context updates and route remounts
+// still render this subtree; memo does not remove those costs.
 export default memo(OperonPhoneNavigate);

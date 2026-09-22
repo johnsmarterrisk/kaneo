@@ -18,6 +18,7 @@ import {
 } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProjectWithTasks } from "@/types/project";
 
 /**
  * Touch drag on the board (John, real iPhone 2026-09-22; Codex r1 #7, r2 #2).
@@ -148,8 +149,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("the board card's drag wiring, under the board's own sensors", () => {
@@ -266,17 +269,18 @@ describe("the shipped card and board keep that contract", () => {
  * The phone board layout (John, real iPhone 2026-09-22: "cards squeezed").
  *
  * Read from source rather than measured: jsdom computes no layout, so a rendered column
- * has no width to assert, and `calc(100vw - 2rem)` only becomes a number in a browser.
+ * has no width to assert, and `calc(100% - 2rem)` only becomes a number in a browser.
  * What can regress here is the RULE, and the rule is the fix — one column per screen, the
- * viewport minus its two 16px gutters, snapping between them, with the desktop board
+ * container minus its two 16px gutters, snapping between them, with the desktop board
  * untouched above `md`.
  */
 describe("the phone board shows one column at a time", () => {
-  it("sizes each column to the viewport minus its gutters, and snaps between them", () => {
-    // 100vw − 2rem is the viewport minus 16px of gutter on each side; `mx-4` is that
-    // gutter, so at 375px a column is 343px and the next one is fully off-screen.
-    expect(BOARD).toContain("max-md:w-[calc(100vw-2rem)]");
+  it("sizes each column to its container minus its gutters, and snaps between them", () => {
+    // Percentage sizing follows the strip even when it is narrower than the viewport.
+    expect(BOARD).toContain("max-md:w-[calc(100%-2rem)]");
     expect(BOARD).toContain("max-md:mx-4");
+    expect(BOARD).toContain("max-md:scroll-px-4");
+    expect(BOARD).toContain("max-md:flex-none");
     expect(BOARD).toContain("max-md:snap-start");
     expect(BOARD).toContain("max-md:snap-x");
     expect(BOARD).toContain("max-md:snap-mandatory");
@@ -298,5 +302,232 @@ describe("the phone board shows one column at a time", () => {
     // Throttled to a frame: a flick must not schedule a React render per scroll event.
     expect(BOARD).toContain("requestAnimationFrame");
     expect(BOARD).toContain("cancelAnimationFrame");
+  });
+});
+
+// Mount the SHIPPED strip, sensors, and drag lifecycle. Only domain dependencies and
+// the column contents are isolated; jsdom geometry is supplied per test.
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("@/hooks/mutations/task/use-update-task", () => ({
+  useUpdateTask: () => ({ mutate: vi.fn() }),
+}));
+vi.mock("@/hooks/use-keyboard-shortcuts", () => ({
+  useRegisterShortcuts: () => {},
+}));
+vi.mock("@/components/bulk-selection/bulk-toolbar", () => ({
+  default: () => null,
+}));
+vi.mock("@/components/kanban-board/task-card", () => ({ default: () => null }));
+vi.mock("@/components/kanban-board/column", () => ({
+  default: ({ column }: { column: ProjectWithTasks["columns"][number] }) => (
+    <SortableContext items={column.tasks}>
+      {column.tasks.map((task) => (
+        <Card key={task.id} id={task.id} />
+      ))}
+    </SortableContext>
+  ),
+}));
+const { default: KanbanBoard } = await import("@/components/kanban-board");
+
+const project = {
+  id: "p1",
+  workspaceId: "w1",
+  name: "Board",
+  columns: [
+    { id: "a", slug: "a", name: "First", tasks: [{ id: "t1" }] },
+    { id: "b", slug: "b", name: "Second", tasks: [] },
+    { id: "c", slug: "c", name: "Third", tasks: [] },
+  ],
+} as ProjectWithTasks;
+
+function stripGeometry(container: HTMLElement, lefts: number[]) {
+  const columns = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-column-id]"),
+  );
+  const strip = columns[0].parentElement?.parentElement as HTMLElement;
+  Object.defineProperty(strip, "clientWidth", {
+    configurable: true,
+    value: 300,
+  });
+  vi.spyOn(strip, "getBoundingClientRect").mockReturnValue({
+    left: 70,
+    width: 300,
+  } as DOMRect);
+  columns.forEach((column, index) => {
+    vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
+      left: lefts[index],
+      width: 268,
+    } as DOMRect);
+  });
+  return strip;
+}
+
+describe("the real board strip", () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  const observers: {
+    observe: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  }[] = [];
+  function flushFrame() {
+    act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      for (const callback of pending) callback(0);
+    });
+  }
+  beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    frames.clear();
+    observers.length = 0;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.set(++nextFrame, callback);
+        return nextFrame;
+      }),
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => frames.delete(id)),
+    );
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+        constructor() {
+          observers.push(this);
+        }
+      },
+    );
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+  });
+
+  it("coalesces scrolls, uses container coordinates, and selects a neighbour in a gutter", () => {
+    const { container } = render(<KanbanBoard project={project} />);
+    const strip = stripGeometry(container, [-214, 86, 386]);
+    fireEvent.scroll(strip);
+    fireEvent.scroll(strip);
+    expect(frames.size).toBe(1);
+    expect(screen.getByTestId("phone-column-tab-b")).not.toHaveAttribute(
+      "aria-current",
+    );
+    flushFrame();
+    expect(screen.getByTestId("phone-column-tab-b")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    // Centre at 220 lies between columns a (ends at 210) and b (starts at 242).
+    stripGeometry(container, [-58, 242, 542]);
+    fireEvent.scroll(strip);
+    flushFrame();
+    expect(screen.getByTestId("phone-column-tab-a")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
+  it("reconciles a removed column without needing a scroll event", () => {
+    const view = render(<KanbanBoard project={project} />);
+    stripGeometry(view.container, [-214, 86, 386]);
+    flushFrame();
+    expect(screen.getByTestId("phone-column-tab-b")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    view.rerender(
+      <KanbanBoard
+        project={{
+          ...project,
+          columns: [project.columns[0], project.columns[2]],
+        }}
+      />,
+    );
+    stripGeometry(view.container, [86, 386]);
+    flushFrame();
+    expect(screen.getByTestId("phone-column-tab-a")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+  });
+
+  it("scrolls only the chosen column and respects reduced motion", () => {
+    const { container } = render(<KanbanBoard project={project} />);
+    const column = container.querySelector(
+      '[data-column-id="c"]',
+    ) as HTMLElement;
+    const scrollIntoView = vi.fn();
+    column.scrollIntoView = scrollIntoView;
+    fireEvent.click(screen.getByTestId("phone-column-tab-c"));
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: "smooth",
+      inline: "start",
+      block: "nearest",
+    });
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true,
+    } as MediaQueryList);
+    fireEvent.click(screen.getByTestId("phone-column-tab-c"));
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: "auto",
+      inline: "start",
+      block: "nearest",
+    });
+  });
+
+  it("cancels queued work and disconnects the observer on unmount", () => {
+    const view = render(<KanbanBoard project={project} />);
+    const strip = stripGeometry(view.container, [86, 386, 686]);
+    flushFrame();
+    fireEvent.scroll(strip);
+    expect(frames.size).toBe(1);
+    view.unmount();
+    expect(frames.size).toBe(0);
+    const observer = observers.find((item) =>
+      item.observe.mock.calls.some(([target]) => target === strip),
+    );
+    expect(observer?.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("does not measure or schedule scroll updates on desktop", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    const { container } = render(<KanbanBoard project={project} />);
+    const strip = stripGeometry(container, [86, 386, 686]);
+    fireEvent.scroll(strip);
+    expect(frames.size).toBe(0);
+  });
+
+  it("disables snap while a grip drag is active, and restores it on cancellation", () => {
+    const { container } = render(<KanbanBoard project={project} />);
+    const strip = stripGeometry(container, [86, 386, 686]);
+    touch(screen.getByTestId("task-drag-handle-t1"), "touchstart", 50, 50);
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.getByTestId("card-t1")).toHaveAttribute(
+      "data-dragging",
+      "true",
+    );
+    expect(strip.className).toContain("max-md:snap-none");
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+      vi.advanceTimersByTime(300);
+    });
+    expect(strip.className).toContain("max-md:snap-mandatory");
+    expect(screen.getByTestId("card-t1")).toHaveAttribute(
+      "data-dragging",
+      "false",
+    );
   });
 });

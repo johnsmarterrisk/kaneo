@@ -51,12 +51,6 @@ const router = createRouter({
   // width. Without a pending component the router painted whatever the tree rendered
   // underneath a loading route, which on a phone was the desktop rail + white card.
   //
-  // Codex r1 #7: THE ZERO DELAY IS SCOPED TO PHONES. Setting it globally changed desktop
-  // navigation — desktop's pending component is `null`, so a zero-delay pending state made
-  // settled desktop content vanish the instant a loader started instead of staying put for
-  // the router's default grace period, which is the behaviour desktop has always had and
-  // which this build is not allowed to touch. Above 768px the defaults are left alone by
-  // passing `undefined`, which is how the router reads "not configured".
   defaultPendingComponent: RoutePending,
   // `defaultPendingMs` left at the router's default (John, real iPhone 2026-09-22: the fork
   // felt laggy and unstable). Zero meant the navy skeleton replaced the current screen on

@@ -76,14 +76,8 @@ export function usePhoneNav(): { goBack: () => void } {
   const goBack = useCallback(() => {
     const target = phoneBackTarget(location.pathname);
     if ("apex" in target) {
-      // The one location assignment left in the fork's phone code, and it is a FORWARD
-      // navigation to another origin rather than a traversal of this one.
-      //
-      // Imported dynamically, not statically: `operon-switcher` drags the permissions
-      // package into whatever imports it, and that package cannot resolve under vitest on
-      // this branch (a pre-existing `better-auth/plugins/access` failure). A static import
-      // here would have taken `layout.tsx` — and every test that mounts it — down with it.
-      // Deferring also means the switcher is not in the bundle's critical path.
+      // The switcher is also statically reachable through Navigate/AppSidebar, so this
+      // import is not a bundle split; it only defers resolving the back handler's helper.
       void import("@/components/operon-switcher").then(({ apexUrl }) => {
         window.location.assign(apexUrl());
       });
