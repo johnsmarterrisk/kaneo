@@ -35,6 +35,19 @@
 
   <meta name="theme-color" content="#081a33" id="operon-theme-color">
 
+  <!-- Font preload (Piece B, Round 2 mobile-nav brief): self-hosted via
+    `@fontsource-variable/manrope`'s CSS `@import` in `index.css`, but that import's
+    output filename is content-hashed at build time and unknowable here — so the file is
+    copied byte-for-byte into `public/fonts/` (served at an identical, stable path in both
+    `vite dev` and the production build, unlike a `node_modules` path, which only the dev
+    server special-cases) purely so this `<link>` can warm the browser's font cache before
+    the stylesheet that actually `@font-face`s it parses. The CSS import stays the single
+    source of truth for the `@font-face` rule; this is a cache warm-up, not a second font
+    pipeline, and a stale/missing preload degrades to a normal (unwarmed) font load rather
+    than breaking anything. -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="/fonts/manrope-latin-wght-normal.woff2">
+
   <script>
     // Pre-paint theme resolution (Codex round-1 finding 12, manager ruling; mirrors
     // `app/index.html`'s pre-paint script in the Operon repository, GUI pass task 1;
@@ -112,7 +125,38 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <!-- Navy hand-off skeleton (Piece B, Round 2 mobile-nav brief — "no flash on the hop").
+    Scoped to `html.navy` (the class the pre-paint script above already applied
+    SYNCHRONOUSLY, before this paints) so light/dark hops see only their own plain
+    background and never a stray navy rectangle. Shapes a 64px module strip + list panel
+    — the same silhouette `MobileNavigate.tsx` draws on the Operon side of this same
+    hop — in `rgba(255,255,255,.10)` on the navy ground, so the curtain the Operon shell
+    already paints before `window.location.assign` hands off into a frame that already
+    looks like the destination instead of a blank one. Lives INSIDE `#root`: React's
+    first render replaces every child of `#root`, so nothing here has to be torn down by
+    hand. -->
+  <style>
+    .operon-skeleton { display: none; }
+    html.navy .operon-skeleton { display: flex; }
+  </style>
+  <div id="root">
+    <div class="operon-skeleton" aria-hidden="true"
+      style="position:fixed;inset:0;background:#081a33;">
+      <div style="width:64px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 8px;">
+        <div style="width:48px;height:48px;border-radius:16px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:48px;height:48px;border-radius:16px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:48px;height:48px;border-radius:16px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:48px;height:48px;border-radius:16px;background:rgba(255,255,255,.10);"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:16px 12px;">
+        <div style="width:120px;height:16px;border-radius:4px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:100%;height:40px;border-radius:8px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:100%;height:36px;border-radius:6px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:100%;height:36px;border-radius:6px;background:rgba(255,255,255,.10);"></div>
+        <div style="width:100%;height:36px;border-radius:6px;background:rgba(255,255,255,.10);"></div>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 
