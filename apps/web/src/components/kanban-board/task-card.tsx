@@ -8,6 +8,7 @@ import {
   CalendarX,
   GitMerge,
   GitPullRequest,
+  GripVertical,
   SquareCheck,
 } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
@@ -124,7 +125,14 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
     transition:
       transition || "transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94)",
     opacity: isDragging ? 0.6 : 1,
-    touchAction: isDragging ? "none" : "auto",
+    // `touchAction` deliberately NOT set here any more. It used to be
+    // `isDragging ? "none" : "auto"`, which is the bug John hit: the browser decides
+    // whether to claim a touch for scrolling at `touchstart`, BEFORE dnd-kit's 250ms
+    // long-press delay elapses — so at press time this was always `auto`, Safari took the
+    // gesture as a column pan, and the TouchSensor never activated. The style that would
+    // have allowed the drag was only applied once the drag it prevented had started.
+    // `touch-action: none` now lives on the drag HANDLE alone (below), so the rest of the
+    // card still pans the column, which is what a reader needs far more often.
     zIndex: isDragging ? 999 : "auto",
   };
 
@@ -182,7 +190,7 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} className="relative">
       <ContextMenu>
         <ContextMenuTrigger asChild>
           {/** biome-ignore lint/a11y/noStaticElementInteractions: false positive for onClick and onKeyDown */}
@@ -207,6 +215,29 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
               }
             }}
           >
+            {/* DRAG HANDLE (John, real iPhone 2026-09-22: tasks could not be dragged
+                between columns on touch). The sensors were never the problem — a
+                `TouchSensor` with a 250ms long press has been configured all along — the
+                problem was that nothing carried `touch-action: none` at press time, so
+                Safari claimed the gesture as a column pan before the delay elapsed.
+                `touch-action: none` belongs on the handle ALONE: putting it on the whole
+                card would stop the column scrolling at all, since cards fill it. The
+                handle is always rendered (never hover-only, which a phone cannot reach)
+                and is a 44px target. */}
+            {!disableDragDrop && (
+              <button
+                type="button"
+                data-testid={`task-drag-handle-${task.id}`}
+                aria-label={`Drag ${task.title}`}
+                style={{ touchAction: "none" }}
+                className="absolute top-1 right-1 flex h-11 w-11 cursor-move items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+                onClick={(e) => e.stopPropagation()}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+            )}
             <div className="mb-2.5">
               <div
                 className="overflow-hidden break-words leading-5 font-medium text-card-foreground text-[15px]"
