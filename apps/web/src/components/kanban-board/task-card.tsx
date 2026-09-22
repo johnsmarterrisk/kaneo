@@ -65,6 +65,15 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
     transition,
     isDragging,
   } = useSortable({ id: task.id, disabled: disableDragDrop });
+
+  /* `listeners` is dnd-kit's activator map, keyed by event name (`onMouseDown`,
+     `onTouchStart`, `onKeyDown` — one per sensor configured in `kanban-board/index.tsx`).
+     The card takes everything EXCEPT the touch activator; the grip below takes the whole
+     map, so it can be dragged by mouse as well as by touch. */
+  const { onTouchStart, ...cardListeners } = (listeners ?? {}) as {
+    onTouchStart?: React.TouchEventHandler;
+    [key: string]: unknown;
+  };
   const { project } = useProjectStore();
   const taskIsCompleted = isTaskCompleted(task.status, project?.columns);
   const { data: workspace } = useActiveWorkspace();
@@ -190,18 +199,22 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
   };
 
   return (
-    // Codex r1 #2: the MOUSE and KEYBOARD activators stay on the whole card — dragging a
-    // card by its body is the desktop behaviour and this round was never meant to change
-    // it. Only the TOUCH activation is confined to the grip, because only touch needs
-    // `touch-action: none`, and only on a phone does that matter (on the card it would
-    // stop the column scrolling). dnd-kit routes both through the same `listeners`; the
-    // grip adds nothing but the touch-action surface and a visible affordance.
+    // Codex r2 #1: the listeners are SPLIT, not spread whole.
+    //
+    // dnd-kit keys its activator map by event name — `onMouseDown`, `onTouchStart`,
+    // `onKeyDown`, one per configured sensor — so spreading `listeners` on the card put
+    // `onTouchStart` on the whole body and touch was never actually confined to the grip,
+    // whatever the previous round's comment claimed. Pulling `onTouchStart` out is the
+    // whole fix: the card keeps mouse and keyboard activation (dragging a card by its body
+    // is desktop behaviour this round must not change), and the grip is the only element
+    // that can begin a TOUCH drag — which is what leaves the card body free to pan the
+    // column, since cards fill it.
     <div
       ref={setNodeRef}
       style={style}
       className="relative"
       {...attributes}
-      {...listeners}
+      {...cardListeners}
     >
       <ContextMenu>
         <ContextMenuTrigger asChild>
@@ -249,6 +262,8 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
                 // title wraps around the grip instead of running underneath it.
                 className="float-right -mt-1 -mr-1 ml-1 flex h-11 w-11 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent active:cursor-grabbing"
                 onClick={(e) => e.stopPropagation()}
+                onTouchStart={onTouchStart}
+                {...cardListeners}
               >
                 <GripVertical className="h-4 w-4" />
               </button>
