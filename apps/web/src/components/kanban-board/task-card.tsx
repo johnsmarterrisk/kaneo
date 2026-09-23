@@ -212,7 +212,23 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className="relative"
+      // `max-md:!block` (John, real iPhone 2026-09-23 — "Test" wrapping as "Te / st", the
+      // TP-1/priority chips stacking). dnd-kit's `attributes` puts `role="button"` on THIS
+      // div, and `index.css`'s own touch-target rule (`[role="button"]:not([data-touch-
+      // compact]) { display: inline-flex; align-items: center; justify-content: center }`)
+      // therefore applies to it at every width. An inline-flex box with `justify-content:
+      // center` shrink-wraps to its single flex child's CONTENT width and centers that
+      // child inside itself — on a 334px-wide column that measured 133px, the exact
+      // ~40% figure a wrapped two-letter title implies. `!block` (important, so it
+      // outranks the plain-specificity attribute-selector rule) restores the plain block
+      // box this div was always meant to be below `768px`; a block box's width is "auto",
+      // i.e. 100% of its containing block, with no flex shrink-to-fit involved. Scoped to
+      // `max-md:` ONLY, per the ticket's own instruction ("desktop unchanged") — the same
+      // rule measurably narrows the card at `md` and up too, but that is a pre-existing,
+      // unreported desktop behaviour outside this fix's scope; task 0.2's own fix
+      // (da870ce) for the desktop COLUMN-width regression is a different bug and is
+      // untouched by this change either way.
+      className="relative max-md:!block"
       {...attributes}
       {...cardListeners}
     >

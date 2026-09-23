@@ -263,6 +263,15 @@ describe("the shipped card and board keep that contract", () => {
     // Codex r1 #16: back to the established value; 8 was unrelated to the fault.
     expect(BOARD).toMatch(/tolerance: 10/);
   });
+
+  // iPhone pass 1, defect 1 (John, real iPhone 2026-09-23: "Test" wrapping as "Te / st",
+  // the TP-1/priority chips stacking). Read from source, like the phone-column-width
+  // suite below it — jsdom computes no layout, so there is no rendered card width to
+  // assert here, and a Playwright walk (`docs/walks/feat-iphone-pass-1/`) is what actually
+  // measures the pixels. What CAN regress in this test file is the class that fixes it.
+  it("keeps the card root a plain block box below md, not the touch-target rule's inline-flex", () => {
+    expect(TASK_CARD).toContain('className="relative max-md:!block"');
+  });
 });
 
 /**
