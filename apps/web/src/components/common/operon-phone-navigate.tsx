@@ -5,9 +5,9 @@ import {
   OPERON_MODULES,
   OperonPhoneModuleStrip,
   OperonRailFooter,
+  OperonVersionStamp,
 } from "@/components/operon-switcher";
 import Search from "@/components/search";
-import { useVersionStampText } from "@/lib/version-check";
 
 /**
  * The fork's phone Navigate screen (Piece B, Round 2 mobile-nav brief) — mounted by
@@ -32,37 +32,40 @@ function OperonPhoneNavigate() {
   const currentModuleLabel =
     OPERON_MODULES.find((module) => module.key === "initiative")?.label ??
     "Initiative";
-  const versionStamp = useVersionStampText();
 
   return (
     <div
       data-testid="phone-navigate"
-      // `pt-[env(safe-area-inset-top)]` as an arbitrary-value Tailwind class rather than an
-      // inline `style` object — same reasoning as the Operon shell's own `MobileNavigate.tsx`:
-      // jsdom's `cssstyle` engine silently drops an `env()` value written through `style`,
-      // which would make a test asserting the class present but the computed padding absent.
-      className="flex h-full w-full overflow-hidden bg-sidebar text-sidebar-foreground pt-[env(safe-area-inset-top)]"
+      // No top padding of its own any more — see `OperonPhoneModuleStrip`'s and the list
+      // panel's OWN `pt-[env(...)]` below (defect 3). Same box-model reasoning either way,
+      // just no longer relying on this outer div alone to carry it.
+      className="flex h-full w-full overflow-hidden bg-sidebar text-sidebar-foreground"
     >
       <OperonPhoneModuleStrip />
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* iPhone pass 1, defect 3 (John, real iPhone 2026-09-23: the Stream tile sits under
+          the status bar while the list panel's "Telegraph" header is correctly inset —
+          checked here for the same defect, present the same way: this wrapper used to
+          rely on the OUTER div's `pt-[env(...)]` alone, exactly like the Operon shell's
+          `MobileNavigate.tsx` did before its own fix). `pt-[env(safe-area-inset-top)]`
+          directly on this wrapper, matching `OperonPhoneModuleStrip`'s own inset a few
+          lines up — neither side depends on the other, or on the outer div, to be
+          correctly inset. `cssstyle` (jsdom) drops an unrecognised `env()` value from an
+          inline `style`, which is why this is a class, not a style object. */}
+      <div className="flex-1 min-w-0 flex flex-col pt-[env(safe-area-inset-top)]">
         <div className="px-3 pt-3 pb-2 flex items-center justify-between shrink-0 gap-2">
           <h1 className="text-[16.5px] font-bold truncate">
             {currentModuleLabel}
           </h1>
-          {/* Task 0.5: the version stamp beside the chevron — same pairing as the Operon
-              shell's own `MobileNavigate.tsx` header row. */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              data-testid="version-stamp"
-              className="truncate text-[9px] text-sidebar-foreground/60"
-            >
-              {versionStamp}
-            </span>
-            <span aria-hidden="true" className="text-sidebar-foreground/60">
-              ›
-            </span>
-          </div>
+          {/* iPhone pass 1, defect 2: the stamp used to render here, beside the chevron —
+              floating into the status-bar zone on a notched phone. Only the chevron
+              remains; the stamp now renders once, at the very bottom of this screen. */}
+          <span
+            aria-hidden="true"
+            className="text-sidebar-foreground/60 shrink-0"
+          >
+            ›
+          </span>
         </div>
 
         {/* `!justify-start` on every row in the list panel. `index.css`'s own base rule
@@ -80,6 +83,16 @@ function OperonPhoneNavigate() {
         </div>
 
         <OperonRailFooter phone />
+        {/* iPhone pass 1, defect 2: the stamp, under the account/footer row, inside the
+            safe area — see `operon-switcher.tsx`'s own doc comment on
+            `OperonVersionStamp`. `OperonRailFooter` itself carries no bottom inset (its
+            desktop use has none to carry), so the inset lives on this wrapper instead. */}
+        <div
+          data-testid="phone-navigate-version-row"
+          className="px-3 pt-1 pb-[calc(0.25rem_+_env(safe-area-inset-bottom))]"
+        >
+          <OperonVersionStamp />
+        </div>
       </div>
     </div>
   );
