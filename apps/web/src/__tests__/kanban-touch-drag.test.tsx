@@ -270,7 +270,7 @@ describe("the shipped card and board keep that contract", () => {
   // assert here, and a Playwright walk (`docs/walks/feat-iphone-pass-1/`) is what actually
   // measures the pixels. What CAN regress in this test file is the class that fixes it.
   it("keeps the card root a plain block box below md, not the touch-target rule's inline-flex", () => {
-    expect(TASK_CARD).toContain('className="relative max-md:!block"');
+    expect(TASK_CARD).toContain('className="relative !block"');
   });
 });
 

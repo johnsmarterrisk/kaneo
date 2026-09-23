@@ -212,7 +212,7 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
     <div
       ref={setNodeRef}
       style={style}
-      // `max-md:!block` (John, real iPhone 2026-09-23 — "Test" wrapping as "Te / st", the
+      // `!block` (John, real iPhone 2026-09-23 — "Test" wrapping as "Te / st", the
       // TP-1/priority chips stacking). dnd-kit's `attributes` puts `role="button"` on THIS
       // div, and `index.css`'s own touch-target rule (`[role="button"]:not([data-touch-
       // compact]) { display: inline-flex; align-items: center; justify-content: center }`)
@@ -228,7 +228,7 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
       // unreported desktop behaviour outside this fix's scope; task 0.2's own fix
       // (da870ce) for the desktop COLUMN-width regression is a different bug and is
       // untouched by this change either way.
-      className="relative max-md:!block"
+      className="relative !block"
       {...attributes}
       {...cardListeners}
     >
