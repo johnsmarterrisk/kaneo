@@ -466,7 +466,14 @@ export function OperonPhoneModuleStrip() {
     <nav
       aria-label="Modules"
       data-testid="phone-module-strip"
-      className="w-16 shrink-0 flex flex-col items-center py-3 h-full"
+      // iPhone pass 1, defect 3 (John, real iPhone 2026-09-23 — checked on the fork's own
+      // phone Navigate strip for the same defect Operon's had, and it was present the same
+      // way: this strip carried no top inset of its own, only ever the outer div's, which
+      // `operon-phone-navigate.tsx` no longer supplies). `pb-3` keeps `py-3`'s bottom half;
+      // the top half folds into the `calc()` rather than competing with a second
+      // `padding-top` utility of equal specificity — same reasoning as Operon's own
+      // `MobileNavigate.tsx` fix.
+      className="w-16 shrink-0 flex flex-col items-center pb-3 pt-[calc(0.75rem_+_env(safe-area-inset-top))] h-full"
       style={{ backgroundColor: OPERON_COLORS.ground }}
     >
       {/* `px-2` on the scrolling group only (`MobileNavigate.tsx`'s own reasoning,
