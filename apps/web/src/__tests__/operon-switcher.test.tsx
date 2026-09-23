@@ -77,6 +77,8 @@ const {
   OperonModuleNav,
   OperonPhoneModuleStrip,
   OperonRailFooter,
+  OperonRailHeader,
+  OperonVersionStamp,
   OPERON_MODULES,
   apexUrl,
   DEV_APEX_URL,
@@ -276,6 +278,38 @@ describe("OperonRailFooter", () => {
   });
 });
 
+/**
+ * iPhone pass 1, defect 4 (John, desktop 2026-09-23): the stamp used to render top-right
+ * of `OperonRailHeader`'s own row, squeezed beside the mark and truncated. It renders
+ * nowhere in that header any more — `OperonVersionStamp`, asserted separately, is what
+ * `AppSidebar`'s own footer tests (below) confirm takes its place above Settings.
+ */
+describe("OperonRailHeader", () => {
+  it("carries the mark and workspace name, but no version stamp", () => {
+    render(<OperonRailHeader />);
+
+    expect(screen.getByTestId("operon-rail-header").textContent).toContain(
+      "Operon",
+    );
+    expect(screen.queryByTestId("version-stamp")).toBeNull();
+  });
+});
+
+/**
+ * iPhone pass 1, defects 2 and 4: one shared component for the footer-placed stamp on
+ * both surfaces — see its own doc comment in `operon-switcher.tsx`.
+ */
+describe("OperonVersionStamp", () => {
+  it("renders the stamp text at 12px/60% opacity, never truncated", () => {
+    render(<OperonVersionStamp />);
+
+    const stamp = screen.getByTestId("version-stamp");
+    expect(stamp.className).toContain("text-[12px]");
+    expect(stamp.className).toContain("opacity-60");
+    expect(stamp.className).not.toContain("truncate");
+  });
+});
+
 describe("OperonPhoneModuleStrip", () => {
   it("renders Stream/Telegraph/Initiative/Stash in order, Settings pinned in its own group, never mixed into the app tiles", () => {
     render(<OperonPhoneModuleStrip />);
@@ -323,6 +357,18 @@ describe("OperonPhoneModuleStrip", () => {
     expect(settings.tagName).toBe("A");
     expect(settings.getAttribute("href")).toBe(
       "https://apex.phone.test:9443/#/settings",
+    );
+  });
+
+  // iPhone pass 1, defect 3 (John, real iPhone 2026-09-23, checked on the fork's own
+  // phone Navigate strip for Operon's same defect and found present the same way): this
+  // strip carried no safe-area-top inset of its own before this fix, relying entirely on
+  // `operon-phone-navigate.tsx`'s outer wrapper, which the list panel beside it also
+  // depended on — see that file's own test for the panel's half.
+  it("carries its own top safe-area inset, not only the outer screen's", () => {
+    render(<OperonPhoneModuleStrip />);
+    expect(screen.getByTestId("phone-module-strip").className).toContain(
+      "env(safe-area-inset-top)",
     );
   });
 });
@@ -431,6 +477,27 @@ describe("AppSidebar", () => {
     // this test rather than pass silently because nothing looked for them.
     expect(screen.queryByTestId("trial-card")).toBeNull();
     expect(screen.queryByTestId("version-display")).toBeNull();
+  });
+
+  it("iPhone pass 1, defect 4: renders the version stamp once, directly above Settings", async () => {
+    const { AppSidebar } = await import("@/components/app-sidebar");
+
+    render(<AppSidebar />);
+
+    const header = screen.getByTestId("sidebar-header");
+    expect(header.querySelector('[data-testid="version-stamp"]')).toBeNull();
+
+    const footer = screen.getByTestId("sidebar-footer");
+    const stamps = screen.getAllByTestId("version-stamp");
+    expect(stamps).toHaveLength(1);
+    expect(footer.contains(stamps[0])).toBe(true);
+
+    // "Directly above" as DOM order, not only visual position: the stamp's own wrapper is
+    // the Settings nav's immediately preceding sibling.
+    const settingsNav = footer.querySelector(
+      '[data-testid="operon-settings-nav"]',
+    ) as HTMLElement;
+    expect(settingsNav.previousElementSibling?.contains(stamps[0])).toBe(true);
   });
 
   it("renders Kaneo's own nav (Search, NavMain, NavProjects) in the content slot, unstructured", async () => {

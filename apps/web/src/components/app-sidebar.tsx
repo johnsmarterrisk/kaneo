@@ -6,6 +6,7 @@ import {
   OperonModuleNav,
   OperonRailFooter,
   OperonRailHeader,
+  OperonVersionStamp,
 } from "@/components/operon-switcher";
 import {
   Sidebar,
@@ -57,6 +58,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavProjects />
       </SidebarContent>
       <SidebarFooter className="gap-0 p-0">
+        {/* iPhone pass 1, defect 4: the version stamp, directly above Settings — see
+            `operon-switcher.tsx`'s own doc comment on `OperonVersionStamp`. */}
+        <div className="px-4 pb-1.5">
+          <OperonVersionStamp />
+        </div>
         <OperonModuleNav variant="settings" />
         <OperonRailFooter />
       </SidebarFooter>

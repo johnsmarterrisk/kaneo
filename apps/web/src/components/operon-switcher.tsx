@@ -303,7 +303,6 @@ function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
 export function OperonRailHeader() {
   // Re-mounted from `WorkspaceSwitcher`, which no longer renders — see the file header.
   useUserWebSocket();
-  const versionStamp = useVersionStampText();
 
   return (
     <div
@@ -337,19 +336,11 @@ export function OperonRailHeader() {
       >
         Operon
       </h1>
-      {/* Task 0.5: the version stamp, top-right of the desktop rail — the fork's half of
-          "in both desktop rails" (Operon's own copy is `Sidebar.tsx`'s `VersionStamp`).
-          Placed before the bell/avatar group rather than after: those two are account
-          chrome carried over from `WorkspaceSwitcher` (see the file header's note on why
-          they still live here), and the stamp is rail-identity chrome, closer in kind to
-          the mark and name beside it. */}
-      <span
-        data-testid="version-stamp"
-        className="shrink-0 truncate text-[9px] opacity-60"
-        style={{ color: OPERON_COLORS.textPrimary }}
-      >
-        {versionStamp}
-      </span>
+      {/* iPhone pass 1, defect 4 (John, desktop 2026-09-23): the stamp used to render HERE,
+          top-right of the header row, squeezed beside the mark and truncated
+          ("v2026.09.22-4 · 4b17418/4f39"). It now renders once, via `OperonVersionStamp`
+          below, directly above the Settings entry in `AppSidebar`'s footer — never in this
+          header row. */}
       <div className="flex shrink-0 items-center gap-1">
         {/* `groundContext` (John, fix brief): this header sits directly on the navy
             ground, not a white card — the bell was invisible at rest because the ghost
@@ -563,5 +554,31 @@ export function OperonRailFooter({ phone = false }: { phone?: boolean } = {}) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * iPhone pass 1, defects 2 and 4 (John, real iPhone/desktop 2026-09-23) — the stamp used
+ * to render three separate times in header/top-bar chrome: `OperonRailHeader`'s desktop
+ * header row (squeezed beside the mark, truncated), `operon-phone-navigate.tsx`'s
+ * list-panel header (floating into the status-bar zone above "Test Project"), and
+ * `layout.tsx`'s phone Work top bar. One small exported component, one 12px/60%-opacity
+ * treatment (`text-sidebar-foreground`'s fork equivalent, `OPERON_COLORS.textPrimary`, at
+ * 60% via `opacity-60` — the token itself is white on the navy ground, same as the Operon
+ * shell's own `VersionStamp`), no `truncate` so the full stamp is never cut off. It now
+ * renders in exactly two footer-like places, never in header/top-bar chrome: `AppSidebar`'s
+ * `SidebarFooter` (directly above the Settings entry) and `OperonPhoneNavigate`'s own
+ * footer (below the account row, inside the safe area — see that file's own wrapper).
+ */
+export function OperonVersionStamp() {
+  const versionStamp = useVersionStampText();
+  return (
+    <span
+      data-testid="version-stamp"
+      className="block w-full text-center text-[12px] opacity-60"
+      style={{ color: OPERON_COLORS.textPrimary }}
+    >
+      {versionStamp}
+    </span>
   );
 }
