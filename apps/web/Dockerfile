@@ -51,7 +51,8 @@ RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN,required=false \
 FROM nginx:1.29.5-alpine AS runtime
 
 # Create non-root user and configure nginx in a single layer
-RUN addgroup -g 1001 appuser && \
+RUN apk add --no-cache nodejs && \
+  addgroup -g 1001 appuser && \
   adduser -u 1001 -G appuser -D appuser && \
   # Set permissions for nginx directories
   chown -R appuser:appuser /var/cache/nginx && \

@@ -78,7 +78,7 @@ describe("redactEvent", () => {
     const event = {};
     // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
     const result = await redactEvent(event as any);
-    expect(result).toEqual({});
+    expect(result).toEqual({ tags: {} });
   });
 
   it("every entry in DIAGNOSTIC_CATALOGUE round-trips through redactEvent unchanged", async () => {
@@ -150,7 +150,7 @@ describe("redactEvent", () => {
     };
     // biome-ignore lint/suspicious/noExplicitAny: minimal Sentry.ErrorEvent shape for the test
     const result = await redactEvent(event as any);
-    expect(result.request?.url).toBe("https://operon.example/t");
+    expect(result.request?.url).toBe("/redacted");
     expect(JSON.stringify(result)).not.toContain("SECRETVALUE123");
   });
 
@@ -178,7 +178,7 @@ describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("carries both deployment SHAs from the embedded loaded-version identity, not just the package version", () => {
+  it("carries both deployment SHAs as validated tags alongside the immutable build release", async () => {
     vi.stubGlobal(
       "__KANEO_LOADED_VERSION_JSON__",
       JSON.stringify({
@@ -189,12 +189,15 @@ describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
         built_at: "2026-09-22T00:00:00.000Z",
       }),
     );
-    expect(releaseIdentity()).toBe(
-      `2026.09.22-4+${"a".repeat(7)}.${"b".repeat(7)}`,
-    );
+    const result = await redactEvent({ type: undefined });
+    expect(result.tags).toEqual({
+      deployment_release: "2026.09.22-4",
+      operon_sha: "a".repeat(40),
+      fork_sha: "b".repeat(40),
+    });
   });
 
-  it("falls back to the package version alone when the placeholder was never substituted (a dev build)", () => {
+  it("falls back to unknown when no build release is defined", () => {
     vi.stubGlobal(
       "__KANEO_LOADED_VERSION_JSON__",
       "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
@@ -211,4 +214,52 @@ describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
     vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", undefined);
     expect(() => releaseIdentity()).not.toThrow();
   });
+});
+
+it("drops arbitrary metadata, userinfo, functions and non-asset frames", async () => {
+  const privateText = "private@example.invalid";
+  const result = await redactEvent({
+    type: undefined,
+    event_id: privateText,
+    timestamp: Number.NaN,
+    platform: privateText,
+    release: privateText,
+    environment: privateText,
+    tags: { area: privateText },
+    request: { url: `https://${privateText}/private-path` },
+    exception: {
+      values: [
+        {
+          type: "TypeError",
+          value: "Failed to fetch",
+          stacktrace: {
+            frames: [
+              {
+                filename: `https://${privateText}/assets/index-abc.js`,
+                function: privateText,
+                lineno: 1,
+                colno: 2,
+              },
+              { filename: `/private/${privateText}.js`, function: privateText },
+              ...Array.from({ length: 20 }, () => ({
+                filename: "/assets/app-abc.js",
+                lineno: 3,
+                colno: 4,
+              })),
+            ],
+          },
+        },
+      ],
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain(privateText);
+  expect(result.exception?.values?.[0]?.stacktrace?.frames).toHaveLength(10);
+  expect(result.platform).toBeUndefined();
+  expect(result.release).toBeUndefined();
+});
+
+it("uses the same immutable build release as the source-map uploader", () => {
+  vi.stubGlobal("__KANEO_SENTRY_RELEASE__", `initiative-${"a".repeat(32)}`);
+  expect(releaseIdentity()).toBe(`initiative-${"a".repeat(32)}`);
+  vi.unstubAllGlobals();
 });

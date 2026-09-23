@@ -9,6 +9,16 @@
 			"type": "object",
 			"additionalProperties": false,
 			"properties": {
+				"versionUpdate": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"pending": { "type": "string" },
+						"writeRefused": { "type": "string" },
+						"discardAndReload": { "type": "string" }
+					},
+					"required": ["pending", "writeRefused", "discardAndReload"]
+				},
 				"appName": {
 					"type": "string"
 				},
@@ -614,6 +624,7 @@
 				}
 			},
 			"required": [
+				"versionUpdate",
 				"appName",
 				"actions",
 				"a11y",

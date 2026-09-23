@@ -1,39 +1,16 @@
 import { useIsMutating } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { i18n } from "@/lib/i18n";
 
-/** `apps/web/vite.config.ts`'s `define` — a build-time placeholder `env.sh` substitutes
-    with the real, computed `version.json` payload at container start (Stage 1 finding 4).
-    Declared here (an ambient `declare const` works in any `.ts` file, not only `.d.ts`)
-    rather than in `vite-env.d.ts`, which is untouched upstream boilerplate and not on
-    `docs/fork-discipline.md` row 2's list — keeping this declaration inside the file that
-    is already declared for exactly this purpose avoids opening a second one. */
+/** Vite emits a fixed-width runtime slot. env.sh fills it at container start;
+    JSON.parse in the define prevents constant folding into surrounding strings. */
 declare const __KANEO_LOADED_VERSION_JSON__: string;
 
-/**
- * version-check.ts — the fork's half of the Operon stabilization plan's freshness
- * contract (tasks 0.5/0.6, decision D4; `docs/fork-discipline.md` row 2, Stabilization
- * Stage 1 note). Mirrors `app/src/shell/version.ts` + `useVersionCheck.ts` on the Operon
- * side, folded into ONE file because `docs/fork-discipline.md` declares a single new path
- * here rather than two.
- *
- * WHY THE APP'S "OWN" VERSION IS BAKED INTO THE BUNDLE, NOT A FETCH (Stage 1 round-1
- * finding 4). It used to be a fetch of `/version.json` — the SAME resource
- * `fetchVersionJson()` fetches fresh to find the LATEST version, which meant old, cached
- * JavaScript sitting in an open tab could fetch the NEW manifest as its own "loaded"
- * answer and compare equal to the latest fetch forever, the mismatch this whole module
- * exists to detect never firing. This container's config (`KANEO_API_URL`,
- * `KANEO_CLIENT_URL`, `OPERON_APEX_URL`) is already substituted into the ALREADY-BUILT
- * bundle by `env.sh` at CONTAINER START — there is no build-time moment on this side to
- * bake a REAL value the way Vite's `define` does on the Operon side, so the same
- * substitution mechanism is reused instead: `apps/web/vite.config.ts` bakes a literal
- * PLACEHOLDER string into the bundle at build time
- * (`__KANEO_LOADED_VERSION_JSON__`), and `env.sh` substitutes the actual, computed
- * `version.json` payload into it at container start — the identical object it writes to
- * `version.json` itself, so the two can never read differently for the SAME container
- * start. `/version.json` stays reserved for the independently fetched TARGET.
- */
-
+/** The loaded identity belongs to these bundle bytes. Only the target is fetched:
+    fetching both from /version.json would make a cached document compare the newest
+    manifest to itself and miss every update. Keep the config hash in the comparison
+    because the same build can be deployed with different runtime URLs. */
 export interface VersionInfo {
   release: string;
   operon_sha: string;
@@ -187,18 +164,8 @@ export function useVersionStampText(): string {
   return formatStamp(info);
 }
 
-// ─── Dirty-editor registry — Stage 1 round-1 finding 6 ───────────────────────────────
-//
-// `useIsMutating()` alone covers "a save/upload request is in flight" but not "text has
-// been typed and not saved yet" — the window BEFORE a debounced save fires, or before the
-// person has pressed submit at all. `docs/fork-discipline.md` row 2's Stabilization Stage 1
-// note originally filed this as an explicit open item rather than guess at which editors
-// meant it; the note now declares the two that do (`comment-input.tsx`, `task-title.tsx`)
-// and this is the registry they register a dirty predicate with — the same shape
-// `app/src/shell/protectedState.ts` uses on the Operon side (a predicate per id, checked
-// FRESH on every read, so a component does not need to re-register on every keystroke),
-// kept local to this file rather than a new module because no third path was declared.
-
+// Editor predicates bridge the debounce window and remain true after a failed save.
+// useIsMutating and the fetch wrapper protect requests already in flight.
 type DirtyCheck = () => boolean;
 
 const dirtyEditors = new Map<string, DirtyCheck>();
@@ -256,6 +223,38 @@ export function resetReloadScheduledForTests(): void {
   reloadScheduled = false;
 }
 
+// Install once for the document; route changes must not open a write-admission gap.
+let originalFetch: typeof fetch | null = null;
+let inFlightWrites = 0;
+function installMutationAdmission(): void {
+  if (originalFetch) return;
+  originalFetch = window.fetch;
+  const captured = originalFetch;
+  window.fetch = async (input, init) => {
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
+    const writing = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    if (writing && isReloadScheduled()) {
+      const message = i18n.t("common:versionUpdate.writeRefused");
+      toast.info(message);
+      throw new Error(message);
+    }
+    if (writing) inFlightWrites += 1;
+    try {
+      return await captured.call(window, input, init);
+    } finally {
+      if (writing) inFlightWrites -= 1;
+    }
+  };
+}
+
+export function resetMutationAdmissionForTests(): void {
+  if (originalFetch) window.fetch = originalFetch;
+  originalFetch = null;
+  inFlightWrites = 0;
+}
+
 /** A MAP of every target key this session has attempted (Stage 1 finding 11) — not the
     single `{ key, count }` pair the original shape overwrote on every write, which reset
     the effective count for whichever key was not the LAST one written, so alternating
@@ -277,18 +276,24 @@ function readAttempts(): StoredAttempts | null {
       typeof parsed === "object" &&
       parsed !== null &&
       typeof (parsed as StoredAttempts).perTarget === "object" &&
-      (parsed as StoredAttempts).perTarget !== null
+      (parsed as StoredAttempts).perTarget !== null &&
+      !Array.isArray((parsed as StoredAttempts).perTarget)
     ) {
-      const clean: Record<string, number> = {};
+      const clean: Record<string, number> = Object.create(null);
       for (const [key, value] of Object.entries(
         (parsed as StoredAttempts).perTarget,
       )) {
-        if (typeof value === "number" && Number.isFinite(value))
-          clean[key] = value;
+        if (
+          typeof value !== "number" ||
+          !Number.isSafeInteger(value) ||
+          value < 0
+        )
+          return null;
+        clean[key] = value;
       }
       return { perTarget: clean };
     }
-    return { perTarget: {} };
+    return null;
   } catch {
     return null;
   }
@@ -322,17 +327,9 @@ export interface UseVersionCheckOptions {
  * `visibilitychange`→visible, `pageshow`, focus, and every five minutes; reloads once on a
  * `release + config_hash` mismatch unless something protected would be lost.
  *
- * PROTECTED STATE, FORK SIDE (plan row 0.6): "an open task/comment editor with unsaved
- * text OR an upload in flight." `useIsMutating()` (TanStack Query, already the fork's data
- * layer for every write — uploads included) is read with NO additional wiring: it is
- * non-zero for exactly as long as any mutation, upload or otherwise, is in flight.
- *
- * THE "OPEN EDITOR WITH UNSAVED TEXT" HALF (Stage 1 round-1 finding 6) is now wired through
- * `registerDirtyEditor`/`hasDirtyEditor` above: `comment-input.tsx` registers while its
- * draft is non-empty, `task-title.tsx` registers while a keystroke has landed but its
- * 800 ms debounce has not yet handed the save off to `useUpdateTaskTitle` (which
- * `useIsMutating()` already covers once it does). `docs/fork-discipline.md` row 2's
- * Stabilization Stage 1 note now declares both paths for this widened purpose.
+ * Dirty title/description predicates clear only after their latest revision saves;
+ * comments stay protected while nonempty. Query mutations and direct fetch uploads
+ * are also protected. Once scheduled, the fetch wrapper refuses new writes.
  */
 export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
   const mutationCount = useIsMutating();
@@ -344,18 +341,43 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
   reloaderRef.current = reloader;
 
   useEffect(() => {
+    installMutationAdmission();
     let cancelled = false;
     let drainTimer: ReturnType<typeof setInterval> | null = null;
     let hasReloaded = false;
     let notifiedForTargetKey: string | null = null;
 
-    const isProtected = () => mutationCountRef.current > 0 || hasDirtyEditor();
+    const isProtected = () =>
+      mutationCountRef.current > 0 || inFlightWrites > 0 || hasDirtyEditor();
 
     function clearDrainTimer() {
       if (drainTimer !== null) {
         clearInterval(drainTimer);
         drainTimer = null;
       }
+    }
+
+    function showRecovery() {
+      reloadScheduled = true;
+      toast.info(i18n.t("common:versionUpdate.pending"), {
+        id: "version-update",
+        duration: Number.POSITIVE_INFINITY,
+        dismissible: false,
+        action: {
+          label: i18n.t("common:versionUpdate.discardAndReload"),
+          onClick: () => {
+            if (cancelled || hasReloaded || navigator.onLine === false) return;
+            hasReloaded = true;
+            clearDrainTimer();
+            reloaderRef.current();
+          },
+        },
+      });
+    }
+
+    function requireManualRecovery() {
+      showRecovery();
+      clearDrainTimer();
     }
 
     function attemptReload(targetKey: string) {
@@ -365,8 +387,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       const attempts = readAttempts();
       if (attempts === null) {
         // Finding 11: the ledger is unreadable — cannot prove this is bounded, refuse.
-        reloadScheduled = false;
-        clearDrainTimer();
+        requireManualRecovery();
         return;
       }
 
@@ -375,8 +396,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         alreadyTried >= MAX_RELOAD_ATTEMPTS_PER_VERSION ||
         totalAttempts(attempts) >= MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION
       ) {
-        reloadScheduled = false;
-        clearDrainTimer();
+        requireManualRecovery();
         return;
       }
 
@@ -385,13 +405,13 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       });
       if (!wrote) {
         // Finding 11: could not persist the bumped count — refuse rather than reload blind.
-        reloadScheduled = false;
-        clearDrainTimer();
+        requireManualRecovery();
         return;
       }
 
       hasReloaded = true;
-      reloadScheduled = false;
+      // Keep admission closed until navigation replaces this document.
+      reloadScheduled = true;
       clearDrainTimer();
       reloaderRef.current();
     }
@@ -405,10 +425,13 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       if (!loaded || cancelled) return;
 
       const latest = await fetchVersionJson();
-      if (!latest || cancelled) return;
+      if (!latest || cancelled || hasReloaded || navigator.onLine === false)
+        return;
 
       const targetKey = versionKey(latest);
       if (targetKey === versionKey(loaded)) {
+        writeAttempts({ perTarget: {} });
+        toast.dismiss("version-update");
         // Finding 12: "withdrawn updates" — the server reverted to the version this
         // document already has. Cancel any previously deferred reload rather than leave
         // stale deferred state/drain timer live for a mismatch that no longer exists.
@@ -422,9 +445,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         reloadScheduled = true;
         if (notifiedForTargetKey !== targetKey) {
           notifiedForTargetKey = targetKey;
-          toast.info(
-            "A new version is available. It will load once nothing here is in progress.",
-          );
+          showRecovery();
         }
         if (drainTimer === null) {
           // Finding 12: re-run the FULL check (fresh fetch) on drain rather than blindly
@@ -460,6 +481,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       window.removeEventListener("focus", onFocus);
       clearInterval(pollInterval);
       clearDrainTimer();
+      toast.dismiss("version-update");
     };
     // Read through refs so this effect installs its listeners exactly once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps

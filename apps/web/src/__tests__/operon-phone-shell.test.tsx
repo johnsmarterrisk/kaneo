@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import type * as React from "react";
 import { StrictMode } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -244,4 +245,32 @@ describe("mounted phone route model", () => {
     );
     expect(router.navigate).not.toHaveBeenCalled();
   });
+});
+
+it("renders the reload recovery action on the real layout", async () => {
+  setViewportWidth(375);
+  render(
+    <Layout>
+      <div>work</div>
+    </Layout>,
+  );
+  const reload = vi.fn();
+  let id: string | number = "";
+  await act(async () => {
+    id = toast.info("A new version is waiting", {
+      duration: Number.POSITIVE_INFINITY,
+      dismissible: false,
+      action: { label: "Discard unsaved edits and reload", onClick: reload },
+    });
+  });
+  try {
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Discard unsaved edits and reload",
+      }),
+    );
+    expect(reload).toHaveBeenCalledOnce();
+  } finally {
+    toast.dismiss(id);
+  }
 });

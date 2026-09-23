@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Eine neue Version ist verfügbar. Das automatische Neuladen ist angehalten. Beim Neuladen gehen ungespeicherte Änderungen verloren.",
+			"writeRefused": "Eine neue Version wartet. Lade die Seite neu, bevor du weitere Änderungen vornimmst.",
+			"discardAndReload": "Ungespeicherte Änderungen verwerfen und neu laden"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Abbrechen",

@@ -1,28 +1,46 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import babel from "@rolldown/plugin-babel";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import packageJson from "../../package.json";
 
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 const sentryOrg = process.env.SENTRY_ORG;
 const sentryProject = process.env.SENTRY_PROJECT;
 
-export default defineConfig({
+// A build ID names the exact uploaded artifacts, independently of runtime deployment
+// labels. The SDK and uploader receive the same ID from this config evaluation.
+const sentryRelease = `initiative-${randomUUID().replaceAll("-", "")}`;
+const RUNTIME_SLOT_SIZE = 4096;
+
+// JSON.parse prevents the minifier from folding a slot into a larger string or
+// evaluating a configuration-dependent branch before runtime substitution.
+export function runtimeDefines(
+  env: Record<string, string>,
+): Record<string, string> {
+  const definitions: Record<string, string> = {
+    __KANEO_LOADED_VERSION_JSON__: `JSON.parse(${JSON.stringify("KANEO_LOADED_VERSION_JSON_PLACEHOLDER".padEnd(RUNTIME_SLOT_SIZE))})`,
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (/^(KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/.test(value)) {
+      definitions[`import.meta.env.${key}`] =
+        `JSON.parse(${JSON.stringify(value.padEnd(RUNTIME_SLOT_SIZE))})`;
+    }
+  }
+  return definitions;
+}
+
+export default defineConfig(({ mode, command }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
-    // Stage 1 round-1 finding 4: a literal placeholder baked into the bundle at BUILD
-    // time, the same mechanism `KANEO_API_URL` etc. already use — `env.sh` substitutes the
-    // real, computed `version.json` payload into this exact string at CONTAINER START (see
-    // its own comment, and `src/lib/version-check.ts`'s `getLoadedVersion` for why this
-    // document's own "loaded" identity must be baked into the bundle's bytes rather than
-    // fetched from the same resource the freshness check fetches fresh).
-    __KANEO_LOADED_VERSION_JSON__: JSON.stringify(
-      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
-    ),
+    __KANEO_SENTRY_RELEASE__: JSON.stringify(sentryRelease),
+    ...(command === "build"
+      ? runtimeDefines(loadEnv(mode, import.meta.dirname))
+      : {}),
   },
   base: "/",
   plugins: [
@@ -41,7 +59,7 @@ export default defineConfig({
             authToken: sentryAuthToken,
             org: sentryOrg,
             project: sentryProject,
-            release: { name: packageJson.version },
+            release: { name: sentryRelease },
           }),
         ]
       : []),
@@ -76,4 +94,4 @@ export default defineConfig({
     },
     target: "esnext",
   },
-});
+}));

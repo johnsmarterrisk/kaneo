@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Dostępna jest nowa wersja. Automatyczne odświeżanie jest wstrzymane. Odświeżenie teraz odrzuci niezapisane zmiany.",
+			"writeRefused": "Nowa wersja czeka. Odśwież przed wprowadzeniem kolejnej zmiany.",
+			"discardAndReload": "Odrzuć niezapisane zmiany i odśwież"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Anuluj",

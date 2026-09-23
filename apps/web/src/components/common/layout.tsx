@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
@@ -176,6 +177,7 @@ function Layout({ children, className }: LayoutProps) {
 
   return (
     <div className="flex w-full bg-background">
+      <Toaster position="top-center" />
       <SidebarProvider
         defaultOpen={sidebarDefaultOpen}
         style={

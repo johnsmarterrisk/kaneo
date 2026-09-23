@@ -1,221 +1,233 @@
+// @vitest-environment node
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { SourceMap } from "node:module";
 import { resolve } from "node:path";
+import { Script } from "node:vm";
+import { build } from "vite";
 import { describe, expect, it } from "vitest";
+import config, { runtimeDefines } from "../vite.config";
 
-const placeholderPattern = "[`\\\"']KANEO_TURNSTILE_SITE_KEY[`\\\"']";
-const turnstilePlaceholder = "KANEO_TURNSTILE_SITE_KEY";
+const ENV_SH = readFileSync(resolve(import.meta.dirname, "../env.sh"), "utf8");
+const ROOT = "/usr/share/nginx/html";
+const NGINX = "/etc/nginx/conf.d/default.conf";
+const identityEnv = {
+  VERSION_RELEASE: "2026.09.22-4",
+  VERSION_OPERON_SHA: "a".repeat(40),
+  VERSION_FORK_SHA: "b".repeat(40),
+};
 
-const ENV_SH_PATH = resolve(import.meta.dirname, "../env.sh");
-const ENV_SH = readFileSync(ENV_SH_PATH, "utf8");
-
-/** Extracts the literal `CONFIG_ALLOWLIST_INPUT=$( ... )` / `CONFIG_HASH=$(...)` shell
-    text out of the real `env.sh` and runs it against a controlled env — exercising the
-    ACTUAL script rather than a hand copy that could drift from it (Stage 1 round-1
-    finding 18). */
-function extractConfigHashScript(): string {
-  const start = ENV_SH.indexOf("CONFIG_ALLOWLIST_INPUT=$(");
-  // This is literal SHELL text (env.sh's own `${CONFIG_ALLOWLIST_INPUT}`), not a JS
-  // template literal placeholder.
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: see comment above
-  const marker = "CONFIG_HASH=$(printf '%s' \"${CONFIG_ALLOWLIST_INPUT}\"";
-  const end = ENV_SH.indexOf("\n", ENV_SH.indexOf(marker));
-  if (start === -1 || end === -1) {
-    throw new Error("could not locate the CONFIG_HASH block in env.sh");
-  }
-  return ENV_SH.slice(start, end);
+// Execute the entire entrypoint with its real shell/heredoc and Node substitution.
+// Only filesystem I/O is redirected to memory: the review fence forbids fixtures on disk.
+function runEntrypoint(bundle: string, env: Record<string, string> = {}) {
+  const harness = `
+    const fs = require('node:fs');
+    const vm = require('node:vm');
+    const files = JSON.parse(process.env.FIXTURE_FILES);
+    const mockFs = {
+      readdirSync: () => [{ name: 'probe.js', isDirectory: () => false }],
+      readFileSync: path => files[path],
+      writeFileSync: (path, value) => { files[path] = value; },
+    };
+    vm.runInNewContext(fs.readFileSync(0, 'utf8'), {
+      require: id => id === 'node:fs' ? mockFs : require(id),
+      process: { env: JSON.parse(process.env.FIXTURE_ENV) }, URL,
+    });
+    process.stdout.write(JSON.stringify(files));
+  `;
+  return JSON.parse(
+    execFileSync(
+      "sh",
+      ["-c", `node() { command node -e "$HARNESS"; }\n${ENV_SH}`],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH ?? "",
+          HARNESS: harness,
+          FIXTURE_FILES: JSON.stringify({
+            [`${ROOT}/probe.js`]: bundle,
+            [NGINX]:
+              "return 200 'MCP_PRM_JSON_PLACEHOLDER';\nreturn 200 'MCP_AS_JSON_PLACEHOLDER';",
+          }),
+          FIXTURE_ENV: JSON.stringify({ ...identityEnv, ...env }),
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    ),
+  ) as Record<string, string>;
 }
 
-function computeConfigHash(env: Record<string, string>): string {
-  const script = `${extractConfigHashScript()}\nprintf '%s' "$CONFIG_HASH"`;
-  return execFileSync("bash", ["-c", script], {
-    encoding: "utf8",
-    env: { PATH: process.env.PATH ?? "", ...env },
-  });
+const definitions = runtimeDefines({
+  VITE_API_URL: "KANEO_API_URL",
+  VITE_CLIENT_URL: "KANEO_CLIENT_URL",
+  VITE_OPERON_APEX_URL: "OPERON_APEX_URL",
+  VITE_TURNSTILE_SITE_KEY: "KANEO_TURNSTILE_SITE_KEY",
+});
+
+function identity(files: Record<string, string>) {
+  return JSON.parse(files[`${ROOT}/version.json`]);
 }
 
-describe("runtime environment replacement", () => {
-  it("strips unset placeholders regardless of the quote emitted by the bundler", () => {
-    const bundle = [
-      `const doubleQuoted = "${turnstilePlaceholder}";`,
-      `const singleQuoted = '${turnstilePlaceholder}';`,
-      `const templateLiteral = \`${turnstilePlaceholder}\`;`,
-      `const required = "KANEO_API_URL";`,
-      `const configured = "https://example.com";`,
-    ].join("\n");
+describe("runtime entrypoint", () => {
+  it("evaluates the actual identity substitution as JS and matches version.json", () => {
+    const bundle = `globalThis.identity = ${definitions.__KANEO_LOADED_VERSION_JSON__};`;
+    const files = runEntrypoint(bundle);
+    const context: { identity?: string } = {};
+    new Script(files[`${ROOT}/probe.js`]).runInNewContext(context);
+    expect(JSON.parse(context.identity ?? "null")).toEqual(identity(files));
+    expect(identity(files).release).toBe("2026.09.22-4");
+  });
 
-    const result = execFileSync("sed", ["-E", `s#${placeholderPattern}#""#g`], {
-      input: bundle,
-      encoding: "utf8",
+  it("escapes quotes, backslashes, controls and Unicode without shifting any code", () => {
+    const bundle = `globalThis.apex=${definitions["import.meta.env.VITE_OPERON_APEX_URL"]};globalThis.done=true;`;
+    const apex = 'https://example.invalid/"quoted"\\path\n\u2028é';
+    const files = runEntrypoint(bundle, { OPERON_APEX_URL: apex });
+    const result = files[`${ROOT}/probe.js`];
+    const context: { apex?: string; done?: boolean } = {};
+    new Script(result).runInNewContext(context);
+    expect(context).toEqual({ apex, done: true });
+    expect(result.indexOf("globalThis.done")).toBe(
+      bundle.indexOf("globalThis.done"),
+    );
+    expect(result.length).toBe(bundle.length);
+    expect(result.split("\n")).toHaveLength(1);
+  });
+
+  it("preserves source-code placeholder comparisons and empties an unset optional key", () => {
+    const bundle = `globalThis.site=${definitions["import.meta.env.VITE_TURNSTILE_SITE_KEY"]};globalThis.comparison="OPERON_APEX_URL";`;
+    const files = runEntrypoint(bundle, {
+      OPERON_APEX_URL: "https://example.invalid",
     });
-
-    expect(result).not.toContain("KANEO_TURNSTILE_SITE_KEY");
-    expect(result).toContain(`const required = "KANEO_API_URL";`);
-    expect(result).toContain(`const doubleQuoted = "";`);
-    expect(result).toContain(`const singleQuoted = "";`);
-    expect(result).toContain(`const templateLiteral = "";`);
-    expect(result).toContain(`const configured = "https://example.com";`);
+    const context = {};
+    new Script(files[`${ROOT}/probe.js`]).runInNewContext(context);
+    expect(context).toEqual({ site: "", comparison: "OPERON_APEX_URL" });
   });
 
-  it("uses the quote-agnostic pattern in the container entrypoint", () => {
-    const entrypoint = readFileSync(
-      resolve(import.meta.dirname, "../env.sh"),
-      "utf8",
-    );
-
-    expect(entrypoint).toContain(
-      `sed -i -E 's#[\`"'"'"']KANEO_TURNSTILE_SITE_KEY[\`"'"'"']#""#g' {} +`,
-    );
-  });
-});
-
-describe("source maps are never served (Stage 1 round-1 finding 17)", () => {
-  it("nginx.kaneo.conf refuses a direct .map request before the SPA fallback catches it", () => {
-    const conf = readFileSync(
-      resolve(import.meta.dirname, "../nginx.kaneo.conf"),
-      "utf8",
-    );
-    const mapLocationIndex = conf.indexOf("location ~* \\.map$");
-    const rootLocationIndex = conf.indexOf("location / {");
-    expect(mapLocationIndex).toBeGreaterThan(-1);
-    expect(rootLocationIndex).toBeGreaterThan(-1);
-    // A regex location is matched before a prefix location by nginx regardless of
-    // declaration order, but keeping it textually first too is what the paired
-    // Operon-side test (`cache-freshness-headers.test.mjs`) and this file both assert.
-    expect(mapLocationIndex).toBeLessThan(rootLocationIndex);
-    expect(conf.slice(mapLocationIndex, mapLocationIndex + 60)).toContain(
-      "return 404;",
-    );
-  });
-});
-
-describe("config_hash — a canonical allowlist, not just three URLs (Stage 1 finding 18)", () => {
-  it("changing OPERON_APEX_URL still changes the hash (the original behaviour, preserved)", () => {
-    const base = { OPERON_APEX_URL: "https://a.example" };
-    const changed = { OPERON_APEX_URL: "https://b.example" };
-    expect(computeConfigHash(base)).not.toBe(computeConfigHash(changed));
-  });
-
-  it("changing a KANEO_*-prefixed value the generic substitution loop ALSO replaces changes the hash — the regression this finding closes", () => {
-    const base = {
-      OPERON_APEX_URL: "https://a.example",
-      KANEO_TURNSTILE_SITE_KEY: "site-key-one",
-    };
-    const changed = {
-      OPERON_APEX_URL: "https://a.example",
-      KANEO_TURNSTILE_SITE_KEY: "site-key-two",
-    };
-    // The ORIGINAL three-value formula (KANEO_API_URL/KANEO_CLIENT_URL/OPERON_APEX_URL
-    // only) would have hashed these two envs identically, since neither of the varying
-    // keys was in that fixed set.
-    expect(computeConfigHash(base)).not.toBe(computeConfigHash(changed));
-  });
-
-  it("an unset vs a set-but-empty KANEO_* value are NOT confused with each other", () => {
-    const unset = { OPERON_APEX_URL: "https://a.example" };
-    const setEmpty = {
-      OPERON_APEX_URL: "https://a.example",
-      KANEO_TURNSTILE_SITE_KEY: "",
-    };
-    expect(computeConfigHash(unset)).not.toBe(computeConfigHash(setEmpty));
-  });
-
-  it("is deterministic and independent of env var insertion order", () => {
-    const orderA = {
-      OPERON_APEX_URL: "https://a.example",
-      KANEO_A: "1",
-      KANEO_B: "2",
-    };
-    const orderB = {
-      KANEO_B: "2",
-      OPERON_APEX_URL: "https://a.example",
-      KANEO_A: "1",
-    };
-    expect(computeConfigHash(orderA)).toBe(computeConfigHash(orderB));
-  });
-
-  it("is a 64-character hex sha256 digest", () => {
-    const hash = computeConfigHash({ OPERON_APEX_URL: "https://a.example" });
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
-  });
-});
-
-describe("embedded loaded-version identity (Stage 1 finding 4)", () => {
-  it("declares the build-time placeholder define in vite.config.ts", () => {
-    const viteConfig = readFileSync(
-      resolve(import.meta.dirname, "../vite.config.ts"),
-      "utf8",
-    );
-    expect(viteConfig).toContain("__KANEO_LOADED_VERSION_JSON__");
-    expect(viteConfig).toContain("KANEO_LOADED_VERSION_JSON_PLACEHOLDER");
-  });
-
-  it("env.sh writes the SAME payload to version.json and prepares it for the bundle, from the SAME five variables", () => {
-    expect(ENV_SH).toContain("LOADED_VERSION_JSON=$(printf");
-    expect(ENV_SH).toContain("KANEO_LOADED_VERSION_JSON_PLACEHOLDER");
-    const heredocStart =
-      ENV_SH.indexOf("<<VERSIONJSON\n") + "<<VERSIONJSON\n".length;
-    const versionJsonBlock = ENV_SH.slice(
-      heredocStart,
-      ENV_SH.indexOf("\nVERSIONJSON\n", heredocStart),
-    );
-    for (const name of [
-      "VERSION_RELEASE",
-      "VERSION_OPERON_SHA",
-      "VERSION_FORK_SHA",
-      "CONFIG_HASH",
-      "BUILT_AT",
-    ]) {
-      expect(versionJsonBlock).toContain(`\${${name}}`);
-      expect(ENV_SH).toContain(`"\${${name}}"`);
-    }
-  });
-
-  /** Extracts the REAL `case "...five vars..." in *[!SAFE-CHARS]*) ... esac` guard's
-      pattern line out of env.sh, and runs it standalone — proving the actual character
-      class env.sh checks against, not a hand copy that could drift from it. Unlike the
-      version tried first (escaping the payload for sed), which `sed`'s own replacement-
-      text escaping rules made actively wrong (most `sed`s consume a `\` before `"` or
-      `\` in the replacement, so an "escaped" quote arrived BARE — see the removed test
-      this replaced), a value that cannot contain `"`/`\`/`#` in the first place needs no
-      escaping, so the guard IS the whole safety mechanism here. */
-  function isAcceptedByRealGuard(combined: string): boolean {
-    const guardLine = "*[!A-Za-z0-9._:-]*)";
-    expect(ENV_SH).toContain(guardLine); // fails loudly if env.sh's pattern ever changes
-    const script = `case "$1" in\n  ${guardLine} echo UNSAFE ;;\n  *) echo SAFE ;;\nesac`;
-    const result = execFileSync("sh", ["-c", script, "sh", combined], {
-      encoding: "utf8",
-    });
-    return result.trim() === "SAFE";
-  }
-
-  it("accepts realistically-shaped values (release id, hex SHAs, hex hash, ISO-8601 timestamp)", () => {
-    const combined =
-      "2026.09.22-4" +
-      "a".repeat(40) +
-      "b".repeat(40) +
-      "c".repeat(64) +
-      "2026-09-22T12:00:00.000Z";
-    expect(isAcceptedByRealGuard(combined)).toBe(true);
-  });
-
-  it("accepts the dev-fallback release id shape (dev-<sha7>) and the 'unknown' fallback", () => {
-    expect(
-      isAcceptedByRealGuard(
-        "dev-a1b2c3dunknownunknownunknown2026-09-22T00:00:00.000Z",
+  it("fails before publishing an oversized value or malformed identity", () => {
+    expect(() =>
+      runEntrypoint(
+        `globalThis.apex=${definitions["import.meta.env.VITE_OPERON_APEX_URL"]};`,
+        {
+          OPERON_APEX_URL: "x".repeat(5000),
+        },
       ),
-    ).toBe(true);
+    ).toThrow();
+    expect(() =>
+      runEntrypoint("", { VERSION_RELEASE: 'bad"release' }),
+    ).toThrow();
   });
 
-  it("REJECTS a value carrying a double quote — exactly what would break out of the JS string literal", () => {
-    expect(isAcceptedByRealGuard('2026.09.22-4"; alert(1); "')).toBe(false);
+  it("hashes all substituted configuration deterministically, distinguishing absent and empty", () => {
+    const hash = (env: Record<string, string>) =>
+      identity(runEntrypoint("", env)).config_hash;
+    expect(hash({ KANEO_A: "1", KANEO_B: "2" })).toBe(
+      hash({ KANEO_B: "2", KANEO_A: "1" }),
+    );
+    expect(hash({ OPERON_APEX_URL: "https://a.invalid" })).not.toBe(
+      hash({ OPERON_APEX_URL: "https://b.invalid" }),
+    );
+    expect(hash({ KANEO_TURNSTILE_SITE_KEY: "one" })).not.toBe(
+      hash({ KANEO_TURNSTILE_SITE_KEY: "two" }),
+    );
+    expect(hash({})).not.toBe(hash({ KANEO_A: "" }));
+    expect(hash({})).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("REJECTS a value carrying a backslash", () => {
-    expect(isAcceptedByRealGuard("2026.09.22-4\\backslash")).toBe(false);
+  it("still writes OAuth discovery metadata and empties it when API URL is absent", () => {
+    const configured = runEntrypoint("", {
+      KANEO_API_URL: "https://api.example.invalid/api",
+    });
+    expect(configured[NGINX]).toContain(
+      '"resource":"https://api.example.invalid/api/mcp"',
+    );
+    expect(configured[NGINX]).toContain(
+      '"token_endpoint":"https://api.example.invalid/api/mcp/token"',
+    );
+    expect(runEntrypoint("")[NGINX]).toBe("return 200 '{}';\nreturn 200 '{}';");
   });
+});
 
-  it("REJECTS a value carrying the sed delimiter `#`", () => {
-    expect(isAcceptedByRealGuard("2026.09.22-4#injected")).toBe(false);
+it("keeps real Vite source-map positions valid after every runtime substitution", async () => {
+  const source = [
+    "globalThis.api = import.meta.env.VITE_API_URL;",
+    "globalThis.apex = import.meta.env.VITE_OPERON_APEX_URL;",
+    "globalThis.identity = __KANEO_LOADED_VERSION_JSON__;",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: input source for Vite
+    "globalThis.callback = `${import.meta.env.VITE_CLIENT_URL}/auth/sign-in`;",
+    'throw new Error("mapping probe");',
+  ].join("\n");
+  const result = await build({
+    configFile: false,
+    logLevel: "silent",
+    define: definitions,
+    plugins: [
+      {
+        name: "memory-entry",
+        resolveId: (id) =>
+          id.endsWith("runtime-proof") ? "/runtime-proof.js" : null,
+        load: (id) => (id === "/runtime-proof.js" ? source : null),
+      },
+    ],
+    build: {
+      write: false,
+      sourcemap: "hidden",
+      minify: true,
+      lib: { entry: "runtime-proof", formats: ["es"] },
+    },
   });
+  const output = Array.isArray(result) ? result[0] : result;
+  if (!("output" in output)) throw new Error("Expected bundled output");
+  const chunk = output.output.find((entry) => entry.type === "chunk");
+  if (!chunk?.map) throw new Error("Missing source map");
+  const replaced = runEntrypoint(chunk.code, {
+    KANEO_API_URL: "https://api.example.invalid/api",
+    KANEO_CLIENT_URL: "https://initiative.example.invalid",
+    OPERON_APEX_URL: "https://operon.example.invalid",
+  })[`${ROOT}/probe.js`];
+  expect(replaced).toHaveLength(chunk.code.length);
+  const context: { api?: string; apex?: string; callback?: string } = {};
+  let stack = "";
+  try {
+    new Script(replaced, { filename: "probe.js" }).runInNewContext(context);
+  } catch (error) {
+    stack = String((error as Error).stack);
+  }
+  const location = stack.match(/at probe\.js:(\d+):(\d+)/);
+  expect(location).not.toBeNull();
+  const map = new SourceMap(JSON.parse(chunk.map.toString()));
+  const original = map.findEntry(
+    Number(location?.[1]) - 1,
+    Number(location?.[2]) - 1,
+  );
+  expect("originalLine" in original && original.originalLine).toBe(4);
+  expect(context.callback).toBe(
+    "https://initiative.example.invalid/auth/sign-in",
+  );
+  expect(context.api).toBe("https://api.example.invalid/api");
+  expect(context.apex).toBe("https://operon.example.invalid");
+}, 30_000);
+
+it("uses one immutable build ID in the emitted SDK constant and source-map uploader", async () => {
+  const resolved =
+    typeof config === "function"
+      ? await config({ command: "build", mode: "production" })
+      : config;
+  expect(JSON.parse(resolved.define?.__KANEO_SENTRY_RELEASE__ ?? '""')).toMatch(
+    /^initiative-[0-9a-f]{32}$/,
+  );
+  const text = readFileSync(
+    resolve(import.meta.dirname, "../vite.config.ts"),
+    "utf8",
+  );
+  expect(text).toContain("release: { name: sentryRelease }");
+});
+
+it("never serves source maps through nginx", () => {
+  const text = readFileSync(
+    resolve(import.meta.dirname, "../nginx.kaneo.conf"),
+    "utf8",
+  );
+  const location = text.indexOf("location ~* \\.map$");
+  expect(location).toBeGreaterThan(-1);
+  expect(text.slice(location, location + 60)).toContain("return 404;");
 });

@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Uma nova versão está disponível. O recarregamento automático está pausado. Recarregar agora descarta as alterações não salvas.",
+			"writeRefused": "Uma nova versão está aguardando. Recarregue antes de fazer outra alteração.",
+			"discardAndReload": "Descartar alterações não salvas e recarregar"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Cancelar",

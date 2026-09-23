@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "新しいバージョンを利用できます。自動再読み込みは一時停止中です。今すぐ再読み込みすると、未保存の変更は破棄されます。",
+			"writeRefused": "新しいバージョンが待機中です。別の変更を行う前に再読み込みしてください。",
+			"discardAndReload": "未保存の変更を破棄して再読み込み"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "キャンセル",

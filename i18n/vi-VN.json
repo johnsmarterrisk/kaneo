@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Có phiên bản mới. Tự động tải lại đã tạm dừng. Tải lại ngay sẽ hủy các thay đổi chưa lưu.",
+			"writeRefused": "Phiên bản mới đang chờ. Hãy tải lại trước khi thực hiện thay đổi khác.",
+			"discardAndReload": "Hủy thay đổi chưa lưu và tải lại"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Hủy",

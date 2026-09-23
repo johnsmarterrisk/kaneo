@@ -75,14 +75,22 @@ function normalizeType(type: string | undefined): string | undefined {
   return KNOWN_ERROR_TYPES.has(type) ? type : "Error";
 }
 
-/** Strips a query string/fragment off a stack-frame filename or a request URL — the same
-    leak channel `platform-service`'s `FRAME_RE`/`sanitizePath` close server-side (a token
-    or other page-specific content can ride along as `?token=...`). The path itself is kept
-    (not hashed) because it is needed for release-specific symbolication (finding 17) and a
-    bundle/source path is not user content. */
-function sanitizeUrlLike(value: string | undefined): string | undefined {
+function assetPath(value: string | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
-  return value.split(/[?#]/, 1)[0].slice(0, 500);
+  try {
+    const path = new URL(value, "https://redacted.invalid").pathname;
+    return /^\/(?:assets\/)?[A-Za-z0-9_-]+\.m?js$/.test(path)
+      ? path
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function positiveInteger(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
 }
 
 async function sanitizeExceptionValue(
@@ -97,13 +105,16 @@ async function sanitizeExceptionValue(
   const frames = value.stacktrace?.frames;
   if (frames) {
     sanitized.stacktrace = {
-      frames: frames.map((frame) => ({
-        filename: sanitizeUrlLike(frame.filename),
-        function: frame.function,
-        lineno: frame.lineno,
-        colno: frame.colno,
-        in_app: frame.in_app,
-      })),
+      frames: frames
+        .flatMap((frame) => {
+          const filename = assetPath(frame.filename);
+          const lineno = positiveInteger(frame.lineno);
+          const colno = positiveInteger(frame.colno);
+          return filename && lineno && colno
+            ? [{ filename, lineno, colno }]
+            : [];
+        })
+        .slice(-10),
     };
   }
   return sanitized;
@@ -126,13 +137,41 @@ export async function redactEvent(
   event: Sentry.ErrorEvent,
 ): Promise<Sentry.ErrorEvent> {
   const sanitized: Sentry.ErrorEvent = {
-    event_id: event.event_id,
-    timestamp: event.timestamp,
-    platform: event.platform,
-    level: event.level,
-    release: event.release,
-    environment: event.environment,
-    tags: event.tags?.area ? { area: event.tags.area } : undefined,
+    type: undefined,
+    event_id:
+      typeof event.event_id === "string" &&
+      /^[0-9a-f]{32}$/i.test(event.event_id)
+        ? event.event_id
+        : undefined,
+    timestamp:
+      typeof event.timestamp === "number" &&
+      Number.isFinite(event.timestamp) &&
+      event.timestamp > 0
+        ? event.timestamp
+        : undefined,
+    platform: event.platform === "javascript" ? "javascript" : undefined,
+    level:
+      event.level === "error" ||
+      event.level === "fatal" ||
+      event.level === "warning"
+        ? event.level
+        : undefined,
+    release:
+      typeof event.release === "string" &&
+      /^initiative-[0-9a-f]{32}$/.test(event.release) &&
+      event.release === releaseIdentity()
+        ? event.release
+        : undefined,
+    environment:
+      event.environment === "production" ||
+      event.environment === "development" ||
+      event.environment === "test"
+        ? event.environment
+        : undefined,
+    tags: {
+      ...deploymentTags(),
+      ...(event.tags?.area === "auth.session" ? { area: "auth.session" } : {}),
+    },
   };
 
   if (typeof event.message === "string") {
@@ -142,66 +181,43 @@ export async function redactEvent(
   if (event.exception?.values) {
     sanitized.exception = {
       values: await Promise.all(
-        event.exception.values.map(sanitizeExceptionValue),
+        event.exception.values.slice(0, 10).map(sanitizeExceptionValue),
       ),
     };
   }
 
-  const url = sanitizeUrlLike(event.request?.url);
-  if (url) {
-    sanitized.request = { url };
-  }
+  if (event.request?.url) sanitized.request = { url: "/redacted" };
 
   return sanitized;
 }
 
-/** `apps/web/vite.config.ts`'s build-time placeholder, substituted by `env.sh` at
-    container start with the SAME identity `version.json` carries — see
-    `src/lib/version-check.ts`'s copy of this declaration for the full contract. Declared
-    here too rather than imported: this file and that one are declared independently in
-    `docs/fork-discipline.md` row 2, and neither currently depends on the other. */
+declare const __KANEO_SENTRY_RELEASE__: string;
 declare const __KANEO_LOADED_VERSION_JSON__: string;
 
-/**
- * Stage 1 round-1 finding 17: `release: __APP_VERSION__` tagged every event with only
- * upstream Kaneo's package version — the same string on every deploy of this fork,
- * regardless of which Operon or fork commit actually produced the running bundle. A
- * captured stack frame could never be matched back to the RIGHT source map for a
- * multi-release history. This reads the SAME runtime-embedded identity
- * `version-check.ts#getLoadedVersion` reads (both deployment SHAs, not just this
- * package's own version), so a release tag on an event uniquely identifies the exact
- * candidate image it came from. Falls back to `__APP_VERSION__` alone when the embedded
- * constant is absent or still the un-substituted placeholder (a local `vite dev` run with
- * no `env.sh`), so Sentry still receives SOME release value rather than `undefined`.
- */
 export function releaseIdentity(): string {
+  return typeof __KANEO_SENTRY_RELEASE__ === "string" &&
+    /^initiative-[0-9a-f]{32}$/.test(__KANEO_SENTRY_RELEASE__)
+    ? __KANEO_SENTRY_RELEASE__
+    : "unknown";
+}
+
+function deploymentTags(): Record<string, string> {
   try {
-    const raw =
-      typeof __KANEO_LOADED_VERSION_JSON__ === "string"
-        ? __KANEO_LOADED_VERSION_JSON__
-        : "";
-    if (raw && raw !== "KANEO_LOADED_VERSION_JSON_PLACEHOLDER") {
-      const info = JSON.parse(raw) as {
-        release?: string;
-        operon_sha?: string;
-        fork_sha?: string;
-      };
-      if (
-        typeof info.release === "string" &&
-        typeof info.operon_sha === "string" &&
-        typeof info.fork_sha === "string"
-      ) {
-        return `${info.release}+${info.operon_sha.slice(0, 7)}.${info.fork_sha.slice(0, 7)}`;
-      }
+    const info = JSON.parse(__KANEO_LOADED_VERSION_JSON__);
+    const tags: Record<string, string> = {};
+    if (
+      typeof info.release === "string" &&
+      /^(?:\d{4}\.\d{2}\.\d{2}-\d+|dev-[0-9a-f]{7,40})$/.test(info.release)
+    )
+      tags.deployment_release = info.release;
+    for (const key of ["operon_sha", "fork_sha"]) {
+      if (typeof info[key] === "string" && /^[0-9a-f]{40}$/i.test(info[key]))
+        tags[key] = info[key];
     }
+    return tags;
   } catch {
-    // Malformed embedded constant — fall through to the package-version-only value below.
+    return {};
   }
-  // `typeof` guard, not a bare reference: `__APP_VERSION__` is a Vite `define` (textual
-  // replacement at build time) with no runtime binding at all outside a Vite/Rollup
-  // build — a bare reference throws `ReferenceError` in, for one, this file's own test
-  // environment, which uses a separate `vitest.config.ts` with no `define` of its own.
-  return typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "unknown";
 }
 
 // skip init if env.sh never replaced the "KANEO_SENTRY_DSN" placeholder

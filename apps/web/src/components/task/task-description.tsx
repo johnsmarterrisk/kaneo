@@ -75,6 +75,7 @@ import { isInCodeBlockLanguagePicker } from "@/lib/is-in-codeblock-language-pick
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
+import { registerDirtyEditor } from "@/lib/version-check";
 import { AttachmentCard } from "./extensions/attachment-card";
 import { EmbedBlock } from "./extensions/embed-block";
 import { KaneoIssueLink } from "./extensions/kaneo-issue-link";
@@ -575,6 +576,12 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     };
   }, []);
 
+  const unsavedDescriptionsRef = useRef(new Map<string, symbol>());
+  useEffect(
+    () => registerDirtyEditor(() => unsavedDescriptionsRef.current.size > 0),
+    [],
+  );
+
   const pendingDescriptionSavesRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
@@ -585,6 +592,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     const editedTask = taskRef.current;
     if (!editedTask) return;
 
+    const revision = Symbol();
+    unsavedDescriptionsRef.current.set(editedTask.id, revision);
     const timers = pendingDescriptionSavesRef.current;
     const pending = timers.get(editedTask.id);
     if (pending) clearTimeout(pending);
@@ -605,6 +614,9 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
             ...base,
             description: markdown,
           });
+          if (unsavedDescriptionsRef.current.get(editedTask.id) === revision) {
+            unsavedDescriptionsRef.current.delete(editedTask.id);
+          }
         } catch (error) {
           console.error("Failed to update description:", error);
         }

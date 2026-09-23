@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Er is een nieuwe versie beschikbaar. Automatisch herladen is gepauzeerd. Als je nu herlaadt, gaan niet-opgeslagen wijzigingen verloren.",
+			"writeRefused": "Er staat een nieuwe versie klaar. Herlaad voordat je nog een wijziging maakt.",
+			"discardAndReload": "Niet-opgeslagen wijzigingen verwerpen en herladen"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Annuleren",

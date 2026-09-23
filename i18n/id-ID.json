@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "Versi baru tersedia. Muat ulang otomatis dijeda. Memuat ulang sekarang akan membuang perubahan yang belum disimpan.",
+			"writeRefused": "Versi baru menunggu. Muat ulang sebelum membuat perubahan lain.",
+			"discardAndReload": "Buang perubahan yang belum disimpan dan muat ulang"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Batal",

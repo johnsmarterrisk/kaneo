@@ -22,13 +22,9 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
   const isInitializedRef = useRef(false);
   const taskRef = useRef(task);
   const updateTaskRef = useRef(updateTaskTitle);
-  /**
-   * Stage 1 round-1 finding 6: true from the moment a keystroke changes the title until
-   * the 800 ms debounce hands the save off to `useUpdateTaskTitle` — the window
-   * `useIsMutating()` alone cannot see, because nothing is mutating YET. Registered below
-   * so a version-mismatch reload defers rather than discarding a title edit mid-debounce.
-   */
+  // Only the successful save of the latest edit may clear protection.
   const dirtyRef = useRef(false);
+  const editRevisionRef = useRef(0);
 
   useEffect(() => {
     taskRef.current = task;
@@ -55,7 +51,7 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
   }, [task?.title]);
 
   const debouncedUpdate = useCallback(
-    debounce(async (title: string) => {
+    debounce(async (title: string, revision: number) => {
       if (!isInitializedRef.current) return;
 
       const currentTask = taskRef.current;
@@ -64,13 +60,11 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
       if (!currentTask || !updateTaskFn) return;
 
       try {
-        // Handing off to the mutation now — `useIsMutating()` covers it from here, so the
-        // dirty predicate's job (bridging the gap BEFORE this point) is done.
-        dirtyRef.current = false;
         await updateTaskFn({
           ...currentTask,
           title,
         });
+        if (editRevisionRef.current === revision) dirtyRef.current = false;
       } catch (error) {
         console.error("Failed to update title:", error);
       }
@@ -83,7 +77,8 @@ export default function TaskTitle({ taskId }: TaskTitleProps) {
       if (!isInitializedRef.current) return;
 
       dirtyRef.current = true;
-      debouncedUpdate(value);
+      editRevisionRef.current += 1;
+      debouncedUpdate(value, editRevisionRef.current);
     },
     [debouncedUpdate],
   );

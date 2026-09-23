@@ -1,5 +1,10 @@
 {
 	"common": {
+		"versionUpdate": {
+			"pending": "A new version is available. Automatic reload is paused. Reloading now discards unsaved edits.",
+			"writeRefused": "A new version is waiting. Reload before starting another change.",
+			"discardAndReload": "Discard unsaved edits and reload"
+		},
 		"appName": "Initiative",
 		"actions": {
 			"cancel": "Cancel",

@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoisted so `vi.mock` factories below (themselves hoisted above these imports at
@@ -9,7 +9,7 @@ vi.mock("@tanstack/react-query", () => ({
   useIsMutating: () => queryMock.mutationCount,
 }));
 
-const toastMock = vi.hoisted(() => ({ info: vi.fn() }));
+const toastMock = vi.hoisted(() => ({ info: vi.fn(), dismiss: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toastMock }));
 
 import {
@@ -24,6 +24,7 @@ import {
   registerDirtyEditor,
   resetDirtyEditorsForTests,
   resetLoadedVersionForTests,
+  resetMutationAdmissionForTests,
   resetReloadScheduledForTests,
   sha7,
   useVersionCheck,
@@ -78,6 +79,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  resetMutationAdmissionForTests();
   vi.unstubAllGlobals();
   resetReloadScheduledForTests();
   resetDirtyEditorsForTests();
@@ -536,4 +539,151 @@ describe("useVersionCheck", () => {
       expect(stored.perTarget[`${VALID.release}::hash-2`]).toBeUndefined();
     });
   });
+});
+
+describe("round 2 reload safety", () => {
+  it.each([
+    { perTarget: { bad: -1 } },
+    { perTarget: { bad: 0.5 } },
+    { perTarget: { bad: "1" } },
+    { perTarget: [] },
+    {},
+  ])(
+    "corrupt counters stop automatic reload and expose manual recovery: %j",
+    async (ledger) => {
+      sessionStorage.setItem(
+        RELOAD_ATTEMPTS_STORAGE_KEY,
+        JSON.stringify(ledger),
+      );
+      fetchMock.mockResolvedValue(
+        jsonResponse({ ...VALID, config_hash: "new" }),
+      );
+      const reloader = vi.fn();
+      renderHook(() => useVersionCheck({ reloader }));
+      await act(async () => {});
+      expect(reloader).not.toHaveBeenCalled();
+      expect(isReloadScheduled()).toBe(true);
+      expect(toastMock.info).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          duration: Number.POSITIVE_INFINITY,
+          action: expect.objectContaining({ onClick: expect.any(Function) }),
+        }),
+      );
+      const action = toastMock.info.mock.calls.at(-1)?.[1]?.action;
+      act(() => action.onClick());
+      expect(reloader).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("convergence resets the episode budget", async () => {
+    sessionStorage.setItem(
+      RELOAD_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify({ perTarget: { old: 4 } }),
+    );
+    fetchMock.mockResolvedValue(jsonResponse(VALID));
+    renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(
+      JSON.parse(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null"),
+    ).toEqual({ perTarget: {} });
+  });
+
+  it("going offline while the manifest resolves cannot trigger reload", async () => {
+    let finish: (response: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const reloader = vi.fn();
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {});
+    Object.defineProperty(navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+    await act(async () => {
+      finish(jsonResponse({ ...VALID, config_hash: "new" }));
+    });
+    expect(reloader).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY)).toBeNull();
+  });
+
+  it("refuses new writes to every origin while an update is pending, keeping reads available", async () => {
+    registerDirtyEditor(() => true);
+    fetchMock.mockResolvedValue(jsonResponse({ ...VALID, config_hash: "new" }));
+    renderHook(() => useVersionCheck());
+    await act(async () => {});
+    fetchMock.mockClear();
+    await expect(
+      fetch("https://uploads.example.invalid/blob", { method: "PUT" }),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await fetch("/api/task");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("keeps a direct upload protected until it settles and blocks a second write", async () => {
+  fetchMock.mockResolvedValue(jsonResponse(VALID));
+  const reloader = vi.fn();
+  renderHook(() => useVersionCheck({ reloader }));
+  await act(async () => {});
+  let finishUpload: (response: Response) => void = () => {};
+  fetchMock.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+  );
+  const upload = fetch("https://storage.example.invalid/upload", {
+    method: "PUT",
+  });
+  fetchMock.mockResolvedValue(jsonResponse({ ...VALID, config_hash: "new" }));
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(reloader).not.toHaveBeenCalled();
+  expect(isReloadScheduled()).toBe(true);
+  const calls = fetchMock.mock.calls.length;
+  await expect(
+    fetch(
+      new Request("https://api.example.invalid/task", { method: "DELETE" }),
+    ),
+  ).rejects.toThrow();
+  expect(fetchMock).toHaveBeenCalledTimes(calls);
+  await act(async () => {
+    finishUpload(jsonResponse({}));
+    await upload;
+  });
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(reloader).toHaveBeenCalledOnce();
+});
+
+it("storage write failure exposes recovery without an unaccounted reload", async () => {
+  const storageWrite = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+  try {
+    fetchMock.mockResolvedValue(jsonResponse({ ...VALID, config_hash: "new" }));
+    const reloader = vi.fn();
+    renderHook(() => useVersionCheck({ reloader }));
+    await act(async () => {});
+    expect(reloader).not.toHaveBeenCalled();
+    expect(isReloadScheduled()).toBe(true);
+    expect(toastMock.info).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        action: expect.objectContaining({ onClick: expect.any(Function) }),
+      }),
+    );
+  } finally {
+    storageWrite.mockRestore();
+  }
 });

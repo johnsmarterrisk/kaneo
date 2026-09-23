@@ -1,4 +1,4 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { Extension } from "@tiptap/core";
 import TaskItem from "@tiptap/extension-task-item";
 import type { Editor } from "@tiptap/react";
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   >(),
   mutateAsync: vi.fn(),
   editors: [] as unknown[],
+  dirtyCheck: null as (() => boolean) | null,
 }));
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -76,6 +77,15 @@ vi.mock("@/lib/shiki-highlighter", () => ({
   getSharedShikiHighlighter: () => new Promise(() => {}),
 }));
 
+vi.mock("@/lib/version-check", () => ({
+  registerDirtyEditor: (check: () => boolean) => {
+    mocks.dirtyCheck = check;
+    return () => {
+      mocks.dirtyCheck = null;
+    };
+  },
+}));
+
 const DEBOUNCE_MS = 700;
 
 function latestEditor() {
@@ -115,6 +125,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
 });
 
@@ -158,4 +169,61 @@ describe("TaskDescription pending saves", () => {
 
     expect(savedTaskIds().sort()).toEqual(["task-a", "task-b"]);
   });
+});
+
+it("protects description edits during debounce, save failure, and retry", async () => {
+  const { container } = render(<TaskDescription taskId="task-a" />);
+  await waitFor(() => expect(container.textContent).toContain("alpha"));
+  await settle();
+  expect(mocks.dirtyCheck?.()).toBe(false);
+  let rejectSave: (error: Error) => void = () => {};
+  mocks.mutateAsync.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectSave = reject;
+      }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  act(() => {
+    latestEditor().commands.insertContent(" pending");
+  });
+  expect(mocks.dirtyCheck?.()).toBe(true);
+  await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1));
+  expect(mocks.dirtyCheck?.()).toBe(true);
+  await act(async () => {
+    rejectSave(new Error("save failed"));
+  });
+  expect(mocks.dirtyCheck?.()).toBe(true);
+  act(() => {
+    latestEditor().commands.insertContent(" retry");
+  });
+  await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2));
+  expect(mocks.dirtyCheck?.()).toBe(false);
+  log.mockRestore();
+});
+
+it("an older description save cannot clear a newer draft", async () => {
+  const { container } = render(<TaskDescription taskId="task-a" />);
+  await waitFor(() => expect(container.textContent).toContain("alpha"));
+  await settle();
+  let finish: (value: unknown) => void = () => {};
+  mocks.mutateAsync.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  act(() => {
+    latestEditor().commands.insertContent(" first");
+  });
+  await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledOnce());
+  act(() => {
+    latestEditor().commands.insertContent(" second");
+  });
+  await act(async () => {
+    finish({});
+  });
+  expect(mocks.dirtyCheck?.()).toBe(true);
+  await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2));
+  expect(mocks.dirtyCheck?.()).toBe(false);
 });
