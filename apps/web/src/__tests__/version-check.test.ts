@@ -17,6 +17,7 @@ import {
   DRAIN_POLL_MS,
   fetchVersionJson,
   formatStamp,
+  formatTooltip,
   getLoadedVersion,
   isReloadScheduled,
   MAX_RELOAD_ATTEMPTS_PER_VERSION,
@@ -27,8 +28,8 @@ import {
   resetMutationAdmissionForTests,
   resetReloadScheduledForTests,
   sha7,
+  useLoadedVersionInfo,
   useVersionCheck,
-  useVersionStampText,
   type VersionInfo,
   versionKey,
 } from "@/lib/version-check";
@@ -53,6 +54,9 @@ const VALID: VersionInfo = {
   config_hash: "deadbeef",
   built_at: "2026-09-22T12:00:00.000Z",
 };
+
+const targetKey = (configHash: string) =>
+  versionKey({ ...VALID, config_hash: configHash });
 
 function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: async () => body } as unknown as Response;
@@ -143,9 +147,14 @@ describe("sha7 / versionKey / formatStamp", () => {
     expect(sha7("unknown")).toBe("unknown");
   });
 
-  it("versionKey combines release and config_hash only", () => {
-    expect(versionKey(VALID)).toBe("2026.09.22-4::deadbeef");
-    expect(versionKey({ ...VALID, fork_sha: "different" })).toBe(
+  it("versionKey combines release, Initiative's own fork SHA and config_hash", () => {
+    expect(versionKey(VALID)).toBe(
+      "2026.09.22-4::f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5::deadbeef",
+    );
+    expect(versionKey({ ...VALID, operon_sha: "different" })).toBe(
+      versionKey(VALID),
+    );
+    expect(versionKey({ ...VALID, fork_sha: "different" })).not.toBe(
       versionKey(VALID),
     );
     expect(versionKey({ ...VALID, config_hash: "different" })).not.toBe(
@@ -153,23 +162,48 @@ describe("sha7 / versionKey / formatStamp", () => {
     );
   });
 
-  it('formatStamp renders "v<release> · <sha7>/<sha7>", or an em dash when null', () => {
-    expect(formatStamp(VALID)).toBe("v2026.09.22-4 · a1b2c3d/f4e5d6c");
+  it("versionKey changes across dev builds when Initiative's own fork SHA changes", () => {
+    expect(
+      versionKey({ ...VALID, release: "unknown", fork_sha: "a".repeat(40) }),
+    ).not.toBe(
+      versionKey({ ...VALID, release: "unknown", fork_sha: "b".repeat(40) }),
+    );
+  });
+
+  it('formatStamp renders "v<release>" alone, or an em dash when null', () => {
+    expect(formatStamp(VALID)).toBe("v2026.09.22-4");
     expect(formatStamp(null)).toBe("—");
+  });
+
+  it("formatStamp does not double-prefix a release already carrying its own v (vMAJOR.MINOR)", () => {
+    expect(formatStamp({ ...VALID, release: "v1.0" })).toBe("v1.0");
+  });
+
+  it('formatStamp renders "dev" for an empty, unset or "unknown" release', () => {
+    expect(formatStamp({ ...VALID, release: "" })).toBe("dev");
+    expect(formatStamp({ ...VALID, release: "unknown" })).toBe("dev");
+  });
+
+  it('formatTooltip renders "Operon <sha7> · Initiative <sha7>", or "dev build" when both SHAs are unset', () => {
+    expect(formatTooltip(VALID)).toBe("Operon a1b2c3d · Initiative f4e5d6c");
+    expect(
+      formatTooltip({ ...VALID, operon_sha: "unknown", fork_sha: "unknown" }),
+    ).toBe("dev build");
+    expect(formatTooltip(null)).toBe("dev build");
   });
 });
 
-describe("useVersionStampText", () => {
-  it("renders an em dash until the embedded constant resolves, then the formatted stamp — never fetching", async () => {
-    const { result } = renderHook(() => useVersionStampText());
-    expect(result.current).toBe("—");
+describe("useLoadedVersionInfo", () => {
+  it("resolves to null until the embedded constant resolves, then the raw VersionInfo — never fetching", async () => {
+    const { result } = renderHook(() => useLoadedVersionInfo());
+    expect(result.current).toBeNull();
 
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(result.current).toBe("v2026.09.22-4 · a1b2c3d/f4e5d6c");
+    expect(result.current).toEqual(VALID);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -372,11 +406,11 @@ describe("useVersionCheck", () => {
 
   it("no loop: a mismatch already at the attempt bound in sessionStorage is not retried", async () => {
     const reloader = vi.fn();
-    const targetKey = `${VALID.release}::hash-2`;
+    const boundedTargetKey = targetKey("hash-2");
     sessionStorage.setItem(
       RELOAD_ATTEMPTS_STORAGE_KEY,
       JSON.stringify({
-        perTarget: { [targetKey]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
+        perTarget: { [boundedTargetKey]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
       }),
     );
     fetchMock.mockResolvedValueOnce(
@@ -406,15 +440,15 @@ describe("useVersionCheck", () => {
       sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null",
     );
     expect(stored).toEqual({
-      perTarget: { [`${VALID.release}::hash-2`]: 1 },
+      perTarget: { [targetKey("hash-2")]: 1 },
     });
   });
 
   describe("Stage 1 round-1 finding 11: bounded across target changes and storage failure", () => {
     it("alternating between two flapping targets still hits a bound", async () => {
       const reloader = vi.fn();
-      const targetB = `${VALID.release}::hash-b`;
-      const targetC = `${VALID.release}::hash-c`;
+      const targetB = targetKey("hash-b");
+      const targetC = targetKey("hash-c");
       sessionStorage.setItem(
         RELOAD_ATTEMPTS_STORAGE_KEY,
         JSON.stringify({
@@ -442,10 +476,10 @@ describe("useVersionCheck", () => {
         RELOAD_ATTEMPTS_STORAGE_KEY,
         JSON.stringify({
           perTarget: {
-            [`${VALID.release}::h1`]: 1,
-            [`${VALID.release}::h2`]: 1,
-            [`${VALID.release}::h3`]: 1,
-            [`${VALID.release}::h4`]: 1,
+            [targetKey("h1")]: 1,
+            [targetKey("h2")]: 1,
+            [targetKey("h3")]: 1,
+            [targetKey("h4")]: 1,
           },
         }),
       );
@@ -535,8 +569,8 @@ describe("useVersionCheck", () => {
       const stored = JSON.parse(
         sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null",
       );
-      expect(stored.perTarget[`${VALID.release}::hash-3`]).toBe(1);
-      expect(stored.perTarget[`${VALID.release}::hash-2`]).toBeUndefined();
+      expect(stored.perTarget[targetKey("hash-3")]).toBe(1);
+      expect(stored.perTarget[targetKey("hash-2")]).toBeUndefined();
     });
   });
 });

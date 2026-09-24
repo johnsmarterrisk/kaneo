@@ -7,6 +7,7 @@ import { Script } from "node:vm";
 import { build } from "vite";
 import { describe, expect, it } from "vitest";
 import config, { runtimeDefines } from "../vite.config";
+import { formatStamp } from "./lib/version-check";
 
 const ENV_SH = readFileSync(resolve(import.meta.dirname, "../env.sh"), "utf8");
 const ROOT = "/usr/share/nginx/html";
@@ -19,7 +20,10 @@ const identityEnv = {
 
 // Execute the entire entrypoint with its real shell/heredoc and Node substitution.
 // Only filesystem I/O is redirected to memory: the review fence forbids fixtures on disk.
-function runEntrypoint(bundle: string, env: Record<string, string> = {}) {
+function runEntrypoint(
+  bundle: string,
+  env: Record<string, string | undefined> = {},
+) {
   const harness = `
     const fs = require('node:fs');
     const vm = require('node:vm');
@@ -115,6 +119,39 @@ describe("runtime entrypoint", () => {
     expect(() =>
       runEntrypoint("", { VERSION_RELEASE: 'bad"release' }),
     ).toThrow();
+  });
+
+  it("versioning v1: accepts the new vMAJOR.MINOR release shape", () => {
+    const files = runEntrypoint("", { VERSION_RELEASE: "v1.0" });
+    expect(identity(files).release).toBe("v1.0");
+  });
+
+  it("versioning v1: rejects non-canonical zero-major and leading-zero variants", () => {
+    for (const release of ["v0.0", "v0.1", "v01.0", "v1.01"]) {
+      expect(() => runEntrypoint("", { VERSION_RELEASE: release })).toThrow();
+    }
+  });
+
+  it("versioning v1: still accepts the old YYYY.MM.DD-N shape (historical releases)", () => {
+    const files = runEntrypoint("", { VERSION_RELEASE: "2026.09.22-8" });
+    expect(identity(files).release).toBe("2026.09.22-8");
+  });
+
+  it("versioning v1: the retired dev-<sha> fallback shape is no longer accepted", () => {
+    expect(() =>
+      runEntrypoint("", { VERSION_RELEASE: "dev-a1b2c3d" }),
+    ).toThrow();
+  });
+
+  it("versioning v1: VERSION_RELEASE genuinely ABSENT (not merely empty) resolves to unknown/dev, never throwing — Codex round 1 finding 13", () => {
+    // `undefined` here — not `""` — so JSON.stringify drops the key entirely from
+    // FIXTURE_ENV: every other test in this file overrides VERSION_RELEASE, but the shared
+    // `identityEnv` fixture still SUPPLIES one, which is exactly the gap finding 13 named.
+    // This is the actual local `docker compose build initiative` shape open-items row 75
+    // fixed the RENDERING of: no `VERSION_RELEASE` in the container's environment at all.
+    const files = runEntrypoint("", { VERSION_RELEASE: undefined });
+    expect(identity(files).release).toBe("unknown");
+    expect(formatStamp(identity(files))).toBe("dev");
   });
 
   it("hashes all substituted configuration deterministically, distinguishing absent and empty", () => {

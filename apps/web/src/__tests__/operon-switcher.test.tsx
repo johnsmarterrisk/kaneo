@@ -1,6 +1,13 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetLoadedVersionForTests } from "@/lib/version-check";
 
 /**
  * Operon fork check (spec R14, task B11; extended by task G11; rebuilt for the rail-parity
@@ -307,6 +314,50 @@ describe("OperonVersionStamp", () => {
     expect(stamp.className).toContain("text-[12px]");
     expect(stamp.className).toContain("opacity-60");
     expect(stamp.className).not.toContain("truncate");
+  });
+
+  it("carries a title tooltip, never blank, with no embedded identity to read (dev build)", () => {
+    render(<OperonVersionStamp />);
+    const stamp = screen.getByTestId("version-stamp");
+    expect(stamp.getAttribute("title")).toBe("dev build");
+  });
+
+  describe("with a real embedded identity", () => {
+    beforeEach(() => {
+      // `getLoadedVersion()` caches its FIRST read at the module level (by design — a real
+      // document never reloads without a fresh module graph). The sibling test above
+      // already rendered `OperonVersionStamp` with no stub in place, caching `null` — this
+      // reset is what lets THIS test's stub actually be read instead of that stale cache.
+      resetLoadedVersionForTests();
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      resetLoadedVersionForTests();
+    });
+
+    it("renders v1.0 and the known-SHA tooltip — Codex round 1 finding 12: a real render, not just class/default-tooltip assertions", async () => {
+      vi.stubGlobal(
+        "__KANEO_LOADED_VERSION_JSON__",
+        JSON.stringify({
+          release: "v1.0",
+          operon_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          fork_sha: "f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5",
+          config_hash: "deadbeef",
+          built_at: "2026-09-22T12:00:00.000Z",
+        }),
+      );
+
+      render(<OperonVersionStamp />);
+      const stamp = screen.getByTestId("version-stamp");
+
+      await waitFor(() => {
+        expect(stamp.textContent).toBe("v1.0");
+      });
+      expect(stamp.getAttribute("title")).toBe(
+        "Operon a1b2c3d · Initiative f4e5d6c",
+      );
+    });
   });
 });
 

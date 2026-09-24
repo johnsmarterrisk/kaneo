@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import OperonVersionAbout from "@/components/common/operon-version-about";
 import PageTitle from "@/components/page-title";
 import useAuth from "@/components/providers/auth-provider/hooks/use-auth";
 import {
@@ -442,6 +443,8 @@ function RouteComponent() {
             </div>
           </div>
         </div>
+
+        <OperonVersionAbout />
 
         <AlertDialog
           open={isDeleteModalOpen}

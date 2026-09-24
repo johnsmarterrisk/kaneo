@@ -4,7 +4,11 @@ import { UserAvatar } from "@/components/user-avatar";
 import useSignOut from "@/hooks/mutations/use-sign-out";
 import useGetConfig from "@/hooks/queries/config/use-get-config";
 import { useUserWebSocket } from "@/hooks/use-user-websocket";
-import { useVersionStampText } from "@/lib/version-check";
+import {
+  formatStamp,
+  formatTooltip,
+  useLoadedVersionInfo,
+} from "@/lib/version-check";
 
 /**
  * operon-switcher.tsx — the Operon rail chrome injected into the Initiative fork (spec
@@ -571,14 +575,19 @@ export function OperonRailFooter({ phone = false }: { phone?: boolean } = {}) {
  * footer (below the account row, inside the safe area — see that file's own wrapper).
  */
 export function OperonVersionStamp() {
-  const versionStamp = useVersionStampText();
+  const info = useLoadedVersionInfo();
   return (
     <span
       data-testid="version-stamp"
+      // Versioning v1: the visible text is version-only (`formatStamp`); the full Operon
+      // and Initiative SHAs this used to print inline now live in the native `title`
+      // tooltip (`formatTooltip`) — hover/long-press to see them, and the account/
+      // information settings page carries the same pair for support.
+      title={formatTooltip(info)}
       className="block w-full text-center text-[12px] opacity-60"
       style={{ color: OPERON_COLORS.textPrimary }}
     >
-      {versionStamp}
+      {formatStamp(info)}
     </span>
   );
 }
