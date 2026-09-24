@@ -28,9 +28,8 @@ import {
   resetMutationAdmissionForTests,
   resetReloadScheduledForTests,
   sha7,
+  useLoadedVersionInfo,
   useVersionCheck,
-  useVersionStampText,
-  useVersionTooltip,
   type VersionInfo,
   versionKey,
 } from "@/lib/version-check";
@@ -178,32 +177,17 @@ describe("sha7 / versionKey / formatStamp", () => {
   });
 });
 
-describe("useVersionStampText", () => {
-  it("renders an em dash until the embedded constant resolves, then the version-only stamp — never fetching", async () => {
-    const { result } = renderHook(() => useVersionStampText());
-    expect(result.current).toBe("—");
+describe("useLoadedVersionInfo", () => {
+  it("resolves to null until the embedded constant resolves, then the raw VersionInfo — never fetching", async () => {
+    const { result } = renderHook(() => useLoadedVersionInfo());
+    expect(result.current).toBeNull();
 
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(result.current).toBe("v2026.09.22-4");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("useVersionTooltip", () => {
-  it("renders the full-SHA tooltip once the embedded constant resolves — never fetching", async () => {
-    const { result } = renderHook(() => useVersionTooltip());
-    expect(result.current).toBe("dev build");
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(result.current).toBe("Operon a1b2c3d · Initiative f4e5d6c");
+    expect(result.current).toEqual(VALID);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

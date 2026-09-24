@@ -171,11 +171,18 @@ export function formatTooltip(info: VersionInfo | null): string {
 }
 
 /**
- * Shared by every caller that needs the loaded identity (`OperonVersionStamp`, the
- * Versioning v1 About block on the account/information settings page) so the "fetch once"
- * `useEffect`/`useState` pair exists in exactly one place. `useVersionStampText` and
- * `useVersionTooltip` are both built on this — the equivalent of `app/src/shell/
- * VersionStamp.tsx`'s own `getLoadedVersion()` effect on the Operon side.
+ * Shared by every caller that needs the loaded identity (`OperonVersionStamp` and the
+ * Versioning v1 About block on the account/information settings page both call this
+ * directly and format it themselves with `formatStamp`/`formatTooltip`) so the "fetch
+ * once" `useEffect`/`useState` pair exists in exactly one place — the equivalent of
+ * `app/src/shell/VersionStamp.tsx`'s own `getLoadedVersion()` effect on the Operon side.
+ *
+ * Codex round 1 (versioning-v1 qc, finding 12) removed the `useVersionStampText`/
+ * `useVersionTooltip` wrapper hooks this used to also export: once `OperonVersionStamp`
+ * was rewritten to call `formatStamp`/`formatTooltip` directly (so it could pass BOTH to
+ * the same `<span>`, text and `title`, from one `useLoadedVersionInfo()` call), those two
+ * wrappers had no caller left anywhere in the tree — dead exports whose own tests were the
+ * only thing still calling them.
  */
 export function useLoadedVersionInfo(): VersionInfo | null {
   const [info, setInfo] = useState<VersionInfo | null>(null);
@@ -191,17 +198,6 @@ export function useLoadedVersionInfo(): VersionInfo | null {
   }, []);
 
   return info;
-}
-
-/** The stamp text alone (`OperonVersionStamp`'s visible content) — see `useLoadedVersionInfo`. */
-export function useVersionStampText(): string {
-  return formatStamp(useLoadedVersionInfo());
-}
-
-/** The stamp's `title` tooltip text (Versioning v1 — the SHAs moved off the visible text
-    and onto this) — see `useLoadedVersionInfo`. */
-export function useVersionTooltip(): string {
-  return formatTooltip(useLoadedVersionInfo());
 }
 
 // Editor predicates bridge the debounce window and remain true after a failed save.

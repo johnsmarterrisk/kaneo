@@ -32,22 +32,37 @@ export default function OperonVersionAbout() {
   return (
     <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
       <p className="text-sm font-medium">About</p>
-      <dl className="text-sm space-y-1" data-testid="about-version">
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Version</dt>
-          <dd className="font-mono" data-testid="about-version-release">
+      {/* Codex round 1 finding 10: a full 40-character SHA is unbreakable monospace text —
+          `flex justify-between` alone let it push past a 375px viewport's right edge rather
+          than wrap. Each row now stacks label-over-value below `sm` (a `min-w-0` flex child
+          so it CAN shrink at all, `break-all` so a run with no spaces wraps mid-string
+          instead of overflowing) and returns to a single inline row at `sm` and up, where
+          the value has room beside its label. Mirrors Operon's own `AboutVersion.tsx`. */}
+      <dl className="text-sm space-y-2" data-testid="about-version">
+        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+          <dt className="text-muted-foreground shrink-0">Version</dt>
+          <dd
+            className="font-mono min-w-0 break-all sm:text-right"
+            data-testid="about-version-release"
+          >
             {formatStamp(info)}
           </dd>
         </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Operon</dt>
-          <dd className="font-mono" data-testid="about-version-operon-sha">
+        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+          <dt className="text-muted-foreground shrink-0">Operon</dt>
+          <dd
+            className="font-mono min-w-0 break-all sm:text-right"
+            data-testid="about-version-operon-sha"
+          >
             {formatSha(info?.operon_sha)}
           </dd>
         </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Initiative</dt>
-          <dd className="font-mono" data-testid="about-version-fork-sha">
+        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+          <dt className="text-muted-foreground shrink-0">Initiative</dt>
+          <dd
+            className="font-mono min-w-0 break-all sm:text-right"
+            data-testid="about-version-fork-sha"
+          >
             {formatSha(info?.fork_sha)}
           </dd>
         </div>
