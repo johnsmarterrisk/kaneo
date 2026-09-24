@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only twelve kinds of change are permitted, and every file this
+upstream built it. Only thirteen kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -80,10 +80,15 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      event that announces a project could never travel the path that having
      announced it opens. With neither environment value set — which is every
      deployment that is not Operon's — nothing is delivered and nothing changes.
+ 13. Base-image pinning on `Dockerfile.kaneo` — its four `FROM` lines pinned
+     `node:24.19.0-alpine`, a moving public Docker Hub tag Docker Hub can
+     withdraw, replace or roll forward without notice. All four now pin
+     `registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine`
+     by manifest-list digest; no other line in the file changes.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the twelve kinds map onto, path by path, and §7 records which task
+touch list the thirteen kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 
