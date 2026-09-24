@@ -57,10 +57,16 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
             // from; `useSignOut`/`useGetConfig` are default imports, already covered by
             // `export default {}` above.
             "export const useAuth = () => ({ user: null });",
-            // Task 0.5's version stamp (`OperonRailHeader`'s new call): a plain function
-            // stub is enough — nothing in this suite renders the component, it only calls
-            // `apexUrl` after `load()`, so the stub is never actually invoked either.
+            // Task 0.5's version stamp (`OperonRailHeader`'s new call): plain stubs are
+            // enough — nothing in this suite renders the component, it only calls
+            // `apexUrl` after `load()`, so none of these is ever actually invoked.
+            // Versioning v1 widened `operon-switcher.tsx`'s import from the single
+            // `useVersionStampText` hook to `formatStamp`/`formatTooltip`/
+            // `useLoadedVersionInfo` directly (`OperonVersionStamp`'s tooltip title).
             "export const useVersionStampText = () => '';",
+            "export const useLoadedVersionInfo = () => null;",
+            "export const formatStamp = () => '';",
+            "export const formatTooltip = () => '';",
           ].join("\n"),
           loader: "js",
         }));

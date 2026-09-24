@@ -22,7 +22,14 @@ const identity = {
   config_hash: createHash("sha256").update(JSON.stringify(configValues)).digest("hex"),
   built_at: new Date().toISOString(),
 };
-if (!/^(?:unknown|\d{4}\.\d{2}\.\d{2}-\d+|dev-[0-9a-f]{7,40})$/.test(identity.release) ||
+// Versioning v1 (docs/specs/versioning-v1-mini-spec.md, Operon repo): releases are now
+// vMAJOR.MINOR (v1.0, v1.1, ...) in place of YYYY.MM.DD-N. Both shapes are accepted here —
+// the OLD one stays valid for every already-shipped release, since this validator has no
+// way to know which scheme a given deployment predates. The old "dev-[0-9a-f]{7,40}" shape
+// is dropped: Operon's build-time fallback no longer synthesizes it (an unset
+// VITE_APP_VERSION now leaves release empty, same as this file's own "unknown" default
+// above), so "unknown" is the only fallback value either side ever produces.
+if (!/^(?:unknown|v\d+\.\d+|\d{4}\.\d{2}\.\d{2}-\d+)$/.test(identity.release) ||
     ![identity.operon_sha, identity.fork_sha].every(value => /^(?:unknown|[0-9a-f]{40})$/i.test(value))) {
   throw new Error("Invalid deployment identity");
 }

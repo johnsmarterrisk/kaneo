@@ -17,6 +17,7 @@ import {
   DRAIN_POLL_MS,
   fetchVersionJson,
   formatStamp,
+  formatTooltip,
   getLoadedVersion,
   isReloadScheduled,
   MAX_RELOAD_ATTEMPTS_PER_VERSION,
@@ -29,6 +30,7 @@ import {
   sha7,
   useVersionCheck,
   useVersionStampText,
+  useVersionTooltip,
   type VersionInfo,
   versionKey,
 } from "@/lib/version-check";
@@ -153,14 +155,31 @@ describe("sha7 / versionKey / formatStamp", () => {
     );
   });
 
-  it('formatStamp renders "v<release> · <sha7>/<sha7>", or an em dash when null', () => {
-    expect(formatStamp(VALID)).toBe("v2026.09.22-4 · a1b2c3d/f4e5d6c");
+  it('formatStamp renders "v<release>" alone, or an em dash when null', () => {
+    expect(formatStamp(VALID)).toBe("v2026.09.22-4");
     expect(formatStamp(null)).toBe("—");
+  });
+
+  it("formatStamp does not double-prefix a release already carrying its own v (vMAJOR.MINOR)", () => {
+    expect(formatStamp({ ...VALID, release: "v1.0" })).toBe("v1.0");
+  });
+
+  it('formatStamp renders "dev" for an empty, unset or "unknown" release', () => {
+    expect(formatStamp({ ...VALID, release: "" })).toBe("dev");
+    expect(formatStamp({ ...VALID, release: "unknown" })).toBe("dev");
+  });
+
+  it('formatTooltip renders "Operon <sha7> · Initiative <sha7>", or "dev build" when both SHAs are unset', () => {
+    expect(formatTooltip(VALID)).toBe("Operon a1b2c3d · Initiative f4e5d6c");
+    expect(
+      formatTooltip({ ...VALID, operon_sha: "unknown", fork_sha: "unknown" }),
+    ).toBe("dev build");
+    expect(formatTooltip(null)).toBe("dev build");
   });
 });
 
 describe("useVersionStampText", () => {
-  it("renders an em dash until the embedded constant resolves, then the formatted stamp — never fetching", async () => {
+  it("renders an em dash until the embedded constant resolves, then the version-only stamp — never fetching", async () => {
     const { result } = renderHook(() => useVersionStampText());
     expect(result.current).toBe("—");
 
@@ -169,7 +188,22 @@ describe("useVersionStampText", () => {
       await Promise.resolve();
     });
 
-    expect(result.current).toBe("v2026.09.22-4 · a1b2c3d/f4e5d6c");
+    expect(result.current).toBe("v2026.09.22-4");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useVersionTooltip", () => {
+  it("renders the full-SHA tooltip once the embedded constant resolves — never fetching", async () => {
+    const { result } = renderHook(() => useVersionTooltip());
+    expect(result.current).toBe("dev build");
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current).toBe("Operon a1b2c3d · Initiative f4e5d6c");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

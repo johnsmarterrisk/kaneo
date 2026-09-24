@@ -117,6 +117,22 @@ describe("runtime entrypoint", () => {
     ).toThrow();
   });
 
+  it("versioning v1: accepts the new vMAJOR.MINOR release shape", () => {
+    const files = runEntrypoint("", { VERSION_RELEASE: "v1.0" });
+    expect(identity(files).release).toBe("v1.0");
+  });
+
+  it("versioning v1: still accepts the old YYYY.MM.DD-N shape (historical releases)", () => {
+    const files = runEntrypoint("", { VERSION_RELEASE: "2026.09.22-8" });
+    expect(identity(files).release).toBe("2026.09.22-8");
+  });
+
+  it("versioning v1: the retired dev-<sha> fallback shape is no longer accepted", () => {
+    expect(() =>
+      runEntrypoint("", { VERSION_RELEASE: "dev-a1b2c3d" }),
+    ).toThrow();
+  });
+
   it("hashes all substituted configuration deterministically, distinguishing absent and empty", () => {
     const hash = (env: Record<string, string>) =>
       identity(runEntrypoint("", env)).config_hash;

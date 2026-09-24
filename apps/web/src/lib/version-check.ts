@@ -132,23 +132,52 @@ export function versionKey(info: VersionInfo): string {
   return `${info.release}::${info.config_hash}`;
 }
 
-/** `v<release> · <sha7>/<sha7>` — the same literal shape `app/src/shell/VersionStamp.tsx`
-    renders on the Operon side. `null` renders as an em dash. */
-export function formatStamp(info: VersionInfo | null): string {
-  if (!info) return "—";
-  return `v${info.release} · ${sha7(info.operon_sha)}/${sha7(info.fork_sha)}`;
+/** True for the values `env.sh`/Operon's `resolveVersionInfo` use to mean "no real
+    identity here" — an empty/blank string or the literal `unknown` (case-insensitive).
+    Shared by `formatStamp` and `formatTooltip` so the two can never disagree about what
+    counts as "not a real value." Mirrors `app/src/shell/version.ts`'s own `isUnset`. */
+function isUnset(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === "" || trimmed.toLowerCase() === "unknown";
 }
 
 /**
- * Shared by the three chrome surfaces that render the stamp (`OperonRailHeader`,
- * `OperonPhoneNavigate`, `layout.tsx`'s `LayoutHeader`) so the "fetch once, format the
- * same way" logic exists in exactly one place rather than three copies of the same
- * `useEffect`/`useState` pair — the equivalent of `app/src/shell/VersionStamp.tsx` on the
- * Operon side, which is a full component there because Operon has one render target for
- * the mark; this fork has three, each already carrying its own layout, so only the DATA
- * is shared here and each caller renders its own markup around `formatStamp(info)`.
+ * `v<release>` — Versioning v1 (`docs/specs/versioning-v1-mini-spec.md`, Operon repo): the
+ * stamp is version-only now, mirroring `app/src/shell/version.ts`'s `formatStamp` exactly.
+ * Renders the literal `dev` when `release` is empty/unset/`unknown` (`env.sh`'s own default
+ * for a local `docker compose build initiative` with no `VERSION_RELEASE` — open-items row
+ * 75 on the Operon side) instead of `vunknown`. Does not double-prefix a release that
+ * already carries its own `v` (the new `vMAJOR.MINOR` scheme). `null` renders as an em dash.
  */
-export function useVersionStampText(): string {
+export function formatStamp(info: VersionInfo | null): string {
+  if (!info) return "—";
+  if (isUnset(info.release)) return "dev";
+  const release = info.release.trim();
+  return release.startsWith("v") ? release : `v${release}`;
+}
+
+/**
+ * `Operon <sha7> · Initiative <sha7>` — the native `title` tooltip text `OperonVersionStamp`
+ * carries now that its visible text is version-only, mirroring `app/src/shell/version.ts`'s
+ * `formatTooltip`. `dev build` when BOTH SHAs are unset/unknown, a per-SHA `unknown` when
+ * only one is — never throws, never blank.
+ */
+export function formatTooltip(info: VersionInfo | null): string {
+  if (!info) return "dev build";
+  if (isUnset(info.operon_sha) && isUnset(info.fork_sha)) return "dev build";
+  const operon = isUnset(info.operon_sha) ? "unknown" : sha7(info.operon_sha);
+  const fork = isUnset(info.fork_sha) ? "unknown" : sha7(info.fork_sha);
+  return `Operon ${operon} · Initiative ${fork}`;
+}
+
+/**
+ * Shared by every caller that needs the loaded identity (`OperonVersionStamp`, the
+ * Versioning v1 About block on the account/information settings page) so the "fetch once"
+ * `useEffect`/`useState` pair exists in exactly one place. `useVersionStampText` and
+ * `useVersionTooltip` are both built on this — the equivalent of `app/src/shell/
+ * VersionStamp.tsx`'s own `getLoadedVersion()` effect on the Operon side.
+ */
+export function useLoadedVersionInfo(): VersionInfo | null {
   const [info, setInfo] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
@@ -161,7 +190,18 @@ export function useVersionStampText(): string {
     };
   }, []);
 
-  return formatStamp(info);
+  return info;
+}
+
+/** The stamp text alone (`OperonVersionStamp`'s visible content) — see `useLoadedVersionInfo`. */
+export function useVersionStampText(): string {
+  return formatStamp(useLoadedVersionInfo());
+}
+
+/** The stamp's `title` tooltip text (Versioning v1 — the SHAs moved off the visible text
+    and onto this) — see `useLoadedVersionInfo`. */
+export function useVersionTooltip(): string {
+  return formatTooltip(useLoadedVersionInfo());
 }
 
 // Editor predicates bridge the debounce window and remain true after a failed save.

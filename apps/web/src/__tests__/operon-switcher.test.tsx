@@ -308,6 +308,12 @@ describe("OperonVersionStamp", () => {
     expect(stamp.className).toContain("opacity-60");
     expect(stamp.className).not.toContain("truncate");
   });
+
+  it("carries a title tooltip, never blank, with no embedded identity to read (dev build)", () => {
+    render(<OperonVersionStamp />);
+    const stamp = screen.getByTestId("version-stamp");
+    expect(stamp.getAttribute("title")).toBe("dev build");
+  });
 });
 
 describe("OperonPhoneModuleStrip", () => {
