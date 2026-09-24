@@ -1,11 +1,3 @@
-# Mirrored to DOCR and digest-pinned (Operon open-items row 73's companion fix, filed against
-# this Dockerfile since `johnsmarterrisk/kaneo` is a separate repository under its own
-# AGENTS.md). `node:24.19.0-alpine` was a moving public tag Docker Hub can withdraw, replace
-# or roll forward without notice — the same class of outage that took two Operon production
-# deploys down. Mirrored with `docker buildx imagetools create` (registry to registry, manifest
-# list preserved — never `docker tag`+`docker push` from a Mac, which ships an arm64-only or
-# amd64-only mirror silently) and proven with `docker run --rm <ref> node --version` on the
-# production droplet before being pinned here. All four stages pin the SAME digest.
 FROM --platform=$BUILDPLATFORM registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS api-builder
 
 RUN apk add --no-cache python3 make g++ && \
@@ -42,7 +34,6 @@ RUN pnpm run build
 # Assembles the production node_modules on the BUILD platform (native, no QEMU emulation).
 # All API runtime deps are pure JavaScript (bcrypt was replaced with bcryptjs), so this
 # node_modules is architecture-independent and is copied into the runtime stage below.
-# Mirrored to DOCR and digest-pinned — see the identical comment on the api-builder stage above.
 FROM --platform=$BUILDPLATFORM registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS api-runtime
 
 WORKDIR /app
@@ -64,7 +55,6 @@ COPY --from=api-builder /app/apps/api/drizzle ./apps/api/drizzle
 COPY --from=api-builder /app/packages/email ./packages/email
 COPY --from=api-builder /app/packages/permissions ./packages/permissions
 
-# Mirrored to DOCR and digest-pinned — see the identical comment on the api-builder stage above.
 FROM --platform=$BUILDPLATFORM registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS web-builder
 
 RUN apk add --no-cache python3 make g++ && \
@@ -91,8 +81,6 @@ RUN pnpm run build
 WORKDIR /app/apps/web
 RUN pnpm run build
 
-# Mirrored to DOCR and digest-pinned — see the identical comment on the api-builder stage above.
-# No --platform here: this stage was already emulated/native per the target platform upstream.
 FROM registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runtime
 
 RUN apk add --no-cache nginx=~1.30.4 && \
