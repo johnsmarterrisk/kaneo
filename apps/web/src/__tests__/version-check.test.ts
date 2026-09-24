@@ -55,6 +55,9 @@ const VALID: VersionInfo = {
   built_at: "2026-09-22T12:00:00.000Z",
 };
 
+const targetKey = (configHash: string) =>
+  versionKey({ ...VALID, config_hash: configHash });
+
 function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: async () => body } as unknown as Response;
 }
@@ -144,13 +147,26 @@ describe("sha7 / versionKey / formatStamp", () => {
     expect(sha7("unknown")).toBe("unknown");
   });
 
-  it("versionKey combines release and config_hash only", () => {
-    expect(versionKey(VALID)).toBe("2026.09.22-4::deadbeef");
-    expect(versionKey({ ...VALID, fork_sha: "different" })).toBe(
+  it("versionKey combines release, Initiative's own fork SHA and config_hash", () => {
+    expect(versionKey(VALID)).toBe(
+      "2026.09.22-4::f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5::deadbeef",
+    );
+    expect(versionKey({ ...VALID, operon_sha: "different" })).toBe(
+      versionKey(VALID),
+    );
+    expect(versionKey({ ...VALID, fork_sha: "different" })).not.toBe(
       versionKey(VALID),
     );
     expect(versionKey({ ...VALID, config_hash: "different" })).not.toBe(
       versionKey(VALID),
+    );
+  });
+
+  it("versionKey changes across dev builds when Initiative's own fork SHA changes", () => {
+    expect(
+      versionKey({ ...VALID, release: "unknown", fork_sha: "a".repeat(40) }),
+    ).not.toBe(
+      versionKey({ ...VALID, release: "unknown", fork_sha: "b".repeat(40) }),
     );
   });
 
@@ -390,11 +406,11 @@ describe("useVersionCheck", () => {
 
   it("no loop: a mismatch already at the attempt bound in sessionStorage is not retried", async () => {
     const reloader = vi.fn();
-    const targetKey = `${VALID.release}::hash-2`;
+    const boundedTargetKey = targetKey("hash-2");
     sessionStorage.setItem(
       RELOAD_ATTEMPTS_STORAGE_KEY,
       JSON.stringify({
-        perTarget: { [targetKey]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
+        perTarget: { [boundedTargetKey]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
       }),
     );
     fetchMock.mockResolvedValueOnce(
@@ -424,15 +440,15 @@ describe("useVersionCheck", () => {
       sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null",
     );
     expect(stored).toEqual({
-      perTarget: { [`${VALID.release}::hash-2`]: 1 },
+      perTarget: { [targetKey("hash-2")]: 1 },
     });
   });
 
   describe("Stage 1 round-1 finding 11: bounded across target changes and storage failure", () => {
     it("alternating between two flapping targets still hits a bound", async () => {
       const reloader = vi.fn();
-      const targetB = `${VALID.release}::hash-b`;
-      const targetC = `${VALID.release}::hash-c`;
+      const targetB = targetKey("hash-b");
+      const targetC = targetKey("hash-c");
       sessionStorage.setItem(
         RELOAD_ATTEMPTS_STORAGE_KEY,
         JSON.stringify({
@@ -460,10 +476,10 @@ describe("useVersionCheck", () => {
         RELOAD_ATTEMPTS_STORAGE_KEY,
         JSON.stringify({
           perTarget: {
-            [`${VALID.release}::h1`]: 1,
-            [`${VALID.release}::h2`]: 1,
-            [`${VALID.release}::h3`]: 1,
-            [`${VALID.release}::h4`]: 1,
+            [targetKey("h1")]: 1,
+            [targetKey("h2")]: 1,
+            [targetKey("h3")]: 1,
+            [targetKey("h4")]: 1,
           },
         }),
       );
@@ -553,8 +569,8 @@ describe("useVersionCheck", () => {
       const stored = JSON.parse(
         sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null",
       );
-      expect(stored.perTarget[`${VALID.release}::hash-3`]).toBe(1);
-      expect(stored.perTarget[`${VALID.release}::hash-2`]).toBeUndefined();
+      expect(stored.perTarget[targetKey("hash-3")]).toBe(1);
+      expect(stored.perTarget[targetKey("hash-2")]).toBeUndefined();
     });
   });
 });

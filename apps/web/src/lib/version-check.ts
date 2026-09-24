@@ -127,9 +127,12 @@ export function sha7(sha: string): string {
 }
 
 /** The plan's own compare key: a config-only change (env.sh substituting a different
-    value) bumps `config_hash` without a new `release`. */
+    value) bumps `config_hash` without a new `release`. Include `fork_sha` because this is
+    Initiative's own executing code identity: after the visible dev fallback stopped
+    embedding a SHA in `release`, two builds with the same release/config must still compare
+    different when the fork code changes. */
 export function versionKey(info: VersionInfo): string {
-  return `${info.release}::${info.config_hash}`;
+  return `${info.release}::${info.fork_sha}::${info.config_hash}`;
 }
 
 /** True for the values `env.sh`/Operon's `resolveVersionInfo` use to mean "no real

@@ -126,6 +126,12 @@ describe("runtime entrypoint", () => {
     expect(identity(files).release).toBe("v1.0");
   });
 
+  it("versioning v1: rejects non-canonical zero-major and leading-zero variants", () => {
+    for (const release of ["v0.0", "v0.1", "v01.0", "v1.01"]) {
+      expect(() => runEntrypoint("", { VERSION_RELEASE: release })).toThrow();
+    }
+  });
+
   it("versioning v1: still accepts the old YYYY.MM.DD-N shape (historical releases)", () => {
     const files = runEntrypoint("", { VERSION_RELEASE: "2026.09.22-8" });
     expect(identity(files).release).toBe("2026.09.22-8");
