@@ -256,19 +256,41 @@ describe("OperonModuleNav", () => {
     expect(stash.textContent).toContain("📁");
   });
 
-  it("orders the full list Stream, Telegraph, Initiative, Stash, Desk, Settings (Smart Desk D25)", () => {
-    expect(OPERON_MODULES.map((m) => m.label)).toEqual([
+  it("renders Stream, Telegraph, Initiative, Stash, Desk, then the separate Settings row (Smart Desk D25)", () => {
+    // The rail as AppSidebar composes it: the top list, then Settings in its own nav.
+    const { container } = render(
+      <>
+        <OperonModuleNav variant="top" />
+        <OperonModuleNav variant="settings" />
+      </>,
+    );
+    const rows = Array.from(
+      container.querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
+    );
+    const labels = [
       "Stream",
       "Telegraph",
       "Initiative",
       "Stash",
       "Desk",
       "Settings",
-    ]);
-    render(<OperonModuleNav variant="top" />);
-    const desk = screen.getByTestId("module-desk");
-    expect(desk.textContent).toContain("Desk");
-    expect(desk.textContent).toContain("🎫");
+    ];
+    expect(rows).toHaveLength(labels.length);
+    rows.forEach((row, index) => {
+      expect(row.textContent).toContain(labels[index]);
+    });
+    expect(rows[4].textContent).toContain("🎫");
+    // Settings is its own row, not the sixth entry of the top list.
+    expect(
+      screen
+        .getByTestId("operon-module-nav")
+        .querySelector('[data-module="settings"]'),
+    ).toBeNull();
+    expect(
+      screen
+        .getByTestId("operon-settings-nav")
+        .querySelector('[data-module="settings"]'),
+    ).not.toBeNull();
   });
 });
 

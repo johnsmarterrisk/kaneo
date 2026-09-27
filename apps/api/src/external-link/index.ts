@@ -1,5 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import createActivity from "../activity/controllers/create-activity";
 import db from "../database";
 import {
   externalLinkTable,
@@ -173,7 +174,9 @@ externalLink.post(
       });
     }
 
-    let created: typeof externalLinkTable.$inferSelect | undefined;
+    let created:
+      | (typeof externalLinkTable.$inferSelect & { inserted: boolean })
+      | undefined;
 
     try {
       [created] = await db
@@ -207,7 +210,12 @@ externalLink.post(
             updatedAt: new Date(),
           },
         })
-        .returning();
+        // `xmax = 0` only on a fresh INSERT, so a converging retry records no second
+        // activity row.
+        .returning({
+          ...getTableColumns(externalLinkTable),
+          inserted: sql<boolean>`(xmax = 0)`,
+        });
     } catch (error) {
       // 23503 = foreign_key_violation. Reachable when the task or the integration
       // is deleted between the check above and this write; drizzle re-throws the pg
@@ -226,10 +234,23 @@ externalLink.post(
       });
     }
 
+    const { inserted, ...link } = created;
+    // Operon fork (Smart Desk D25): the actor — the on-behalf-of user for Operon's
+    // service key — is recorded like any other task write.
+    if (inserted) {
+      await createActivity(
+        taskId,
+        "external_link_created",
+        c.get("userId"),
+        `added a ${resourceType} link`,
+        { externalLinkId: link.id, resourceType, externalId },
+      );
+    }
+
     return c.json(
       {
-        ...created,
-        metadata: created.metadata ? JSON.parse(created.metadata) : null,
+        ...link,
+        metadata: link.metadata ? JSON.parse(link.metadata) : null,
         // Mirrors the read route's projection exactly: id and type only, never
         // `config`, which holds plaintext provider secrets.
         integration: {

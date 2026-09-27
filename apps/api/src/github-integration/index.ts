@@ -17,6 +17,7 @@ import {
   validateGitHubConfig,
 } from "../plugins/github/config";
 import { handleGitHubWebhook } from "../plugins/github/webhook-handler";
+import { refuseOperonServiceKey } from "../utils/operon-on-behalf-of";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createGithubIntegration from "./controllers/create-github-integration";
@@ -209,6 +210,7 @@ const importIssuesRoute = createRoute({
     "Import the linked repository's issues as tasks. Issues that already have a task are skipped.",
   middleware: [
     scopeToProjectFromBody,
+    refuseOperonServiceKey,
     requireWorkspacePermission({ task: ["create"] }),
   ] as const,
   request: {

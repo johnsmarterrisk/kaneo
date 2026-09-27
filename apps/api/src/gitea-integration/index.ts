@@ -14,6 +14,7 @@ import {
 } from "../openapi";
 import { type GiteaConfig, validateGiteaConfig } from "../plugins/gitea/config";
 import { handleGiteaWebhookRequest } from "../plugins/gitea/webhook-handler";
+import { refuseOperonServiceKey } from "../utils/operon-on-behalf-of";
 import {
   hasWorkspacePermission,
   requireWorkspacePermission,
@@ -197,6 +198,7 @@ const importIssuesRoute = createRoute({
     "Import the linked repository's issues as tasks. Issues that already have a task are refreshed rather than duplicated.",
   middleware: [
     scopeToProjectFromBody,
+    refuseOperonServiceKey,
     requireWorkspacePermission({ task: ["create"] }),
   ] as const,
   request: {

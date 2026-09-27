@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import db from "../database";
-import { apikeyTable } from "../database/schema";
+import { apikeyTable, userTable, workspaceUserTable } from "../database/schema";
 
 // Operon fork addition (spec S11, widened by Smart Desk D25): the on-behalf-of gate,
 // shared by the Telegraph external-link write route and the task create / import
@@ -53,10 +53,11 @@ function parseJsonObject(raw: string | null): Record<string, unknown> | null {
  * themselves a marked key; the header is IGNORED, never trusted, on any credential
  * whose row does not carry it, and on every browser session.
  */
-export async function requireOperonOnBehalfOf(c: Context, next: Next) {
+/** True when the request's API key ROW carries Operon's server-minted marker. */
+async function isOperonServiceKey(c: Context) {
   const apiKey = c.get("apiKey") as { id?: string } | undefined;
-  // A browser session has no context key id: unchanged, header ignored.
-  if (!apiKey?.id) return next();
+  // A browser session has no context key id.
+  if (!apiKey?.id) return false;
 
   const [row] = await db
     .select({ metadata: apikeyTable.metadata })
@@ -64,9 +65,26 @@ export async function requireOperonOnBehalfOf(c: Context, next: Next) {
     .where(eq(apikeyTable.id, apiKey.id))
     .limit(1);
 
-  const metadata = parseJsonObject(row?.metadata ?? null);
-  // An unmarked key: unchanged, header ignored.
-  if (metadata?.[OPERON_SERVICE_MARKER] !== true) return next();
+  return (
+    parseJsonObject(row?.metadata ?? null)?.[OPERON_SERVICE_MARKER] === true
+  );
+}
+
+export async function requireOperonOnBehalfOf(c: Context, next: Next) {
+  // Sessions and unmarked keys: unchanged, header ignored.
+  if (!(await isOperonServiceKey(c))) return next();
+
+  // Only a key carrying the widened ceiling may act for anyone. A marked key minted
+  // before D25 is refused rather than falling back to its owner's authority.
+  const apiKey = c.get("apiKey") as
+    | { permissions?: Record<string, string[]> | null }
+    | undefined;
+  if (!apiKey?.permissions?.task?.includes("create")) {
+    return c.json(
+      { message: "The Operon service key must be re-minted (task:create)" },
+      403,
+    );
+  }
 
   const requested = c.req.header(OPERON_ON_BEHALF_OF_HEADER)?.trim();
   if (!requested) {
@@ -76,6 +94,42 @@ export async function requireOperonOnBehalfOf(c: Context, next: Next) {
     );
   }
 
+  // The named user must exist AND be a member of THIS workspace. Without this an
+  // instance admin — whom `hasWorkspacePermission` passes before its membership
+  // lookup — could be named into a workspace they do not belong to.
+  const [member] = await db
+    .select({ userId: workspaceUserTable.userId })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, c.get("workspaceId")),
+        eq(workspaceUserTable.userId, requested),
+      ),
+    )
+    .limit(1);
+  if (!member) {
+    return c.json(
+      { message: "The named user is not a member of this workspace" },
+      403,
+    );
+  }
+
   c.set("userId", requested);
+  return next();
+}
+
+/**
+ * The widened ceiling (`task:create`) also satisfies upstream's GitHub and Gitea
+ * issue-import routes, which D25 does not name and which take no on-behalf-of user.
+ * The marked service key is refused on them outright.
+ */
+export async function refuseOperonServiceKey(c: Context, next: Next) {
+  if (await isOperonServiceKey(c)) {
+    return c.json(
+      { message: "The Operon service key may not call this route" },
+      403,
+    );
+  }
   return next();
 }

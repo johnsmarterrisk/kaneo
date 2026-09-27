@@ -623,7 +623,8 @@ describe("API integration: the telegraph external-link write route", () => {
     const { member, task, integration } = await seedTelegraphProject("admin");
     const viewer = await addMemberToWorkspace(member.workspace.id, "viewer");
     const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
-      task: ["update"],
+      // The D25 ceiling: a marked key without task:create is refused outright.
+      task: ["create", "update"],
     });
     const { app } = createApp();
 
@@ -647,7 +648,8 @@ describe("API integration: the telegraph external-link write route", () => {
     const { member, task, integration } = await seedTelegraphProject("admin");
     const teammate = await addMemberToWorkspace(member.workspace.id, "member");
     const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
-      task: ["update"],
+      // The D25 ceiling: a marked key without task:create is refused outright.
+      task: ["create", "update"],
     });
     const { app } = createApp();
 
@@ -663,7 +665,8 @@ describe("API integration: the telegraph external-link write route", () => {
     const { member, task, integration } = await seedTelegraphProject("admin");
     const outsider = await createWorkspaceMember();
     const serviceKey = await mintMarkedServiceKeyFor(member.user.id, {
-      task: ["update"],
+      // The D25 ceiling: a marked key without task:create is refused outright.
+      task: ["create", "update"],
     });
     const { app } = createApp();
 

@@ -168,6 +168,20 @@ async function createdActivityActor(taskId: string) {
   return undefined;
 }
 
+/** The actor of the `external_link_created` row the link write records. */
+async function linkActivityActors(taskId: string) {
+  const rows = await db
+    .select({ userId: schema.activityTable.userId })
+    .from(schema.activityTable)
+    .where(
+      and(
+        eq(schema.activityTable.taskId, taskId),
+        eq(schema.activityTable.type, "external_link_created"),
+      ),
+    );
+  return rows.map((row) => row.userId);
+}
+
 async function taskIdByTitle(projectId: string, title: string) {
   const [row] = await db
     .select({ id: schema.taskTable.id })
@@ -190,15 +204,80 @@ describe("API integration: Operon on-behalf-of on the Smart Desk write routes", 
     expect(OPERON_SERVICE_KEY_PERMISSIONS.task).toEqual(["create", "update"]);
   });
 
-  it("refuses a marked service key WITHOUT the widened permission with 403 on create and import", async () => {
-    const { owner, teammate, project } = await seedDeskProject();
+  it("refuses a marked service key WITHOUT the widened permission with 403 on all three routes, never rebinding", async () => {
+    const { owner, teammate, project, task, integration } =
+      await seedDeskProject();
     const key = await mintKey(owner.user.id, { task: ["update"] }, true);
     const { app } = createApp();
     const headers = { "x-api-key": key, [HEADER]: teammate.id };
 
     expect((await createTask(app, project.id, headers)).status).toBe(403);
     expect((await importTasks(app, project.id, headers)).status).toBe(403);
+    // Before D25 this key was rebound on the link write; now it is refused, and
+    // it does not fall back to the owner's authority either.
+    expect(
+      (await createLink(app, task.id, integration.id, headers)).status,
+    ).toBe(403);
     expect(await taskIdByTitle(project.id, "From the desk")).toBeUndefined();
+    const links = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(links).toHaveLength(0);
+    expect(await linkActivityActors(task.id)).toEqual([]);
+  });
+
+  it("refuses a named user who is not a member — an instance admin, or an unknown id — with 403", async () => {
+    const { owner, project, task, integration } = await seedDeskProject();
+    const admin = await createWorkspaceMember();
+    await db
+      .update(schema.userTable)
+      .set({ role: "admin" })
+      .where(eq(schema.userTable.id, admin.user.id));
+    const key = await mintKey(
+      owner.user.id,
+      OPERON_SERVICE_KEY_PERMISSIONS,
+      true,
+    );
+    const { app } = createApp();
+
+    for (const named of [admin.user.id, "user-that-does-not-exist"]) {
+      const headers = { "x-api-key": key, [HEADER]: named };
+      expect((await createTask(app, project.id, headers)).status).toBe(403);
+      expect((await importTasks(app, project.id, headers)).status).toBe(403);
+      expect(
+        (await createLink(app, task.id, integration.id, headers)).status,
+      ).toBe(403);
+    }
+    expect(await taskIdByTitle(project.id, "From the desk")).toBeUndefined();
+    expect(await linkActivityActors(task.id)).toEqual([]);
+  });
+
+  it("refuses the marked service key on the GitHub and Gitea issue-import routes", async () => {
+    const { owner, teammate, project } = await seedDeskProject();
+    const key = await mintKey(
+      owner.user.id,
+      OPERON_SERVICE_KEY_PERMISSIONS,
+      true,
+    );
+    const { app } = createApp();
+    const headers = { "x-api-key": key, [HEADER]: teammate.id };
+
+    for (const path of [
+      "/api/github-integration/import-issues",
+      "/api/gitea-integration/import-issues",
+    ]) {
+      const response = await postJson(
+        app,
+        path,
+        { projectId: project.id },
+        headers,
+      );
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        message: "The Operon service key may not call this route",
+      });
+    }
   });
 
   it("refuses a marked service key with NO header with 400 on all three routes, and writes nothing", async () => {
@@ -259,6 +338,7 @@ describe("API integration: Operon on-behalf-of on the Smart Desk write routes", 
     expect(
       (await createLink(app, task.id, integration.id, headers)).status,
     ).toBe(200);
+    expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
   });
 
   it("IGNORES a forged header on an unmarked key: the key's own user is the actor", async () => {

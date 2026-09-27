@@ -31,10 +31,11 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      sign-in is disabled by environment, and the post-login hook reports the new
      Kaneo user back to Operon.
   2. Branding and chrome — the product is called Initiative inside Operon, and
-     the sidebar carries Operon's surface switcher.
+     the sidebar carries Operon's surface switcher (Stream, Telegraph,
+     Initiative, Stash, Desk, Settings).
   3. A `telegraph` integration type with an authorised external-link write
      route, so a Kaneo task can carry the Nostr event id of the chat message it
-     came from.
+     came from — or the Stash file or Smart Desk thread (`desk-thread`) it links.
   4. Workspace bootstrap — a single shared workspace, created by the first
      admin's login and joined by everyone after.
   5. Build hygiene — one `.dockerignore` line keeping a build-cache directory
@@ -86,14 +87,15 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      `registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine`
      by manifest-list digest; no other line in the file changes.
  14. Service-key writes on behalf of a named user — Operon's service key may
-     create and import tasks (its ceiling gains `task: create`), and a key
-     carrying Operon's server-minted marker MUST name the Kaneo user it acts
-     for in `X-Operon-On-Behalf-Of` on task create, task import and the
-     external-link write, or is refused; that user's role is checked and that
-     user is recorded as the actor. The header is ignored on every other
-     credential and on browser sessions, so ordinary Kaneo keys and users behave
-     as upstream built them. The same change lets the external-link write carry
-     a `desk-thread` resource kind and adds Desk to the surface switcher.
+     create and import tasks (its ceiling gains `task: create`), but only for a
+     user it names: a key carrying Operon's server-minted marker MUST name, in
+     `X-Operon-On-Behalf-Of`, a member of the workspace on task create, task
+     import and the external-link write, or is refused; that user's role is
+     checked and that user is recorded as the actor. The marked key is refused
+     outright on the GitHub and Gitea issue-import routes the widened ceiling
+     would otherwise open. The header is ignored on every other credential and
+     on browser sessions, so ordinary Kaneo keys and users behave as upstream
+     built them.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
