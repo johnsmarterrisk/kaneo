@@ -272,7 +272,7 @@ describe("OperonModuleNav", () => {
       "Telegraph",
       "Initiative",
       "Stash",
-      "Desk",
+      "SmartDesk",
       "Settings",
     ];
     expect(rows).toHaveLength(labels.length);

@@ -110,7 +110,7 @@ export const OPERON_MODULES: readonly OperonModule[] = [
   { key: "initiative", label: "Initiative", icon: "📋" },
   { key: "files", label: "Stash", icon: "📁" },
   // Smart Desk D25 (John, 2026-09-26): after Stash, before Settings — order is position.
-  { key: "desk", label: "Desk", icon: "🎫" },
+  { key: "desk", label: "SmartDesk", icon: "🎫" },
   { key: "settings", label: "Settings", icon: "⚙️" },
 ] as const;
 
