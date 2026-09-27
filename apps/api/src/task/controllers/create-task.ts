@@ -1,7 +1,13 @@
 import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { postgresFailure, UNIQUE_VIOLATION } from "../../auth";
 import db from "../../database";
-import { columnTable, taskTable, userTable } from "../../database/schema";
+import {
+  columnTable,
+  projectTable,
+  taskTable,
+  userTable,
+} from "../../database/schema";
 import { publishEvent } from "../../events";
 import {
   assertAssignableUser,
@@ -20,6 +26,7 @@ async function createTask({
   dueDate,
   description,
   priority,
+  operonIdempotencyKey,
 }: {
   projectId: string;
   currentUserId: string;
@@ -30,6 +37,7 @@ async function createTask({
   dueDate?: Date;
   description?: string;
   priority?: string;
+  operonIdempotencyKey?: string;
 }) {
   const resolvedStatus = status || "to-do";
   const resolvedPriority = priority || "no-priority";
@@ -90,6 +98,7 @@ async function createTask({
         priority: resolvedPriority,
         number: taskNumber,
         position: nextPosition,
+        operonIdempotencyKey: operonIdempotencyKey ?? null,
       })
       .returning();
 
@@ -115,6 +124,56 @@ async function createTask({
     ...createdTask,
     assigneeName: assignee?.name,
   };
+}
+
+/**
+ * Smart Desk F0b (F4, F5): the task an Operon `Idempotency-Key` already created, in the
+ * shape `createTask` returns (the full row plus `assigneeName`, the same assignee join
+ * `get-task.ts` uses), or undefined when no task carries the key.
+ *
+ * It answers with the task AS IT STANDS NOW — its current project included if someone
+ * moved it — and never with a task from another workspace: that is a 409 carrying no
+ * task data, because a key must not become a way to read across workspaces.
+ */
+export async function findOperonKeyedTask(key: string, workspaceId: string) {
+  const [found] = await db
+    .select({
+      task: taskTable,
+      assigneeName: userTable.name,
+      workspaceId: projectTable.workspaceId,
+    })
+    .from(taskTable)
+    .innerJoin(projectTable, eq(projectTable.id, taskTable.projectId))
+    .leftJoin(userTable, eq(taskTable.userId, userTable.id))
+    .where(eq(taskTable.operonIdempotencyKey, key))
+    .limit(1);
+
+  if (!found) return undefined;
+
+  if (found.workspaceId !== workspaceId) {
+    throw new HTTPException(409, {
+      res: Response.json(
+        {
+          code: "idempotency_key_conflict",
+          message:
+            "This Idempotency-Key belongs to a task in another workspace",
+        },
+        { status: 409 },
+      ),
+    });
+  }
+
+  // `createTask` returns `assigneeName: assignee?.name`, i.e. absent when unassigned.
+  return { ...found.task, assigneeName: found.assigneeName ?? undefined };
+}
+
+/** A concurrent keyed create won the `task_operon_idempotency_key_unique` race. */
+export function isOperonIdempotencyKeyViolation(error: unknown) {
+  const failure = postgresFailure(error);
+  return (
+    failure?.code === UNIQUE_VIOLATION &&
+    failure.constraint === "task_operon_idempotency_key_unique"
+  );
 }
 
 export default createTask;

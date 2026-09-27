@@ -805,12 +805,19 @@
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "operonIdempotencyKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "assigneeName",
               "assigneeId",
-              "updatedAt"
+              "updatedAt",
+              "operonIdempotencyKey"
             ]
           }
         ]

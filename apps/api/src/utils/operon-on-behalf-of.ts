@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
+import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import { apikeyTable, userTable, workspaceUserTable } from "../database/schema";
 
@@ -9,6 +10,9 @@ import { apikeyTable, userTable, workspaceUserTable } from "../database/schema";
 
 const OPERON_SERVICE_MARKER = "operonService";
 export const OPERON_ON_BEHALF_OF_HEADER = "X-Operon-On-Behalf-Of";
+// Smart Desk F0b (D2): the keyed task create. Honoured for the marked key only.
+export const OPERON_IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+const OPERON_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9:_-]{1,200}$/;
 
 function parseJsonObject(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
@@ -116,7 +120,30 @@ export async function requireOperonOnBehalfOf(c: Context, next: Next) {
   }
 
   c.set("userId", requested);
+  // F0b: the verified mark, recorded so the task-create handler can honour
+  // `Idempotency-Key` without re-reading the key's row (isOperonServiceKey stays
+  // private). Set ONLY here, after every check passed.
+  c.set("operonServiceKey", true);
   return next();
+}
+
+/**
+ * The `Idempotency-Key` of a keyed task create (Smart Desk F0b, F1/F2), or undefined.
+ * Read only when `requireOperonOnBehalfOf` recorded the marked key; for any other
+ * caller the header is ignored and the create behaves as upstream built it. A key
+ * outside 1–200 characters of `[A-Za-z0-9:_-]` is refused 400 before anything is
+ * created.
+ */
+export function readOperonIdempotencyKey(c: Context): string | undefined {
+  if (c.get("operonServiceKey") !== true) return undefined;
+  const key = c.req.header(OPERON_IDEMPOTENCY_KEY_HEADER);
+  if (key === undefined) return undefined;
+  if (!OPERON_IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    throw new HTTPException(400, {
+      message: `${OPERON_IDEMPOTENCY_KEY_HEADER} must be 1-200 characters of A-Z, a-z, 0-9, ':', '_' or '-'`,
+    });
+  }
+  return key;
 }
 
 /**

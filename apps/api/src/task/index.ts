@@ -22,7 +22,10 @@ import {
   validateTaskAssetUploadInput,
 } from "../storage/s3";
 import { normalizeApiServerUrl } from "../utils/openapi-spec";
-import { requireOperonOnBehalfOf } from "../utils/operon-on-behalf-of";
+import {
+  readOperonIdempotencyKey,
+  requireOperonOnBehalfOf,
+} from "../utils/operon-on-behalf-of";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import {
   validateAndParseDate,
@@ -30,7 +33,10 @@ import {
 } from "../utils/validate-dates";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import bulkUpdateTasks from "./controllers/bulk-update-tasks";
-import createTask from "./controllers/create-task";
+import createTask, {
+  findOperonKeyedTask,
+  isOperonIdempotencyKeyViolation,
+} from "./controllers/create-task";
 import deleteTask from "./controllers/delete-task";
 import exportTasks from "./controllers/export-tasks";
 import getTask from "./controllers/get-task";
@@ -546,7 +552,9 @@ const updateTaskDescriptionRoute = createRoute({
   },
 });
 
-const task = apiRouter<BaseVariables & { workspaceId: string }>()
+const task = apiRouter<
+  BaseVariables & { workspaceId: string; operonServiceKey?: boolean }
+>()
   .openapi(listTasksRoute, async (c) => {
     const { projectId } = c.req.valid("param");
     const filters = c.req.valid("query") || {};
@@ -587,6 +595,25 @@ const task = apiRouter<BaseVariables & { workspaceId: string }>()
     const { title, description, startDate, dueDate, priority, status, userId } =
       c.req.valid("json");
 
+    // Smart Desk F0b (D2): a keyed create from Operon's marked service key. The
+    // replay is decided after the body schema check and BEFORE the date, status and
+    // assignee checks, so a repeat still answers when the first task's column has
+    // since been renamed or removed, and runs none of the create's side effects.
+    const operonIdempotencyKey = readOperonIdempotencyKey(c);
+    const replayOperonKeyedCreate = async () => {
+      if (!operonIdempotencyKey) return undefined;
+      const existing = await findOperonKeyedTask(
+        operonIdempotencyKey,
+        c.get("workspaceId"),
+      );
+      if (!existing) return undefined;
+      c.header("Idempotent-Replay", "true");
+      return c.json(existing, 200);
+    };
+
+    const replay = await replayOperonKeyedCreate();
+    if (replay) return replay;
+
     const parsedStartDate =
       startDate !== undefined
         ? validateAndParseDate(startDate, "startDate")
@@ -598,17 +625,30 @@ const task = apiRouter<BaseVariables & { workspaceId: string }>()
 
     validateDateRange(parsedStartDate, parsedDueDate);
 
-    const task = await createTask({
-      projectId,
-      currentUserId: c.get("userId"),
-      userId: userId,
-      title,
-      description,
-      startDate: parsedStartDate,
-      dueDate: parsedDueDate,
-      priority,
-      status,
-    });
+    let task: Awaited<ReturnType<typeof createTask>>;
+    try {
+      task = await createTask({
+        projectId,
+        currentUserId: c.get("userId"),
+        userId: userId,
+        title,
+        description,
+        startDate: parsedStartDate,
+        dueDate: parsedDueDate,
+        priority,
+        status,
+        operonIdempotencyKey,
+      });
+    } catch (error) {
+      // A concurrent create with the same key committed first (F6): this insert's
+      // transaction rolled back, so re-read the winner outside it and answer as a
+      // replay (or 409 if it lives in another workspace).
+      if (operonIdempotencyKey && isOperonIdempotencyKeyViolation(error)) {
+        const winner = await replayOperonKeyedCreate();
+        if (winner) return winner;
+      }
+      throw error;
+    }
 
     return c.json(task, 200);
   })

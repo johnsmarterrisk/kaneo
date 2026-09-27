@@ -93,9 +93,14 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      import and the external-link write, or is refused; that user's role is
      checked and that user is recorded as the actor. The marked key is refused
      outright on the GitHub and Gitea issue-import routes the widened ceiling
-     would otherwise open. The header is ignored on every other credential and
-     on browser sessions, so ordinary Kaneo keys and users behave as upstream
-     built them.
+     would otherwise open. On task create the marked key may also send
+     `Idempotency-Key`: the key is stored on the task under a unique
+     constraint (a nullable `task` column, migration 0048), and a repeat
+     answers with the task that already carries it, marked
+     `Idempotent-Replay: true`, instead of filing a second one — or 409 when
+     that task is in another workspace. Both headers are ignored on every
+     other credential and on browser sessions, so ordinary Kaneo keys and
+     users behave as upstream built them.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the

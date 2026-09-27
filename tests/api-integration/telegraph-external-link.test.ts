@@ -586,6 +586,8 @@ describe("API integration: the telegraph external-link write route", () => {
         "dueDate",
         "id",
         "number",
+        // Smart Desk F0b (D2): the keyed create's Idempotency-Key, null here.
+        "operonIdempotencyKey",
         "position",
         "priority",
         "projectId",

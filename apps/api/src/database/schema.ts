@@ -459,6 +459,11 @@ export const taskTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    // Operon fork addition (Smart Desk F0b, D1): the `Idempotency-Key` Operon's service
+    // key sent when it created this task. NULL for every other task, and NULLs never
+    // collide, so human-created tasks are unaffected. The unique constraint below is
+    // what makes a repeated or concurrent keyed create converge on one task.
+    operonIdempotencyKey: text("operon_idempotency_key"),
   },
   (table) => [
     index("task_projectId_idx").on(table.projectId),
@@ -466,6 +471,7 @@ export const taskTable = pgTable(
     index("task_assigneeId_idx").on(table.userId),
     index("task_columnId_idx").on(table.columnId),
     unique("task_project_number_unique").on(table.projectId, table.number),
+    unique("task_operon_idempotency_key_unique").on(table.operonIdempotencyKey),
   ],
 );
 

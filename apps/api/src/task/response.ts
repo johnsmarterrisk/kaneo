@@ -40,6 +40,10 @@ export const taskWithAssigneeSchema = taskSchema
     // response of create/update/move, whose handlers would each have to start
     // returning the column. The two routes the sweep reads are these two.
     updatedAt: responseTimestamp,
+    // Operon fork addition (Smart Desk F0b, D2): the `Idempotency-Key` Operon's service
+    // key created this task with, or null. Operon's reconcile reads it here to prove a
+    // named task is the one its own keyed create filed.
+    operonIdempotencyKey: z.string().nullable(),
   })
   .openapi("TaskWithAssignee");
 
