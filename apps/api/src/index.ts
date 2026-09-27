@@ -16,6 +16,7 @@ import { HTTPException } from "hono/http-exception";
 import activity from "./activity";
 import {
   auth,
+  ensureOperonServiceKeyCeiling,
   isOperonOidcOnlyInstance,
   requestCarriesOperonServiceKey,
 } from "./auth";
@@ -890,6 +891,9 @@ export async function runStartupTasks() {
   // After Drizzle migrations: apikey table must exist so we can align columns
   // with Better Auth (reference_id + nullable user_id).
   await migrateApiKeyReferenceId();
+  // Operon fork addition (docs/fork-discipline.md §3 row 14, Smart Desk F0b D4): the one
+  // enabled service key's permissions follow the ceiling; a throw here fails the boot.
+  await ensureOperonServiceKeyCeiling();
 
   await migrateNotificationPreferencesSchema();
   await migrateGitHubIntegration();

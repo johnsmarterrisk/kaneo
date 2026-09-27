@@ -825,11 +825,7 @@ async function revokeOperonServiceKeys(): Promise<number> {
     })
     .from(schema.apikeyTable);
 
-  const doomed = rows
-    .filter(
-      (row) => row.enabled !== false && hasOperonServiceMarker(row.metadata),
-    )
-    .map((row) => row.id);
+  const doomed = rows.filter(isEnabledOperonServiceRow).map((row) => row.id);
 
   if (doomed.length === 0) return 0;
 
@@ -839,6 +835,132 @@ async function revokeOperonServiceKeys(): Promise<number> {
     .where(inArray(schema.apikeyTable.id, doomed));
 
   return doomed.length;
+}
+
+/** The row filter the revoke above and the ceiling sync below share. */
+function isEnabledOperonServiceRow(row: {
+  enabled: boolean | null;
+  metadata: string | null;
+}): boolean {
+  return row.enabled !== false && hasOperonServiceMarker(row.metadata);
+}
+
+/**
+ * Parse a stored `apikey.permissions` value into resource -> action set, or `null`
+ * when it is not a JSON object of string arrays (the shape `utils/verify-api-key.ts`
+ * accepts; anything else reads there as no permissions at all).
+ */
+function parseStoredPermissions(
+  raw: string | null,
+): Map<string, Set<string>> | null {
+  if (raw === null) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const parsed = new Map<string, Set<string>>();
+  for (const [resource, actions] of Object.entries(value)) {
+    if (
+      !Array.isArray(actions) ||
+      actions.some((action) => typeof action !== "string")
+    ) {
+      return null;
+    }
+    parsed.set(resource, new Set(actions as string[]));
+  }
+  return parsed;
+}
+
+/** `resource:action` names, sorted, for the change log (never a key value). */
+function permissionNames(permissions: Map<string, Set<string>>): string {
+  return [...permissions]
+    .flatMap(([resource, actions]) =>
+      [...actions].map((action) => `${resource}:${action}`),
+    )
+    .sort()
+    .join(",");
+}
+
+/**
+ * Bring the one enabled Operon service key's stored permissions to
+ * {@link OPERON_SERVICE_KEY_PERMISSIONS} at boot (Smart Desk F0b, D4: F8–F9).
+ *
+ * A release that changes the ceiling used to need a manual re-mint before Operon's
+ * key stopped answering 403. The key's permissions are corrected IN PLACE rather
+ * than re-minted because a new key value can only reach Operon through a login
+ * callback; the holder is the same either way. Value, id and metadata are untouched.
+ *
+ * With more than one enabled marked key nothing is written: the fork cannot tell
+ * which one Operon holds, and permissions are never widened on a key that may not
+ * be it. The per-request 403 in `utils/operon-on-behalf-of.ts` still names the fix.
+ * A throwing read or write propagates and fails the boot, as a failed migration does.
+ */
+export async function ensureOperonServiceKeyCeiling(): Promise<
+  "none" | "equal" | "ambiguous" | "synced"
+> {
+  const rows = await db
+    .select({
+      id: schema.apikeyTable.id,
+      metadata: schema.apikeyTable.metadata,
+      enabled: schema.apikeyTable.enabled,
+      permissions: schema.apikeyTable.permissions,
+    })
+    .from(schema.apikeyTable);
+
+  const marked = rows.filter(isEnabledOperonServiceRow);
+  const [row] = marked;
+  if (!row) return "none";
+  if (marked.length > 1) {
+    console.error(
+      `[operon] operon_service_key_ceiling_ambiguous: ${marked.length} enabled service keys (${marked
+        .map((row) => row.id)
+        .join(", ")}); none changed`,
+    );
+    return "ambiguous";
+  }
+
+  const ceiling = new Map(
+    Object.entries(OPERON_SERVICE_KEY_PERMISSIONS).map(
+      ([resource, actions]) => [resource, new Set(actions)] as const,
+    ),
+  );
+  const stored = parseStoredPermissions(row.permissions);
+  if (
+    stored &&
+    stored.size === ceiling.size &&
+    [...ceiling].every(([resource, actions]) => {
+      const have = stored.get(resource);
+      return (
+        have?.size === actions.size &&
+        [...actions].every((action) => have.has(action))
+      );
+    })
+  ) {
+    return "equal";
+  }
+
+  // The mint path hands `createApiKey` this same object, which stores it as
+  // `JSON.stringify(permissions)`; the ceiling test pins the text against a minted row.
+  await db
+    .update(schema.apikeyTable)
+    .set({ permissions: JSON.stringify(OPERON_SERVICE_KEY_PERMISSIONS) })
+    .where(eq(schema.apikeyTable.id, row.id));
+
+  const after = permissionNames(ceiling);
+  if (stored) {
+    console.log(
+      `[operon] operon_service_key_ceiling_synced: key ${row.id} permissions ${permissionNames(stored) || "(none)"} -> ${after}`,
+    );
+  } else {
+    // The raw text is never logged: it is unparseable, so nothing says what it holds.
+    console.warn(
+      `[operon] operon_service_key_ceiling_synced: key ${row.id} permissions (unparseable) -> ${after}`,
+    );
+  }
+  return "synced";
 }
 
 /**

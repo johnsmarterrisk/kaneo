@@ -98,7 +98,10 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      constraint (a nullable `task` column, migration 0048), and a repeat
      answers with the task that already carries it, marked
      `Idempotent-Replay: true`, instead of filing a second one — or 409 when
-     that task is in another workspace. Both headers are ignored on every
+     that task is in another workspace. At boot, the one enabled marked key's
+     stored permissions are set to that ceiling when they differ, in place (its
+     value, id and marker unchanged); with two or more enabled marked keys none
+     is changed and an error names them. Both headers are ignored on every
      other credential and on browser sessions, so ordinary Kaneo keys and
      users behave as upstream built them.
 
