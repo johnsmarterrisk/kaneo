@@ -1,8 +1,8 @@
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import createActivity from "../activity/controllers/create-activity";
 import db from "../database";
 import {
+  activityTable,
   externalLinkTable,
   integrationTable,
   projectTable,
@@ -174,48 +174,67 @@ externalLink.post(
       });
     }
 
-    let created:
-      | (typeof externalLinkTable.$inferSelect & { inserted: boolean })
-      | undefined;
+    let created: typeof externalLinkTable.$inferSelect;
 
     try {
-      [created] = await db
-        .insert(externalLinkTable)
-        .values({
-          taskId,
-          integrationId,
-          resourceType,
-          externalId,
-          url,
-          title: title ?? null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-        })
-        .onConflictDoUpdate({
-          // The same four columns migration 0045 makes unique. `resource_type` is
-          // in the key because upstream's `{number}` branch pattern means branch "5"
-          // and issue #5 are two legitimate links from one task through one
-          // integration; a three-column key rejected the second, or refused to
-          // migrate an instance that already held both.
-          target: [
-            externalLinkTable.taskId,
-            externalLinkTable.integrationId,
-            externalLinkTable.resourceType,
-            externalLinkTable.externalId,
-          ],
-          set: {
+      created = await db.transaction(async (tx) => {
+        const [result] = await tx
+          .insert(externalLinkTable)
+          .values({
+            taskId,
+            integrationId,
             resourceType,
+            externalId,
             url,
             title: title ?? null,
             metadata: metadata ? JSON.stringify(metadata) : null,
-            updatedAt: new Date(),
-          },
-        })
-        // `xmax = 0` only on a fresh INSERT, so a converging retry records no second
-        // activity row.
-        .returning({
-          ...getTableColumns(externalLinkTable),
-          inserted: sql<boolean>`(xmax = 0)`,
-        });
+          })
+          .onConflictDoUpdate({
+            // The same four columns migration 0045 makes unique. `resource_type` is
+            // in the key because upstream's `{number}` branch pattern means branch "5"
+            // and issue #5 are two legitimate links from one task through one
+            // integration; a three-column key rejected the second, or refused to
+            // migrate an instance that already held both.
+            target: [
+              externalLinkTable.taskId,
+              externalLinkTable.integrationId,
+              externalLinkTable.resourceType,
+              externalLinkTable.externalId,
+            ],
+            set: {
+              resourceType,
+              url,
+              title: title ?? null,
+              metadata: metadata ? JSON.stringify(metadata) : null,
+              updatedAt: new Date(),
+            },
+          })
+          // A conflict update is a retry, so only the insert records activity.
+          .returning({
+            ...getTableColumns(externalLinkTable),
+            inserted: sql<boolean>`(xmax = 0)`,
+          });
+
+        if (!result) {
+          throw new HTTPException(500, {
+            message: "Failed to write the external link",
+          });
+        }
+
+        const { inserted, ...link } = result;
+        // Commit the link and actor record together. A failed activity insert must
+        // leave no link for a retry to mistake for an already recorded write.
+        if (inserted) {
+          await tx.insert(activityTable).values({
+            taskId,
+            type: "external_link_created",
+            userId: c.get("userId"),
+            content: `added a ${resourceType} link`,
+            eventData: { externalLinkId: link.id, resourceType, externalId },
+          });
+        }
+        return link;
+      });
     } catch (error) {
       // 23503 = foreign_key_violation. Reachable when the task or the integration
       // is deleted between the check above and this write; drizzle re-throws the pg
@@ -228,29 +247,10 @@ externalLink.post(
       throw error;
     }
 
-    if (!created) {
-      throw new HTTPException(500, {
-        message: "Failed to write the external link",
-      });
-    }
-
-    const { inserted, ...link } = created;
-    // Operon fork (Smart Desk D25): the actor — the on-behalf-of user for Operon's
-    // service key — is recorded like any other task write.
-    if (inserted) {
-      await createActivity(
-        taskId,
-        "external_link_created",
-        c.get("userId"),
-        `added a ${resourceType} link`,
-        { externalLinkId: link.id, resourceType, externalId },
-      );
-    }
-
     return c.json(
       {
-        ...link,
-        metadata: link.metadata ? JSON.parse(link.metadata) : null,
+        ...created,
+        metadata: created.metadata ? JSON.parse(created.metadata) : null,
         // Mirrors the read route's projection exactly: id and type only, never
         // `config`, which holds plaintext provider secrets.
         integration: {

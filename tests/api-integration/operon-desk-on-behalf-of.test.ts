@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { auth, OPERON_SERVICE_KEY_PERMISSIONS } from "../../apps/api/src/auth";
 import db, { schema } from "../../apps/api/src/database";
@@ -120,14 +120,13 @@ function importTasks(
   app: App,
   projectId: string,
   headers?: Record<string, string>,
+  title = "Imported from the desk",
 ) {
   return postJson(
     app,
     `/api/task/import/${projectId}`,
     {
-      tasks: [
-        { title: "Imported from the desk", status: "to-do", priority: "low" },
-      ],
+      tasks: [{ title, status: "to-do", priority: "low" }],
     },
     headers,
   );
@@ -139,6 +138,7 @@ function createLink(
   integrationId: string,
   headers?: Record<string, string>,
   resourceType = "message",
+  externalId = `thread-${Date.now()}`,
 ) {
   return postJson(
     app,
@@ -147,7 +147,7 @@ function createLink(
       taskId,
       integrationId,
       resourceType,
-      externalId: `thread-${Date.now()}`,
+      externalId,
       url: "https://operon.test/#/desk/thread-1",
       title: "Customer thread",
     },
@@ -341,6 +341,152 @@ describe("API integration: Operon on-behalf-of on the Smart Desk write routes", 
     expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
   });
 
+  it("records one named actor on a fresh link, never another on retry or a racing write", async () => {
+    const { owner, teammate, task, integration } = await seedDeskProject();
+    const key = await mintKey(
+      owner.user.id,
+      OPERON_SERVICE_KEY_PERMISSIONS,
+      true,
+    );
+    const { app } = createApp();
+    const headers = { "x-api-key": key, [HEADER]: teammate.id };
+    const externalId = "stable-desk-thread";
+
+    const first = await createLink(
+      app,
+      task.id,
+      integration.id,
+      headers,
+      "desk-thread",
+      externalId,
+    );
+    expect(first.status).toBe(200);
+    const firstLink = await first.json();
+    expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
+
+    const retry = await createLink(
+      app,
+      task.id,
+      integration.id,
+      headers,
+      "desk-thread",
+      externalId,
+    );
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).id).toBe(firstLink.id);
+    expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
+
+    const ownerRetry = await createLink(
+      app,
+      task.id,
+      integration.id,
+      { "x-api-key": key, [HEADER]: owner.user.id },
+      "desk-thread",
+      externalId,
+    );
+    expect(ownerRetry.status).toBe(200);
+    expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
+
+    const { app: otherApp } = createApp();
+    const racingId = "racing-desk-thread";
+    const [a, b] = await Promise.all([
+      createLink(
+        app,
+        task.id,
+        integration.id,
+        headers,
+        "desk-thread",
+        racingId,
+      ),
+      createLink(
+        otherApp,
+        task.id,
+        integration.id,
+        headers,
+        "desk-thread",
+        racingId,
+      ),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(await linkActivityActors(task.id)).toEqual([
+      teammate.id,
+      teammate.id,
+    ]);
+    const links = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(links).toHaveLength(2);
+  });
+
+  it("rolls back a new link when its actor activity cannot be stored", async () => {
+    const { owner, teammate, task, integration } = await seedDeskProject();
+    const key = await mintKey(
+      owner.user.id,
+      OPERON_SERVICE_KEY_PERMISSIONS,
+      true,
+    );
+    const { app } = createApp();
+    const headers = { "x-api-key": key, [HEADER]: teammate.id };
+    const externalId = "activity-rollback-test";
+
+    await db.execute(
+      sql.raw(`
+      CREATE FUNCTION reject_external_link_activity() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'activity insert unavailable';
+      END;
+      $$
+    `),
+    );
+    try {
+      await db.execute(
+        sql.raw(`
+        CREATE TRIGGER reject_external_link_activity_insert
+        BEFORE INSERT ON activity
+        FOR EACH ROW WHEN (NEW.type = 'external_link_created')
+        EXECUTE FUNCTION reject_external_link_activity()
+      `),
+      );
+      const failed = await createLink(
+        app,
+        task.id,
+        integration.id,
+        headers,
+        "desk-thread",
+        externalId,
+      );
+      expect(failed.status).toBe(500);
+      expect(
+        await db
+          .select()
+          .from(schema.externalLinkTable)
+          .where(eq(schema.externalLinkTable.taskId, task.id)),
+      ).toHaveLength(0);
+    } finally {
+      await db.execute(
+        sql.raw(
+          "DROP TRIGGER IF EXISTS reject_external_link_activity_insert ON activity",
+        ),
+      );
+      await db.execute(
+        sql.raw("DROP FUNCTION reject_external_link_activity()"),
+      );
+    }
+
+    const retry = await createLink(
+      app,
+      task.id,
+      integration.id,
+      headers,
+      "desk-thread",
+      externalId,
+    );
+    expect(retry.status).toBe(200);
+    expect(await linkActivityActors(task.id)).toEqual([teammate.id]);
+  });
+
   it("IGNORES a forged header on an unmarked key: the key's own user is the actor", async () => {
     const { owner, project, task, integration } = await seedDeskProject();
     const outsider = await createWorkspaceMember();
@@ -371,6 +517,20 @@ describe("API integration: Operon on-behalf-of on the Smart Desk write routes", 
     expect(
       (await createLink(app, task.id, integration.id, headers)).status,
     ).toBe(200);
+    expect(await linkActivityActors(task.id)).toEqual([owner.user.id]);
+
+    for (const path of [
+      "/api/github-integration/import-issues",
+      "/api/gitea-integration/import-issues",
+    ]) {
+      const response = await postJson(
+        app,
+        path,
+        { projectId: project.id },
+        headers,
+      );
+      expect(response.status).toBe(404);
+    }
   });
 
   it("leaves a human session unaffected on all three routes, with or without the header", async () => {
@@ -393,14 +553,71 @@ describe("API integration: Operon on-behalf-of on the Smart Desk write routes", 
     );
 
     expect((await importTasks(app, project.id)).status).toBe(200);
-    expect((await createLink(app, task.id, integration.id)).status).toBe(200);
+    const forgedImport = await importTasks(
+      app,
+      project.id,
+      {
+        [HEADER]: teammate.id,
+      },
+      "Forged-header import",
+    );
+    expect(forgedImport.status).toBe(200);
+    expect(
+      await createdActivityActor(
+        (await taskIdByTitle(project.id, "Forged-header import")) as string,
+      ),
+    ).toBe(owner.user.id);
+    // Two FRESH links (distinct external ids), the second with a forged header, then
+    // a retry of the second: one activity row per fresh insert, none on the retry,
+    // and every actor is the session user — never the user the header names.
     expect(
       (
-        await createLink(app, task.id, integration.id, {
-          [HEADER]: teammate.id,
-        })
+        await createLink(
+          app,
+          task.id,
+          integration.id,
+          undefined,
+          "message",
+          "session-link-plain",
+        )
       ).status,
     ).toBe(200);
+    for (let write = 0; write < 2; write++) {
+      expect(
+        (
+          await createLink(
+            app,
+            task.id,
+            integration.id,
+            { [HEADER]: teammate.id },
+            "message",
+            "session-link-forged",
+          )
+        ).status,
+      ).toBe(200);
+    }
+    const links = await db
+      .select()
+      .from(schema.externalLinkTable)
+      .where(eq(schema.externalLinkTable.taskId, task.id));
+    expect(links).toHaveLength(2);
+    const actors = await linkActivityActors(task.id);
+    expect(actors).toHaveLength(links.length);
+    expect(actors).toEqual([owner.user.id, owner.user.id]);
+    expect(actors).not.toContain(teammate.id);
+
+    for (const path of [
+      "/api/github-integration/import-issues",
+      "/api/gitea-integration/import-issues",
+    ]) {
+      const response = await postJson(
+        app,
+        path,
+        { projectId: project.id },
+        { [HEADER]: teammate.id },
+      );
+      expect(response.status).toBe(404);
+    }
   });
 
   it("accepts the `desk-thread` resource type and still refuses an unknown one", async () => {
