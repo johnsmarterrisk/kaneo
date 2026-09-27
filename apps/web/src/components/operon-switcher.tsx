@@ -85,7 +85,8 @@ export type OperonModuleKey =
   | "initiative"
   | "signals"
   | "settings"
-  | "files";
+  | "files"
+  | "desk";
 
 export type OperonModule = {
   key: OperonModuleKey;
@@ -94,7 +95,7 @@ export type OperonModule = {
 };
 
 /**
- * The five modules, in order, replicated from `MODULES` in `app/src/shell/branding.ts`.
+ * The six modules, in order (Desk added by Smart Desk D25), replicated from `MODULES` in `app/src/shell/branding.ts`.
  *
  * Widened to FIVE (John, GUI-pass fix): this list had drifted to four, missing `files`
  * (Stash, `branding.ts` decision 0) entirely — a real staleness this rebuild surfaces and
@@ -108,6 +109,8 @@ export const OPERON_MODULES: readonly OperonModule[] = [
   { key: "telegraph", label: "Telegraph", icon: "💬" },
   { key: "initiative", label: "Initiative", icon: "📋" },
   { key: "files", label: "Stash", icon: "📁" },
+  // Smart Desk D25 (John, 2026-09-26): after Stash, before Settings — order is position.
+  { key: "desk", label: "Desk", icon: "🎫" },
   { key: "settings", label: "Settings", icon: "⚙️" },
 ] as const;
 
@@ -221,13 +224,15 @@ function moduleHref(apex: string, key: OperonModuleKey): string {
       return `${apex}/#/telegraph`;
     case "files":
       return `${apex}/#/files`;
+    case "desk":
+      return `${apex}/#/desk`;
     case "settings":
       return `${apex}/#/settings`;
     default:
       // "initiative" never reaches here: `ModuleRow` renders the current module as a
       // `<span>`, never an `<a>` (see `isCurrent` below), so `moduleHref` is only ever
-      // called for the OTHER four keys — this default exists so the switch stays
-      // exhaustive if a fifth, still-addressless module ever joins the list.
+      // called for the OTHER five keys — this default exists so the switch stays
+      // exhaustive if a seventh, still-addressless module ever joins the list.
       return `${apex}/`;
   }
 }

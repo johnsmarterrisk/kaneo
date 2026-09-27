@@ -738,15 +738,17 @@ export const OPERON_SERVICE_KEY_METADATA = { operonService: true } as const;
  * is the workspace owner:
  *
  *   * `workspace: ["manage_settings"]` — integration and webhook provisioning.
- *   * `task: ["update"]` — the Telegraph external-link write route, which now
- *     demands the same permission upstream's own task-update routes demand.
+ *   * `task: ["create", "update"]` — the Telegraph external-link write route, which
+ *     demands the same permission upstream's own task-update routes demand, and the
+ *     Smart Desk card bridge's task create/import (D25), always on behalf of a named
+ *     user (`utils/operon-on-behalf-of.ts`).
  *   * `operon: ["rekey"]` — a scope no upstream role grants and no upstream route
  *     reads, checked by `PATCH /api/internal/operon/account-id` alongside the
  *     metadata marker above.
  */
 export const OPERON_SERVICE_KEY_PERMISSIONS: Record<string, string[]> = {
   workspace: ["manage_settings"],
-  task: ["update"],
+  task: ["create", "update"],
   operon: ["rekey"],
 };
 

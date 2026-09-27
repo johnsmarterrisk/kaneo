@@ -110,17 +110,18 @@ describe("OperonModuleNav", () => {
       "telegraph",
       "initiative",
       "files",
+      "desk",
     ]);
     expect(
       OPERON_MODULES.filter((m) => m.key !== "settings").map((m) => m.key),
-    ).toEqual(["signals", "telegraph", "initiative", "files"]);
+    ).toEqual(["signals", "telegraph", "initiative", "files", "desk"]);
 
     const initiative = screen.getByTestId("module-initiative");
     expect(initiative.getAttribute("aria-current")).toBe("page");
     expect(initiative.tagName).toBe("SPAN");
     expect(initiative.dataset.external).toBe("false");
 
-    for (const key of ["telegraph", "signals", "files"]) {
+    for (const key of ["telegraph", "signals", "files", "desk"]) {
       const element = screen.getByTestId(`module-${key}`);
       expect(element.tagName).toBe("A");
       expect(element.dataset.external).toBe("true");
@@ -190,6 +191,9 @@ describe("OperonModuleNav", () => {
     expect(screen.getByTestId("module-files").getAttribute("href")).toBe(
       "https://apex.g11.test:9443/#/files",
     );
+    expect(screen.getByTestId("module-desk").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/desk",
+    );
 
     // Initiative is the current module: a span, so it carries no href at all.
     expect(
@@ -250,6 +254,21 @@ describe("OperonModuleNav", () => {
     const stash = screen.getByTestId("module-files");
     expect(stash.textContent).toContain("Stash");
     expect(stash.textContent).toContain("📁");
+  });
+
+  it("orders the full list Stream, Telegraph, Initiative, Stash, Desk, Settings (Smart Desk D25)", () => {
+    expect(OPERON_MODULES.map((m) => m.label)).toEqual([
+      "Stream",
+      "Telegraph",
+      "Initiative",
+      "Stash",
+      "Desk",
+      "Settings",
+    ]);
+    render(<OperonModuleNav variant="top" />);
+    const desk = screen.getByTestId("module-desk");
+    expect(desk.textContent).toContain("Desk");
+    expect(desk.textContent).toContain("🎫");
   });
 });
 
@@ -362,7 +381,7 @@ describe("OperonVersionStamp", () => {
 });
 
 describe("OperonPhoneModuleStrip", () => {
-  it("renders Stream/Telegraph/Initiative/Stash in order, Settings pinned in its own group, never mixed into the app tiles", () => {
+  it("renders Stream/Telegraph/Initiative/Stash/Desk in order, Settings pinned in its own group, never mixed into the app tiles", () => {
     render(<OperonPhoneModuleStrip />);
 
     const appsGroup = screen.getByTestId("phone-module-strip-apps");
@@ -374,6 +393,7 @@ describe("OperonPhoneModuleStrip", () => {
       "telegraph",
       "initiative",
       "files",
+      "desk",
     ]);
     // Settings never appears in the scrolling apps group.
     expect(appsGroup.querySelector('[data-module="settings"]')).toBeNull();

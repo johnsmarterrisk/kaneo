@@ -534,7 +534,8 @@ describe("Operon mode: the bootstrap key's ceiling", () => {
     });
     expect(JSON.parse(key?.permissions ?? "null")).toEqual({
       workspace: ["manage_settings"],
-      task: ["update"],
+      // Widened by Smart Desk D25: the card bridge creates tasks on behalf of a user.
+      task: ["create", "update"],
       operon: ["rekey"],
     });
     // `auth.api.createApiKey` is the only writer of that marker, and it is reached
@@ -747,7 +748,8 @@ describe("Operon mode: a service key that never arrived is re-minted", () => {
     expect(verified?.key.enabled).toBe(true);
     expect(verified?.key.permissions).toEqual({
       workspace: ["manage_settings"],
-      task: ["update"],
+      // Widened by Smart Desk D25: the card bridge creates tasks on behalf of a user.
+      task: ["create", "update"],
       operon: ["rekey"],
     });
     expect(verified?.key.metadata).toEqual({ operonService: true });

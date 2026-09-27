@@ -24,7 +24,7 @@ export const createExternalLinkBody = z.object({
   // `telegraph` integration could write rows shaped like the ones upstream's
   // github/gitea link managers synchronise against. Defaulted rather than
   // required so an existing caller that omits it keeps working.
-  resourceType: z.enum(["message", "file"]).default("message"),
+  resourceType: z.enum(["message", "file", "desk-thread"]).default("message"),
   externalId: z.string().min(1).max(256),
   // http/https only. This value is rendered straight into an `<a href>` by
   // `apps/web/src/components/external-links/external-links-accordion.tsx`, and every

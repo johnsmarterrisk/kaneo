@@ -22,6 +22,7 @@ import {
   validateTaskAssetUploadInput,
 } from "../storage/s3";
 import { normalizeApiServerUrl } from "../utils/openapi-spec";
+import { requireOperonOnBehalfOf } from "../utils/operon-on-behalf-of";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import {
   validateAndParseDate,
@@ -138,6 +139,7 @@ const createTaskRoute = createRoute({
     "Add a task to a project. It is placed in the column named by `status`.",
   middleware: [
     workspaceAccess.fromProject("projectId"),
+    requireOperonOnBehalfOf,
     requireWorkspacePermission({ task: ["create"] }),
     requireEntitlement,
   ] as const,
@@ -267,6 +269,7 @@ const importTasksRoute = createRoute({
     "Import tasks into a project. Each task is reported individually, so a partial import still returns 200.",
   middleware: [
     workspaceAccess.fromProject("projectId"),
+    requireOperonOnBehalfOf,
     requireWorkspacePermission({ task: ["create"] }),
     requireEntitlement,
   ] as const,
