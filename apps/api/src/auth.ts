@@ -66,7 +66,7 @@ import { getGithubSsoOAuthCredentials } from "./utils/github-sso-env";
 import { isCloud } from "./utils/is-cloud";
 import { isDisposableEmail } from "./utils/is-disposable-email";
 import { isLocalSignInPath } from "./utils/is-local-sign-in-path";
-import { verifyApiKey } from "./utils/verify-api-key";
+import { apiKeyEnabledCondition, verifyApiKey } from "./utils/verify-api-key";
 import { verifyTurnstile } from "./utils/verify-turnstile";
 
 config();
@@ -825,7 +825,14 @@ async function revokeOperonServiceKeys(): Promise<number> {
     })
     .from(schema.apikeyTable);
 
-  const doomed = rows.filter(isEnabledOperonServiceRow).map((row) => row.id);
+  // `enabled !== false`, deliberately looser than the ceiling sync's `enabled = true`:
+  // the Better Auth plugin refuses only `enabled === false`, so a NULL row may still
+  // authenticate there, and disabling it is the safe side of a revoke.
+  const doomed = rows
+    .filter(
+      (row) => row.enabled !== false && hasOperonServiceMarker(row.metadata),
+    )
+    .map((row) => row.id);
 
   if (doomed.length === 0) return 0;
 
@@ -835,14 +842,6 @@ async function revokeOperonServiceKeys(): Promise<number> {
     .where(inArray(schema.apikeyTable.id, doomed));
 
   return doomed.length;
-}
-
-/** The row filter the revoke above and the ceiling sync below share. */
-function isEnabledOperonServiceRow(row: {
-  enabled: boolean | null;
-  metadata: string | null;
-}): boolean {
-  return row.enabled !== false && hasOperonServiceMarker(row.metadata);
 }
 
 /**
@@ -908,9 +907,12 @@ export async function ensureOperonServiceKeyCeiling(): Promise<
       enabled: schema.apikeyTable.enabled,
       permissions: schema.apikeyTable.permissions,
     })
-    .from(schema.apikeyTable);
+    .from(schema.apikeyTable)
+    // The verifier's own enabled condition (`enabled = true`), so a legacy NULL row —
+    // which `verifyApiKey` never accepts — cannot make the live key look ambiguous.
+    .where(apiKeyEnabledCondition());
 
-  const marked = rows.filter(isEnabledOperonServiceRow);
+  const marked = rows.filter((row) => hasOperonServiceMarker(row.metadata));
   const [row] = marked;
   if (!row) return "none";
   if (marked.length > 1) {

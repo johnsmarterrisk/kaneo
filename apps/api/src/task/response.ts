@@ -28,6 +28,16 @@ export const taskSchema = z
   })
   .openapi("Task");
 
+// Operon fork addition (Smart Desk F0b, D2): the create route's response. The handler
+// already returns the full row, so this documents the keyed create's field; `taskSchema`
+// itself stays upstream's, being also the update and move responses.
+export const createdTaskSchema = taskSchema.extend({
+  operonIdempotencyKey: z.string().nullable().openapi({
+    description:
+      "The Idempotency-Key Operon's service key created this task with, or null.",
+  }),
+});
+
 export const taskWithAssigneeSchema = taskSchema
   .extend({
     assigneeName: z.string().nullable(),

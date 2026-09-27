@@ -12,7 +12,7 @@ const OPERON_SERVICE_MARKER = "operonService";
 export const OPERON_ON_BEHALF_OF_HEADER = "X-Operon-On-Behalf-Of";
 // Smart Desk F0b (D2): the keyed task create. Honoured for the marked key only.
 export const OPERON_IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
-const OPERON_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9:_-]{1,200}$/;
+export const OPERON_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9:_-]{1,200}$/;
 
 function parseJsonObject(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;

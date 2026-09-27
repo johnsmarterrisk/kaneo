@@ -14,6 +14,7 @@ import {
   createRoute,
   errorResponse,
   jsonResponse,
+  z,
 } from "../openapi";
 import {
   assertTaskImageKeyMatchesContext,
@@ -23,6 +24,8 @@ import {
 } from "../storage/s3";
 import { normalizeApiServerUrl } from "../utils/openapi-spec";
 import {
+  OPERON_IDEMPOTENCY_KEY_HEADER,
+  OPERON_IDEMPOTENCY_KEY_PATTERN,
   readOperonIdempotencyKey,
   requireOperonOnBehalfOf,
 } from "../utils/operon-on-behalf-of";
@@ -58,6 +61,7 @@ import updateTaskTitle from "./controllers/update-task-title";
 import {
   boardSchema,
   bulkResultSchema,
+  createdTaskSchema,
   finalizedAssetSchema,
   imageUploadSchema,
   moveTaskResultSchema,
@@ -149,6 +153,23 @@ const createTaskRoute = createRoute({
     requireWorkspacePermission({ task: ["create"] }),
     requireEntitlement,
   ] as const,
+  // Operon fork (Smart Desk F0b, D2). A plain OpenAPI parameter, not `request.headers`:
+  // a Zod header schema would add a request validator and make the typed web client
+  // require a `header` argument. `readOperonIdempotencyKey` enforces the pattern, and
+  // only for Operon's marked service key.
+  parameters: [
+    {
+      name: OPERON_IDEMPOTENCY_KEY_HEADER,
+      in: "header",
+      required: false,
+      description:
+        "Honoured only from Operon's marked service key (ignored for every other caller). A repeat answers 200 with the task the key already created, plus `Idempotent-Replay: true`, and creates nothing; an invalid key from that key answers 400.",
+      schema: {
+        type: "string",
+        pattern: OPERON_IDEMPOTENCY_KEY_PATTERN.source,
+      },
+    },
+  ],
   request: {
     params: projectIdParam,
     body: {
@@ -157,10 +178,31 @@ const createTaskRoute = createRoute({
     },
   },
   responses: {
-    200: jsonResponse("The created task", taskSchema),
-    400: errorResponse("Invalid body, or unknown project"),
+    200: {
+      ...jsonResponse(
+        "The created task, or on a keyed replay the task the Idempotency-Key already created",
+        createdTaskSchema,
+      ),
+      headers: {
+        "Idempotent-Replay": {
+          description:
+            "`true` when this answer is a replay of an earlier keyed create; absent otherwise.",
+          schema: { type: "string", enum: ["true"] },
+        },
+      },
+    },
+    400: errorResponse(
+      "Invalid body, unknown project, or an invalid Idempotency-Key from Operon's service key",
+    ),
     403: errorResponse(
       "No workspace access, or missing task:create permission",
+    ),
+    409: jsonResponse(
+      "The Idempotency-Key belongs to a task in another workspace; no task data is returned",
+      z.object({
+        code: z.literal("idempotency_key_conflict"),
+        message: z.string(),
+      }),
     ),
   },
 });

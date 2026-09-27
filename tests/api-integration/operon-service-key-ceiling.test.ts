@@ -239,6 +239,31 @@ describe("API integration: Operon service-key ceiling at boot (Smart Desk F0b T2
     expect(changes[0].text).toContain(second.id);
   });
 
+  it("F8: a legacy enabled-NULL marked row beside one live marked key: the live key is corrected, the NULL row untouched, no ambiguity", async () => {
+    const { owner, ceilingText } = await seed();
+    const legacy = await mintKey(owner.user.id, OLD_CEILING);
+    await db
+      .update(schema.apikeyTable)
+      .set({ enabled: null })
+      .where(eq(schema.apikeyTable.id, legacy.id));
+    const live = await mintKey(owner.user.id, OLD_CEILING);
+    const logs = captureLogs();
+
+    // `verifyApiKey` accepts only `enabled = true`, so the NULL row is not a key Operon
+    // can be holding and must not count toward "more than one enabled key".
+    expect(await ensureOperonServiceKeyCeiling()).toBe("synced");
+
+    expect((await row(live.id)).permissions).toBe(ceilingText);
+    const untouched = await row(legacy.id);
+    expect(untouched.permissions).toBe(JSON.stringify(OLD_CEILING));
+    expect(untouched.enabled).toBeNull();
+    const changes = logs.ceiling();
+    expect(changes).toHaveLength(1);
+    expect(changes[0].text).toContain("operon_service_key_ceiling_synced");
+    expect(changes[0].text).toContain(live.id);
+    expect(changes[0].text).not.toContain(legacy.id);
+  });
+
   it("F8b: a throwing read fails the boot", async () => {
     captureLogs();
     // Only a read of `apikey` throws, so a later startup step's own reads cannot be the

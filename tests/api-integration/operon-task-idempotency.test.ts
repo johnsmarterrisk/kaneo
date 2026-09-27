@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { auth, OPERON_SERVICE_KEY_PERMISSIONS } from "../../apps/api/src/auth";
 import db, { schema } from "../../apps/api/src/database";
@@ -122,6 +122,60 @@ async function settledActivityCount(taskId?: string) {
 }
 
 /** Create once, then return the create's body and the counts a replay must not move. */
+/**
+ * A controlled collision for F6 (review round 1, finding 4). The keyed create's initial
+ * lookup runs in the handler; `claimTaskNumber`'s `UPDATE "project"` runs later, inside
+ * `createTask`'s transaction and BEFORE its insert. Holding that project row locked from
+ * another transaction parks every create there, so a create seen waiting on the lock has
+ * provably passed its lookup without finding the key. Releasing the lock then lets the
+ * first insert commit and makes the second hit `task_operon_idempotency_key_unique` —
+ * the unique-violation recovery, not the lookup, is what answers it. No production seam.
+ */
+async function lockProjectRow(projectId: string) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let acquired!: () => void;
+  const locked = new Promise<void>((resolve) => {
+    acquired = resolve;
+  });
+  const holder = db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select id from project where id = ${projectId} for update`,
+    );
+    acquired();
+    await released;
+  });
+  await Promise.race([locked, holder]);
+  return async () => {
+    release();
+    await holder;
+  };
+}
+
+async function waitForCreatesParkedOnProjectLock(expected: number) {
+  for (let attempt = 0; attempt < 250; attempt++) {
+    const result = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from pg_stat_activity
+          where datname = current_database()
+            and wait_event_type = 'Lock'
+            and query ilike 'update "project"%'`,
+    );
+    if ((result.rows[0]?.n ?? 0) >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`fewer than ${expected} creates reached the project lock`);
+}
+
+async function lastTaskNumber(projectId: string) {
+  const [row] = await db
+    .select({ n: schema.projectTable.lastTaskNumber })
+    .from(schema.projectTable)
+    .where(eq(schema.projectTable.id, projectId));
+  return row?.n;
+}
+
 async function createOnce(
   app: App,
   projectId: string,
@@ -337,6 +391,88 @@ describe("API integration: Operon Idempotency-Key on task create (Smart Desk F0b
         (response) => response.headers.get("Idempotent-Replay") === "true",
       ),
     ).toHaveLength(3);
+  });
+
+  it("F6: a forced collision past both lookups is answered by the unique-violation re-read as a replay", async () => {
+    const { project, app, headers } = await seedDesk();
+    const unlock = await lockProjectRow(project.id);
+
+    const pending = [0, 1].map(() =>
+      createTask(app, project.id, headers("desk:collide:0")),
+    );
+    await waitForCreatesParkedOnProjectLock(2);
+    // Both creates are past the lookup, and neither has inserted.
+    expect(await tasksWithKey("desk:collide:0")).toHaveLength(0);
+    await unlock();
+    const responses = await Promise.all(pending);
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const bodies = await Promise.all(
+      responses.map((response) => response.json()),
+    );
+    const rows = await tasksWithKey("desk:collide:0");
+    expect(rows).toHaveLength(1);
+    expect(bodies.map((body) => body.id)).toEqual([rows[0]?.id, rows[0]?.id]);
+    expect(
+      responses.map((response) => response.headers.get("Idempotent-Replay")),
+    ).toContain("true");
+    expect(
+      responses.filter(
+        (response) => response.headers.get("Idempotent-Replay") === "true",
+      ),
+    ).toHaveLength(1);
+    expect(await taskCount()).toBe(1);
+    // The loser's claimed number rolled back with its transaction.
+    expect(await lastTaskNumber(project.id)).toBe(1);
+  });
+
+  it("F5/F6: a forced collision whose loser is in another workspace answers only 409 after its transaction rolls back", async () => {
+    const desk = await seedDesk();
+    const elsewhere = await createWorkspaceMember({ role: "owner" });
+    const { project: foreign } = await createProjectFixture({
+      workspaceId: elsewhere.workspace.id,
+    });
+    const foreignKey = await mintKey(elsewhere.user.id, true);
+    const foreignNumberBefore = await lastTaskNumber(foreign.id);
+    const activitiesBefore = await settledActivityCount();
+
+    const unlockDesk = await lockProjectRow(desk.project.id);
+    const unlockForeign = await lockProjectRow(foreign.id);
+    const deskPending = createTask(
+      desk.app,
+      desk.project.id,
+      desk.headers("desk:collide:ws"),
+    );
+    const foreignPending = createTask(desk.app, foreign.id, {
+      "x-api-key": foreignKey,
+      [ON_BEHALF_OF]: elsewhere.user.id,
+      [IDEMPOTENCY_KEY]: "desk:collide:ws",
+    });
+    await waitForCreatesParkedOnProjectLock(2);
+
+    // The desk's create commits first; only then may the foreign one insert.
+    await unlockDesk();
+    const deskResponse = await deskPending;
+    expect(deskResponse.status).toBe(200);
+    expect(deskResponse.headers.get("Idempotent-Replay")).toBeNull();
+    const winner = await deskResponse.json();
+    await unlockForeign();
+    const response = await foreignPending;
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("Idempotent-Replay")).toBeNull();
+    const body = await response.json();
+    expect(body).toEqual({
+      code: "idempotency_key_conflict",
+      message: expect.any(String),
+    });
+    expect(JSON.stringify(body)).not.toContain(winner.id);
+    expect(JSON.stringify(body)).not.toContain("From the desk");
+    const rows = await tasksWithKey("desk:collide:ws");
+    expect(rows.map((row) => row.id)).toEqual([winner.id]);
+    expect(await taskCount()).toBe(1);
+    expect(await lastTaskNumber(foreign.id)).toBe(foreignNumberBefore);
+    expect(await settledActivityCount(winner.id)).toBe(activitiesBefore + 1);
   });
 
   it("F1: the header from a caller that is not the marked key is ignored", async () => {

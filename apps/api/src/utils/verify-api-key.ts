@@ -36,6 +36,15 @@ function parsePermissions(raw: string | null): Record<string, string[]> | null {
   return permissions;
 }
 
+/**
+ * The "enabled" condition a key must meet to authenticate here: `enabled = true`, so a
+ * NULL row never verifies. Operon fork (Smart Desk F0b): exported so the boot-time
+ * ceiling sync in `auth.ts` counts exactly the keys this verifier accepts.
+ */
+export function apiKeyEnabledCondition() {
+  return eq(schema.apikeyTable.enabled, true);
+}
+
 export async function verifyApiKey(key: string) {
   const hashedKey = await hashApiKey(key);
 
@@ -45,7 +54,7 @@ export async function verifyApiKey(key: string) {
     .where(
       and(
         eq(schema.apikeyTable.key, hashedKey),
-        eq(schema.apikeyTable.enabled, true),
+        apiKeyEnabledCondition(),
         or(
           isNull(schema.apikeyTable.expiresAt),
           gt(schema.apikeyTable.expiresAt, new Date()),
