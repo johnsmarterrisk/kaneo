@@ -183,6 +183,15 @@ describe("Account/Workspace sub-pages — page <h1> carries text-card-foreground
 });
 
 describe("Account/Workspace sub-pages — FormLabel/Label on a bg-sidebar card carries text-sidebar-foreground", () => {
+  // Codex final-review finding (2026-09-28): the shared Label primitive's own default
+  // is "text-base/4.5 sm:text-sm/4 ..." — twMerge only dedupes classes that share the
+  // same variant, so a call site's unprefixed "text-base" (added for O2's one-step type
+  // bump) never removes the default's "sm:text-sm/4", and the sm: rule wins in the
+  // generated CSS at and above the sm breakpoint. The requested larger size therefore
+  // showed only below sm (phone). Every call site now also carries "sm:text-base",
+  // which IS in the same variant group as the default's "sm:text-sm/4" and evicts it via
+  // twMerge, so the larger size holds at desktop too. These assertions fail if a label's
+  // "sm:text-base" is ever removed again.
   it("account/information.tsx — Full name and Email FormLabels", () => {
     const formLabelTags = [
       ...informationSource.matchAll(/<FormLabel className="([^"]*)">/g),
@@ -190,6 +199,7 @@ describe("Account/Workspace sub-pages — FormLabel/Label on a bg-sidebar card c
     expect(formLabelTags.length).toBe(2);
     for (const match of formLabelTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 
@@ -200,6 +210,7 @@ describe("Account/Workspace sub-pages — FormLabel/Label on a bg-sidebar card c
     expect(labelTags.length).toBe(10);
     for (const match of labelTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 
@@ -210,6 +221,7 @@ describe("Account/Workspace sub-pages — FormLabel/Label on a bg-sidebar card c
     expect(formLabelTags.length).toBe(2);
     for (const match of formLabelTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 
@@ -218,6 +230,7 @@ describe("Account/Workspace sub-pages — FormLabel/Label on a bg-sidebar card c
     expect(labelTags.length).toBe(2);
     for (const match of labelTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 });
@@ -255,6 +268,10 @@ describe("visibility.tsx — Labels and hints on the bg-sidebar card are readabl
     expect(labelTags.length).toBe(2);
     for (const match of labelTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      // Codex final-review finding (2026-09-28): "sm:text-base" must be present
+      // alongside "text-base", or the shared Label default's "sm:text-sm/4" wins at
+      // and above the sm breakpoint and the requested size bump never reaches desktop.
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 

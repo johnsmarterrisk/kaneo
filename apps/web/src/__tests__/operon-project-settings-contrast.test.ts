@@ -169,6 +169,11 @@ describe("project general settings page contrast (John, 2026-09-28: title/labels
     expect(formLabelOpenTags.length).toBe(3);
     for (const match of formLabelOpenTags) {
       expect(match[1]).toContain("text-sidebar-foreground");
+      // Codex final-review finding (2026-09-28): the shared Label primitive's own
+      // "sm:text-sm/4" default outranks an unprefixed "text-base" override at and
+      // above the sm breakpoint (twMerge only dedupes same-variant classes), so the
+      // O2 size bump needs its own "sm:text-base" here to actually reach desktop.
+      expect(match[1]).toContain("sm:text-base");
     }
   });
 

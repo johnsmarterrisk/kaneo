@@ -508,8 +508,13 @@ function RouteComponent() {
                               panel), which reads as invisible dark-on-navy text on THIS
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
-                              why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-base font-medium text-sidebar-foreground">
+                              why only these three (Project name/Key/Description) go dark.
+                              sm:text-base (Codex final-review finding, 2026-09-28): the
+                              shared default is "text-base/4.5 sm:text-sm/4 ..." and an
+                              unprefixed text-base override never evicts that sm: rule
+                              (twMerge only dedupes same-variant classes) — sm:text-base
+                              is what actually keeps the larger size at desktop width. */}
+                          <FormLabel className="text-base sm:text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.projectNameLabel")}
                           </FormLabel>
                           {/* text-sidebar-foreground: same bg-sidebar card as the
@@ -554,7 +559,7 @@ function RouteComponent() {
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
                               why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-base font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base sm:text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.keyLabel")}
                           </FormLabel>
                           {/* text-sidebar-foreground: same bg-sidebar card, same
@@ -599,7 +604,7 @@ function RouteComponent() {
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
                               why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-base font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base sm:text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.descriptionLabel")}
                           </FormLabel>
                           {/* text-sidebar-foreground: same bg-sidebar card, same

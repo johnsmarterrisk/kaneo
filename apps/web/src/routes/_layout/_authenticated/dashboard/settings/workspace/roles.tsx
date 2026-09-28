@@ -510,8 +510,13 @@ function PermissionList({
                             card (see the container at the top of this file). The
                             shared Label primitive defaults to text-card-foreground
                             (dark, for a white bg-card panel), invisible dark-on-navy
-                            here — same GUI-4 pattern as general.tsx. */}
-                        <Label className="text-base font-medium text-sidebar-foreground">
+                            here — same GUI-4 pattern as general.tsx.
+                            sm:text-base (Codex final-review finding, 2026-09-28): the
+                            shared default is "text-base/4.5 sm:text-sm/4 ..." and an
+                            unprefixed text-base override never evicts that sm: rule
+                            (twMerge only dedupes same-variant classes) — sm:text-base
+                            is what actually keeps the larger size at desktop width. */}
+                        <Label className="text-base sm:text-base font-medium text-sidebar-foreground">
                           {t(
                             `settings:workspaceRoles.permissions.${labelKey}`,
                             {
@@ -618,7 +623,7 @@ function DraftEditor({
           <div className="space-y-0.5">
             {/* text-sidebar-foreground: same reason as PermissionList's Label above —
                 this draft row sits inside the roles list's bg-sidebar (navy) card. */}
-            <Label className="text-base font-medium text-sidebar-foreground">
+            <Label className="text-base sm:text-base font-medium text-sidebar-foreground">
               {t("settings:workspaceRoles.nameLabel")}
             </Label>
             <p className="text-sm text-sidebar-foreground">

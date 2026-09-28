@@ -121,10 +121,15 @@ function RouteComponent() {
                 here; the hints beside it now carry the same full-strength token instead
                 of the global text-muted-foreground (dark gray, also dark-on-navy) or a
                 reduced-opacity variant — same GUI-4 pattern as general.tsx's Project
-                Information card. text-base/text-sm: one step up the type scale (O2). */}
+                Information card. text-base/text-sm: one step up the type scale (O2).
+                sm:text-base (Codex final-review finding, 2026-09-28): the shared
+                Label default is "text-base/4.5 sm:text-sm/4 ..." and an unprefixed
+                text-base override never evicts that sm: rule (twMerge only dedupes
+                same-variant classes) — sm:text-base is what keeps the larger size at
+                desktop width. */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base font-medium text-sidebar-foreground">
+                <Label className="text-base sm:text-base font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicAccess")}
                 </Label>
                 <p className="text-sm text-sidebar-foreground">
@@ -144,7 +149,7 @@ function RouteComponent() {
               <div className="space-y-0.5">
                 {/* text-sidebar-foreground, full strength: same bg-sidebar card, same
                     contrast fix as the Public Access Label above. */}
-                <Label className="text-base font-medium text-sidebar-foreground">
+                <Label className="text-base sm:text-base font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicUrl")}
                 </Label>
                 <p className="text-sm text-sidebar-foreground">
