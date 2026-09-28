@@ -101,28 +101,34 @@ function RouteComponent() {
     <div className="flex gap-6 h-full">
       <SettingsSidebar>
         <div className="p-2">
+          {/* This aside sits on the settings frame's white bg-card panel (settings.tsx),
+              not the app's navy ground. Every class below was originally one of the
+              sidebar-scoped rail tokens (correct only on the navy sidebar surface);
+              on this white panel they rendered as white-on-white or near-invisible
+              dark-on-transparent. Swapped for the white-panel equivalents instead —
+              same GUI-4 pattern as the rest of the navy-theme fix. */}
           <div className="mb-1 flex items-center gap-3 rounded-md px-2 py-2">
             <Avatar className="h-8 w-8">
               <AvatarImage
                 src={workspace?.logo ?? ""}
                 alt={workspace?.name || ""}
               />
-              <AvatarFallback className="border border-sidebar-border/70 bg-sidebar-accent/70 text-xs font-medium text-sidebar-accent-foreground">
+              <AvatarFallback className="border border-border/70 text-xs font-medium">
                 {workspaceInitials}
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col md:min-w-fit">
-              <p className="truncate text-sm md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-sm text-card-foreground md:overflow-visible md:text-clip md:whitespace-normal">
                 {workspace?.name}
               </p>
-              <p className="truncate text-xs text-sidebar-foreground/60 capitalize md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-xs text-muted-foreground capitalize md:overflow-visible md:text-clip md:whitespace-normal">
                 {t(`team:roles.${role}`, { defaultValue: role })}
               </p>
             </div>
           </div>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
               {t("navigation:projectSettings.projectLabel")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -141,10 +147,10 @@ function RouteComponent() {
                 }}
               >
                 <SelectTrigger
-                  className="h-8 text-sm font-normal text-foreground"
+                  className="h-8 text-sm font-normal text-card-foreground"
                   size="sm"
                 >
-                  <span className="truncate font-normal text-foreground">
+                  <span className="truncate font-normal text-card-foreground">
                     {selectedProject?.name ||
                       (projects?.length
                         ? t("settings:projectSwitcher.selectProject")
@@ -160,7 +166,7 @@ function RouteComponent() {
                 >
                   {projects?.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
-                      <span className="font-normal text-foreground">
+                      <span className="font-normal text-card-foreground">
                         {project.name}
                       </span>
                     </SelectItem>
@@ -171,7 +177,7 @@ function RouteComponent() {
           </SidebarGroup>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
               {t("navigation:page.settingsTitle")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -190,9 +196,8 @@ function RouteComponent() {
                         size="sm"
                         disabled={!selectedProject}
                         className={cn(
-                          "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-sidebar-foreground/80",
-                          isActive &&
-                            "bg-sidebar-accent text-sidebar-accent-foreground",
+                          "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-muted-foreground",
+                          isActive && "bg-accent text-accent-foreground",
                         )}
                       >
                         <item.icon className="h-3.5 w-3.5" />

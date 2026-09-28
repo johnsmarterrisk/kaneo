@@ -107,7 +107,10 @@ function SettingsLayout() {
               </Button>
             </div>
 
-            <h1 className="mt-4 hidden pl-1 text-2xl font-semibold md:block">
+            {/* text-card-foreground: this frame is bg-card (white) — see the div below —
+                so the title needs the light-panel foreground explicitly, not the
+                inherited body text-foreground (white in navy mode, invisible on white). */}
+            <h1 className="mt-4 hidden pl-1 text-2xl font-semibold text-card-foreground md:block">
               {t("navigation:page.settingsTitle")}
             </h1>
 

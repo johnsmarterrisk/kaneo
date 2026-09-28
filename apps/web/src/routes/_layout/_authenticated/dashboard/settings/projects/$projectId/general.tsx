@@ -325,7 +325,11 @@ function RouteComponent() {
       <PageTitle title={t("settings:projectGeneral.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground, so it needs the
+              light-panel foreground token explicitly rather than inheriting body's
+              text-foreground (white in navy mode, invisible on white — GUI-4 pattern). */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:projectGeneral.title")}
           </h1>
           <p className="text-muted-foreground">
@@ -448,7 +452,16 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: this FormField sits inside the
+                              Project Information card, which is bg-sidebar (navy) here —
+                              upstream's own styling, unmodified (see this file's diff
+                              against v2.23.1). The shared Label/FormLabel primitive
+                              defaults to text-card-foreground (dark, for a white bg-card
+                              panel), which reads as invisible dark-on-navy text on THIS
+                              card; the plain <p> labels beside it (Icon, Import/Export)
+                              have no color class and inherit white from body, which is
+                              why only these three (Project name/Key/Description) go dark. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.projectNameLabel")}
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
@@ -480,7 +493,16 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: this FormField sits inside the
+                              Project Information card, which is bg-sidebar (navy) here —
+                              upstream's own styling, unmodified (see this file's diff
+                              against v2.23.1). The shared Label/FormLabel primitive
+                              defaults to text-card-foreground (dark, for a white bg-card
+                              panel), which reads as invisible dark-on-navy text on THIS
+                              card; the plain <p> labels beside it (Icon, Import/Export)
+                              have no color class and inherit white from body, which is
+                              why only these three (Project name/Key/Description) go dark. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.keyLabel")}
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
@@ -514,7 +536,16 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: this FormField sits inside the
+                              Project Information card, which is bg-sidebar (navy) here —
+                              upstream's own styling, unmodified (see this file's diff
+                              against v2.23.1). The shared Label/FormLabel primitive
+                              defaults to text-card-foreground (dark, for a white bg-card
+                              panel), which reads as invisible dark-on-navy text on THIS
+                              card; the plain <p> labels beside it (Icon, Import/Export)
+                              have no color class and inherit white from body, which is
+                              why only these three (Project name/Key/Description) go dark. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.descriptionLabel")}
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
