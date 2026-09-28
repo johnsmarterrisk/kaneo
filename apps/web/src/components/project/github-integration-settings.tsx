@@ -267,7 +267,7 @@ export function GitHubIntegrationSettings({
       <div className="space-y-4 border border-border rounded-md p-4 bg-card">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium text-card-foreground">
               {t("settings:githubIntegration.connectionStatus")}
             </p>
             {isConnected ? (
@@ -302,7 +302,7 @@ export function GitHubIntegrationSettings({
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:githubIntegration.repository")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -328,7 +328,7 @@ export function GitHubIntegrationSettings({
             <Separator />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1 space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:githubIntegration.commentTaskLinkTitle")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -371,7 +371,7 @@ export function GitHubIntegrationSettings({
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:githubIntegration.appStatusTitle")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -476,7 +476,7 @@ export function GitHubIntegrationSettings({
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:githubIntegration.actionsTitle")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -643,7 +643,7 @@ export function GitHubIntegrationSettings({
         <div className="space-y-4 border border-border rounded-md p-4 bg-card">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <p className="text-sm font-medium">
+              <p className="text-sm font-medium text-card-foreground">
                 {t("settings:githubIntegration.importSectionTitle")}
               </p>
               <p className="text-xs text-muted-foreground">

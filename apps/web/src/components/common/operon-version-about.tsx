@@ -31,36 +31,45 @@ export default function OperonVersionAbout() {
 
   return (
     <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
-      <p className="text-sm font-medium">About</p>
+      {/* text-base/text-sidebar-foreground: this card is bg-sidebar (navy) — the title
+          had no color class, inheriting body text-foreground (dark navy in light theme,
+          invisible on this always-dark-navy card, WALK finding F6, 1.27:1). One step up
+          the type scale too (John, 2026-09-28, O2). */}
+      <p className="text-base font-medium text-sidebar-foreground">About</p>
       {/* Codex round 1 finding 10: a full 40-character SHA is unbreakable monospace text —
           `flex justify-between` alone let it push past a 375px viewport's right edge rather
           than wrap. Each row now stacks label-over-value below `sm` (a `min-w-0` flex child
           so it CAN shrink at all, `break-all` so a run with no spaces wraps mid-string
           instead of overflowing) and returns to a single inline row at `sm` and up, where
           the value has room beside its label. Mirrors Operon's own `AboutVersion.tsx`. */}
-      <dl className="text-sm space-y-2" data-testid="about-version">
+      {/* text-base (John, 2026-09-28, O2: one step up the type scale on every navy
+          card); dt/dd below carry text-sidebar-foreground explicitly — the global
+          text-muted-foreground token only reaches 2.2:1 (light) / 2.96:1 (navy) against
+          this card's bg-sidebar, and dd had no color class at all (same F6 fault as the
+          title, on the SHA values). */}
+      <dl className="text-base space-y-2" data-testid="about-version">
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <dt className="text-muted-foreground shrink-0">Version</dt>
+          <dt className="text-sidebar-foreground shrink-0">Version</dt>
           <dd
-            className="font-mono min-w-0 break-all sm:text-right"
+            className="font-mono min-w-0 break-all sm:text-right text-sidebar-foreground"
             data-testid="about-version-release"
           >
             {formatStamp(info)}
           </dd>
         </div>
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <dt className="text-muted-foreground shrink-0">Operon</dt>
+          <dt className="text-sidebar-foreground shrink-0">Operon</dt>
           <dd
-            className="font-mono min-w-0 break-all sm:text-right"
+            className="font-mono min-w-0 break-all sm:text-right text-sidebar-foreground"
             data-testid="about-version-operon-sha"
           >
             {formatSha(info?.operon_sha)}
           </dd>
         </div>
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <dt className="text-muted-foreground shrink-0">Initiative</dt>
+          <dt className="text-sidebar-foreground shrink-0">Initiative</dt>
           <dd
-            className="font-mono min-w-0 break-all sm:text-right"
+            className="font-mono min-w-0 break-all sm:text-right text-sidebar-foreground"
             data-testid="about-version-fork-sha"
           >
             {formatSha(info?.fork_sha)}

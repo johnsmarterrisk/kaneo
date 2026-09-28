@@ -53,7 +53,11 @@ export default function WorkflowEditor({ projectId }: WorkflowEditorProps) {
   ) => (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">
+        {/* text-card-foreground (John, 2026-09-28, O3): this heading had no color
+            class, inheriting body text-foreground (white in navy) on the settings
+            frame's own bg-card panel — invisible, same fault as the event name
+            below. */}
+        <h3 className="text-sm font-medium text-card-foreground">
           {t(`settings:workflowEditor.${headingKey}`)}
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -74,7 +78,11 @@ export default function WorkflowEditor({ projectId }: WorkflowEditorProps) {
               key={`${integrationType}-${eventType}`}
               className="flex items-center justify-between gap-4 p-3 border border-border rounded-md bg-card"
             >
-              <span className="text-sm">
+              {/* text-card-foreground (John, 2026-09-28, O3): the event name had no
+                  color class, inheriting body text-foreground (white in navy) on
+                  this row's own bg-card (white) — invisible, matching the
+                  operator's screenshot of the rebuilt local stack. */}
+              <span className="text-sm text-card-foreground">
                 {t(`settings:workflowEditor.events.${eventType}`)}
               </span>
               <Select

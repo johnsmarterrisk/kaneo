@@ -352,10 +352,10 @@ function RouteComponent() {
                               Label/FormLabel primitive defaults to text-card-foreground
                               (dark, for a white bg-card panel), invisible dark-on-navy
                               here — same GUI-4 pattern as general.tsx (projects). */}
-                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.nameLabel")}
                           </FormLabel>
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t("settings:workspaceGeneral.nameHint")}
                           </p>
                         </div>
@@ -387,10 +387,10 @@ function RouteComponent() {
                           {/* text-sidebar-foreground: same reason as the Name FormLabel
                               above — this FormField sits on the same bg-sidebar (navy)
                               Workspace Info card. */}
-                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.descriptionLabel")}
                           </FormLabel>
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t("settings:workspaceGeneral.descriptionHint")}
                           </p>
                         </div>
@@ -433,13 +433,13 @@ function RouteComponent() {
             <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5 min-w-0">
-                  <p className="text-sm font-medium">
+                  <p className="text-base font-medium">
                     {t(
                       "settings:workspaceGeneral.transferOwnership.pickerLabel",
                       { defaultValue: "New owner" },
                     )}
                   </p>
-                  <p className="text-xs text-sidebar-foreground/70">
+                  <p className="text-sm text-sidebar-foreground">
                     {eligibleNewOwners.length === 0
                       ? t(
                           "settings:workspaceGeneral.transferOwnership.noEligibleMembers",
@@ -519,17 +519,25 @@ function RouteComponent() {
             <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5">
-                  <p className="text-sm font-medium">
+                  {/* text-base: title one step up the type scale (John, 2026-09-28,
+                      O2) — text-sidebar-foreground already applies, inherited from
+                      the card div above. */}
+                  <p className="text-base font-medium">
                     {t("settings:workspaceGeneral.deleteWorkspace")}
                   </p>
-                  <p className="text-xs text-sidebar-foreground/70">
+                  {/* text-sm/full-strength text-sidebar-foreground (John, 2026-09-28,
+                      O1/O2): no reduced-opacity grey on a navy card, one step up the
+                      type scale. */}
+                  <p className="text-sm text-sidebar-foreground">
                     {t("settings:workspaceGeneral.deleteWorkspaceDescription")}
                   </p>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive transition-colors"
+                  // bg-card/border-border: see the equivalent "Delete project" button's
+                  // comment (projects/$projectId/general.tsx) — same fault, same fix.
+                  className="bg-card border-border text-destructive hover:text-destructive transition-colors"
                   type="button"
                   onClick={() => setIsDeleteModalOpen(true)}
                 >

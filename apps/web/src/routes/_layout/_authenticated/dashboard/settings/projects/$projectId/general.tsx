@@ -390,7 +390,7 @@ function RouteComponent() {
           </div>
 
           <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
-            {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) — the plain
+            {/* text-sidebar-foreground, full strength (John, 2026-09-28, O1): this card is bg-sidebar (navy) — the plain
                 <p> labels here have no color class and inherit body text-foreground, which
                 reads dark-on-navy in light theme; the muted hints beside them use the
                 global text-muted-foreground token, which is dark gray in both light and
@@ -398,10 +398,10 @@ function RouteComponent() {
                 foreground token instead, same GUI-4 pattern as the FormLabels below. */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium text-sidebar-foreground">
+                <p className="text-base font-medium text-sidebar-foreground">
                   {t("settings:projectGeneral.iconLabel")}
                 </p>
-                <p className="text-xs text-sidebar-foreground/70">
+                <p className="text-sm text-sidebar-foreground">
                   {t("settings:projectGeneral.iconHint")}
                 </p>
               </div>
@@ -509,14 +509,14 @@ function RouteComponent() {
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
                               why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.projectNameLabel")}
                           </FormLabel>
-                          {/* text-sidebar-foreground/70: same bg-sidebar card as the
+                          {/* text-sidebar-foreground: same bg-sidebar card as the
                               FormLabel above — see its comment. text-muted-foreground is
                               dark gray in light and navy theme, unreadable on this navy
                               card in both. */}
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t("settings:projectGeneral.projectNameHint")}
                           </p>
                         </div>
@@ -554,12 +554,12 @@ function RouteComponent() {
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
                               why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.keyLabel")}
                           </FormLabel>
-                          {/* text-sidebar-foreground/70: same bg-sidebar card, same
+                          {/* text-sidebar-foreground: same bg-sidebar card, same
                               contrast fix as the Project name hint above. */}
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t("settings:projectGeneral.keyHint", {
                               slug: projectForm.watch("slug") || "ABC",
                             })}
@@ -599,12 +599,12 @@ function RouteComponent() {
                               card; the plain <p> labels beside it (Icon, Import/Export)
                               have no color class and inherit white from body, which is
                               why only these three (Project name/Key/Description) go dark. */}
-                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
+                          <FormLabel className="text-base font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.descriptionLabel")}
                           </FormLabel>
-                          {/* text-sidebar-foreground/70: same bg-sidebar card, same
+                          {/* text-sidebar-foreground: same bg-sidebar card, same
                               contrast fix as the Project name hint above. */}
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t("settings:projectGeneral.descriptionHint")}
                           </p>
                         </div>
@@ -628,12 +628,12 @@ function RouteComponent() {
             <Separator />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                {/* text-sidebar-foreground(/70): same bg-sidebar card as the Icon row —
+                {/* text-sidebar-foreground, full strength (John, 2026-09-28, O1): same bg-sidebar card as the Icon row —
                     see its comment. */}
-                <p className="text-sm font-medium text-sidebar-foreground">
+                <p className="text-base font-medium text-sidebar-foreground">
                   {t("settings:projectGeneral.importExportTasks")}
                 </p>
-                <p className="text-xs text-sidebar-foreground/70">
+                <p className="text-sm text-sidebar-foreground">
                   {t("settings:projectGeneral.importExportTasksDescription")}
                 </p>
               </div>
@@ -656,19 +656,26 @@ function RouteComponent() {
             <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5">
-                  {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) too —
+                  {/* text-sidebar-foreground, full strength (John, 2026-09-28, O1): this card is bg-sidebar (navy) too —
                       same contrast fix as the Project Information card above. */}
-                  <p className="text-sm font-medium text-sidebar-foreground">
+                  <p className="text-base font-medium text-sidebar-foreground">
                     {t("settings:projectGeneral.deleteProject")}
                   </p>
-                  <p className="text-xs text-sidebar-foreground/70">
+                  <p className="text-sm text-sidebar-foreground">
                     {t("settings:projectGeneral.deleteProjectDescription")}
                   </p>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive transition-colors"
+                  // bg-card/border-border: ghost's default background is fully
+                  // transparent, so this "Delete project" text sat directly on the
+                  // danger-zone card's own bg-sidebar (navy) — text-destructive
+                  // (#c0362c) on that navy only reaches 2.35:1 (light) / 3.16:1
+                  // (navy), both under 4.5:1. bg-card is the theme's own light
+                  // panel token (white in light/navy, dark navy in dark), which
+                  // text-destructive clears comfortably in every theme.
+                  className="bg-card border-border text-destructive hover:text-destructive transition-colors"
                   type="button"
                   onClick={() => setIsDeleteModalOpen(true)}
                   disabled={!project}

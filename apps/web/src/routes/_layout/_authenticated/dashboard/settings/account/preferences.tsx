@@ -118,10 +118,10 @@ function RouteComponent() {
                   for a white bg-card panel), invisible dark-on-navy here — same
                   GUI-4 pattern as general.tsx's Project name/Key labels. Every Label
                   in this file's two bg-sidebar cards needs the same override. */}
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.theme")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.themeDescription")}
               </p>
             </div>
@@ -154,10 +154,10 @@ function RouteComponent() {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.language")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.languageDescription")}
               </p>
             </div>
@@ -190,10 +190,10 @@ function RouteComponent() {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.firstDayOfWeek")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.firstDayOfWeekDescription")}
               </p>
             </div>
@@ -234,10 +234,10 @@ function RouteComponent() {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.defaultView")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.defaultViewDescription")}
               </p>
             </div>
@@ -267,10 +267,10 @@ function RouteComponent() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.sidebarDefault")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.sidebarDefaultDescription")}
               </p>
             </div>
@@ -306,10 +306,10 @@ function RouteComponent() {
         <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.taskNumbers")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.taskNumbersDescription")}
               </p>
             </div>
@@ -323,10 +323,10 @@ function RouteComponent() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.assignees")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.assigneesDescription")}
               </p>
             </div>
@@ -340,10 +340,10 @@ function RouteComponent() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.dueDates")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.dueDatesDescription")}
               </p>
             </div>
@@ -354,10 +354,10 @@ function RouteComponent() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.labels")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.labelsDescription")}
               </p>
             </div>
@@ -368,10 +368,10 @@ function RouteComponent() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-sidebar-foreground">
+              <Label className="text-base font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.priority")}
               </Label>
-              <p className="text-xs text-sidebar-foreground/70">
+              <p className="text-sm text-sidebar-foreground">
                 {t("settings:preferencesPage.priorityDescription")}
               </p>
             </div>

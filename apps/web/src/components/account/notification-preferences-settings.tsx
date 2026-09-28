@@ -123,7 +123,10 @@ function ChannelCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="font-medium">{title}</h3>
+          {/* text-card-foreground (John's 2026-09-28 report / F4): this channel
+              header had no color class, inheriting body text-foreground (white in
+              navy) on its own bg-card (white) container — invisible in navy. */}
+          <h3 className="font-medium text-card-foreground">{title}</h3>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {headerRight}
@@ -248,7 +251,12 @@ function WorkspaceRuleCard({
     <div className="space-y-4 border border-border rounded-md bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium">{workspace.name}</p>
+          {/* text-card-foreground (F4): no color class, same fault as ChannelCard's
+              title above — this workspace name inherits body text-foreground on its
+              own bg-card (white) container, invisible in navy. */}
+          <p className="text-sm font-medium text-card-foreground">
+            {workspace.name}
+          </p>
           <p className="text-xs text-muted-foreground">
             {t("settings:notificationsPage.workspaceCardHint")}
           </p>
@@ -367,7 +375,10 @@ function WorkspaceRuleCard({
               value="all"
             />
             <div className="min-w-0 space-y-0.5">
-              <p className="text-sm font-medium">
+              {/* text-card-foreground (F4, WALK-confirmed 1:1): the radio labels had
+                  no color class, invisible on their own bg-card (white) container
+                  in navy. */}
+              <p className="text-sm font-medium text-card-foreground">
                 {t("settings:notificationsPage.allProjects")}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -386,7 +397,8 @@ function WorkspaceRuleCard({
               value="selected"
             />
             <div className="min-w-0 space-y-0.5">
-              <p className="text-sm font-medium">
+              {/* text-card-foreground (F4): same fault as "All projects" above. */}
+              <p className="text-sm font-medium text-card-foreground">
                 {t("settings:notificationsPage.selectedProjects")}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -419,7 +431,11 @@ function WorkspaceRuleCard({
                         toggleProject(project.id, Boolean(value))
                       }
                     />
-                    <span className="text-sm font-medium">{project.name}</span>
+                    {/* text-card-foreground (F4 sibling): same unstyled-text fault,
+                        same bg-card container. */}
+                    <span className="text-sm font-medium text-card-foreground">
+                      {project.name}
+                    </span>
                   </label>
                 );
               })
@@ -576,7 +592,9 @@ export function NotificationPreferencesSettings() {
     <div className="space-y-8">
       <div className="flex flex-col gap-5 rounded-md border bg-card p-4">
         <div className="flex flex-col gap-1">
-          <h2 className="font-medium">
+          {/* text-card-foreground (John's 2026-09-28 report / F4, named finding: the
+              "Notify me about" heading was literally invisible, 1:1). */}
+          <h2 className="font-medium text-card-foreground">
             {t("settings:notificationsPage.eventPreferencesTitle")}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -1180,7 +1198,9 @@ export function NotificationPreferencesSettings() {
 
       <div className="space-y-4">
         <div className="space-y-1">
-          <h3 className="font-medium">
+          {/* text-card-foreground (F4 sibling): same unstyled-text fault, on the
+              settings frame's own bg-card panel this time. */}
+          <h3 className="font-medium text-card-foreground">
             {t("settings:notificationsPage.workspaceRulesTitle")}
           </h3>
           <p className="text-sm text-muted-foreground">

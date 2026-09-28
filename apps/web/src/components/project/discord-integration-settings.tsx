@@ -282,7 +282,7 @@ export function DiscordIntegrationSettings({
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-medium">
+                  <h3 className="font-medium text-card-foreground">
                     {t("settings:discordIntegration.connectionTitle")}
                   </h3>
                 </div>
@@ -363,7 +363,7 @@ export function DiscordIntegrationSettings({
 
           <div className="space-y-3 rounded-md border border-border bg-card p-4">
             <div>
-              <h3 className="font-medium">
+              <h3 className="font-medium text-card-foreground">
                 {t("settings:discordIntegration.eventsTitle")}
               </h3>
               <p className="text-sm text-muted-foreground">

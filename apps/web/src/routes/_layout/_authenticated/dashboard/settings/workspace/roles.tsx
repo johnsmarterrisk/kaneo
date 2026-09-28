@@ -290,7 +290,7 @@ function RouteComponent() {
           </div>
           <div className="border border-border rounded-md bg-sidebar text-sidebar-foreground">
             {isLoading && !draftActive ? (
-              <p className="text-xs text-sidebar-foreground/70 px-4 py-6">
+              <p className="text-sm text-sidebar-foreground px-4 py-6">
                 {t("settings:workspaceRoles.loading")}
               </p>
             ) : customRolesError ? (
@@ -308,7 +308,7 @@ function RouteComponent() {
                   <EmptyTitle>
                     {t("settings:workspaceRoles.emptyTitle")}
                   </EmptyTitle>
-                  <EmptyDescription className="text-sidebar-foreground/70">
+                  <EmptyDescription className="text-sidebar-foreground">
                     {t("settings:workspaceRoles.emptyDescription")}
                   </EmptyDescription>
                 </EmptyHeader>
@@ -328,7 +328,7 @@ function RouteComponent() {
                   >
                     <AccordionTrigger className="px-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <Shield className="w-3.5 h-3.5 text-sidebar-foreground/70 shrink-0" />
+                        <Shield className="w-3.5 h-3.5 text-sidebar-foreground shrink-0" />
                         <p className="text-sm font-medium italic">
                           {t("settings:workspaceRoles.newRole")}
                         </p>
@@ -383,7 +383,7 @@ function RouteComponent() {
                       <AccordionTrigger className="px-4">
                         <div className="flex items-center justify-between gap-4 flex-1 min-w-0">
                           <div className="flex items-center gap-3 min-w-0">
-                            <Shield className="w-3.5 h-3.5 text-sidebar-foreground/70 shrink-0" />
+                            <Shield className="w-3.5 h-3.5 text-sidebar-foreground shrink-0" />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <p
@@ -400,13 +400,13 @@ function RouteComponent() {
                                 )}
                               </div>
                               {description && (
-                                <p className="text-xs font-normal text-sidebar-foreground/70 truncate">
+                                <p className="text-xs font-normal text-sidebar-foreground truncate">
                                   {description}
                                 </p>
                               )}
                             </div>
                           </div>
-                          <p className="text-xs font-normal text-sidebar-foreground/70 shrink-0">
+                          <p className="text-xs font-normal text-sidebar-foreground shrink-0">
                             {t("settings:workspaceRoles.permissionCount", {
                               count: permissionCount(role.permission),
                             })}
@@ -511,7 +511,7 @@ function PermissionList({
                             shared Label primitive defaults to text-card-foreground
                             (dark, for a white bg-card panel), invisible dark-on-navy
                             here — same GUI-4 pattern as general.tsx. */}
-                        <Label className="text-sm font-medium text-sidebar-foreground">
+                        <Label className="text-base font-medium text-sidebar-foreground">
                           {t(
                             `settings:workspaceRoles.permissions.${labelKey}`,
                             {
@@ -520,7 +520,7 @@ function PermissionList({
                           )}
                         </Label>
                         {meta.description && (
-                          <p className="text-xs text-sidebar-foreground/70">
+                          <p className="text-sm text-sidebar-foreground">
                             {t(
                               `settings:workspaceRoles.permissions.${descriptionKey}`,
                               {
@@ -618,10 +618,10 @@ function DraftEditor({
           <div className="space-y-0.5">
             {/* text-sidebar-foreground: same reason as PermissionList's Label above —
                 this draft row sits inside the roles list's bg-sidebar (navy) card. */}
-            <Label className="text-sm font-medium text-sidebar-foreground">
+            <Label className="text-base font-medium text-sidebar-foreground">
               {t("settings:workspaceRoles.nameLabel")}
             </Label>
-            <p className="text-xs text-sidebar-foreground/70">
+            <p className="text-sm text-sidebar-foreground">
               {t("settings:workspaceRoles.nameHint")}
             </p>
           </div>
@@ -648,6 +648,11 @@ function DraftEditor({
         <Button
           variant="ghost"
           size="sm"
+          // text-sidebar-foreground: same fault as SettingsSidebar's back button — ghost's
+          // default text-card-foreground (dark, for a white bg-card panel) sits directly on
+          // this footer's bg-sidebar (navy), 1.27:1 (light) / 1.05:1 (navy); only reachable
+          // once "+ New Role" opens the draft row, which the walk never triggered.
+          className="text-sidebar-foreground hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
           onClick={onDiscard}
           disabled={isPending}
         >
@@ -745,7 +750,7 @@ function CustomRoleEditor({
       <Separator />
       <div className="flex items-center justify-between gap-2 px-4 py-3 bg-sidebar">
         {isDefault ? (
-          <span className="text-xs text-sidebar-foreground/70">
+          <span className="text-sm text-sidebar-foreground">
             {t("settings:workspaceRoles.defaultRoleHelp")}
           </span>
         ) : (
@@ -753,7 +758,11 @@ function CustomRoleEditor({
             variant="ghost"
             size="sm"
             onClick={onDelete}
-            className="text-destructive hover:text-destructive"
+            // bg-card/border-border: same fault as the "Delete project"/"Delete
+            // workspace"/"Delete account" buttons (projects/$projectId/general.tsx) —
+            // ghost's transparent background let text-destructive sit directly on this
+            // footer's bg-sidebar (navy), 2.35:1 (light) / 3.16:1 (navy).
+            className="bg-card border-border text-destructive hover:text-destructive"
             disabled={isPending}
           >
             <Trash2 className="w-4 h-4" />
@@ -761,7 +770,7 @@ function CustomRoleEditor({
           </Button>
         )}
         <div className="flex items-center gap-3">
-          <p className="text-xs text-sidebar-foreground/70">
+          <p className="text-sm text-sidebar-foreground">
             {dirty
               ? t("settings:workspaceRoles.unsavedChanges")
               : t("settings:workspaceRoles.allChangesSaved")}

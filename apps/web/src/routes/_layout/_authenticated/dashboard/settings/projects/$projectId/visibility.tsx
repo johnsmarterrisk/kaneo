@@ -115,18 +115,19 @@ function RouteComponent() {
           </div>
 
           <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
-            {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) — the shared
-                Label primitive defaults to text-card-foreground (dark, for a white card),
-                which is dark-on-navy here; the muted hints beside it use the global
-                text-muted-foreground token, dark gray in both light and navy theme, also
-                dark-on-navy — same GUI-4 pattern as general.tsx's Project Information
-                card. */}
+            {/* text-sidebar-foreground, full strength (John, 2026-09-28, O1): this card
+                is bg-sidebar (navy) — the shared Label primitive defaults to
+                text-card-foreground (dark, for a white card), which is dark-on-navy
+                here; the hints beside it now carry the same full-strength token instead
+                of the global text-muted-foreground (dark gray, also dark-on-navy) or a
+                reduced-opacity variant — same GUI-4 pattern as general.tsx's Project
+                Information card. text-base/text-sm: one step up the type scale (O2). */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium text-sidebar-foreground">
+                <Label className="text-base font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicAccess")}
                 </Label>
-                <p className="text-xs text-sidebar-foreground/70">
+                <p className="text-sm text-sidebar-foreground">
                   {t("settings:projectVisibility.publicAccessHint")}
                 </p>
               </div>
@@ -141,12 +142,12 @@ function RouteComponent() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                {/* text-sidebar-foreground(/70): same bg-sidebar card, same contrast fix
-                    as the Public Access Label above. */}
-                <Label className="text-sm font-medium text-sidebar-foreground">
+                {/* text-sidebar-foreground, full strength: same bg-sidebar card, same
+                    contrast fix as the Public Access Label above. */}
+                <Label className="text-base font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicUrl")}
                 </Label>
-                <p className="text-xs text-sidebar-foreground/70">
+                <p className="text-sm text-sidebar-foreground">
                   {t("settings:projectVisibility.publicUrlHint")}
                 </p>
               </div>

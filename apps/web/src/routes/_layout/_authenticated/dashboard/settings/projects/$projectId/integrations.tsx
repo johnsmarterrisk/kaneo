@@ -131,22 +131,30 @@ function IntegrationSection({
   children: ReactNode;
 }) {
   return (
+    // bg-sidebar/text-sidebar-foreground, full strength (John, 2026-09-28: the greyish
+    // text on these navy cards should be white on blue, no muted/reduced-opacity variant):
+    // this card used bg-background, the one integration section styled off the
+    // established "accent card" pattern every other settings section already uses
+    // (Danger Zone, Project Information, Visibility, Roles, ...) — text-card-foreground
+    // on it read dark-on-dark in navy (rgb(11,31,58) on rgb(8,26,51), F3). Switching to
+    // bg-sidebar both matches that sitewide pattern and gives the sidebar/sidebar-foreground
+    // pair, which is readable in all three themes by construction.
     <Collapsible
-      className="rounded-xl border border-border bg-background"
+      className="rounded-xl border border-border bg-sidebar"
       defaultOpen={defaultOpen}
     >
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-4 text-left">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 text-muted-foreground">{icon}</div>
+          <div className="mt-0.5 text-sidebar-foreground">{icon}</div>
           <div className="min-w-0">
-            <h2 className="text-md font-medium text-card-foreground">
+            <h2 className="text-lg font-medium text-sidebar-foreground">
               {title}
             </h2>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-sm text-sidebar-foreground">{subtitle}</p>
           </div>
         </div>
 
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[panel-open]:rotate-180" />
+        <ChevronDown className="size-4 shrink-0 text-sidebar-foreground transition-transform duration-200 group-data-[panel-open]:rotate-180" />
       </CollapsibleTrigger>
 
       <CollapsibleContent>

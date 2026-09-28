@@ -151,11 +151,19 @@ function RouteComponent() {
                   });
                 }}
               >
+                {/* text-card-foreground, unconditional (F5, WALK-confirmed 1:1 at
+                    375px): unlike the avatar/name text above, this control paints
+                    its OWN background — ui/select.tsx's SelectTrigger variant sets
+                    bg-card unconditionally, both mobile and desktop, so the
+                    md:-prefixed pairing this file uses for ambient-surface text
+                    left mobile with light text-sidebar-foreground on the trigger's
+                    always-white bg-card. text-card-foreground alone is correct
+                    on both surfaces because the box under it never changes. */}
                 <SelectTrigger
-                  className="h-8 text-sm font-normal text-sidebar-foreground md:text-card-foreground"
+                  className="h-8 text-sm font-normal text-card-foreground"
                   size="sm"
                 >
-                  <span className="truncate font-normal text-sidebar-foreground md:text-card-foreground">
+                  <span className="truncate font-normal text-card-foreground">
                     {selectedProject?.name ||
                       (projects?.length
                         ? t("settings:projectSwitcher.selectProject")

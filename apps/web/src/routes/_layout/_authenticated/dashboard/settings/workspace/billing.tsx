@@ -202,7 +202,7 @@ function RouteComponent() {
                       Free
                     </Badge>
                   </div>
-                  <p className="text-sidebar-foreground/70 text-sm leading-relaxed">
+                  <p className="text-sidebar-foreground text-sm leading-relaxed">
                     This workspace has free access to Kaneo Cloud as an early
                     supporter. Thank you for being here from the start.
                   </p>
@@ -223,7 +223,7 @@ function RouteComponent() {
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="text-sidebar-foreground/70 text-sm">
+                  <p className="text-sidebar-foreground text-sm">
                     {billing.plan === "team"
                       ? `$${billing.billingInterval === "annual" ? 50 : 5} / user / ${pricePer}`
                       : `$${billing.billingInterval === "annual" ? 40 : 4} / ${pricePer}`}
@@ -232,7 +232,7 @@ function RouteComponent() {
                 </div>
                 <div className="text-right">
                   {renews ? (
-                    <p className="text-sidebar-foreground/70 text-xs">
+                    <p className="text-sidebar-foreground text-xs">
                       {billing.canceledAt ? "Access ends" : "Renews"}
                     </p>
                   ) : null}
@@ -243,7 +243,7 @@ function RouteComponent() {
               </div>
               <Separator />
               <div className="flex flex-col items-start gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sidebar-foreground/70 text-xs">
+                <p className="text-sidebar-foreground text-xs">
                   Update payment method, view invoices, or cancel anytime.
                 </p>
                 {billing.hasCustomer ? (
@@ -278,7 +278,7 @@ function RouteComponent() {
                   <h3 className="font-medium text-sm">
                     {trialExpired ? "Your trial has ended" : "Free trial"}
                   </h3>
-                  <p className="text-sidebar-foreground/70 text-sm leading-relaxed">
+                  <p className="text-sidebar-foreground text-sm leading-relaxed">
                     {trialExpired
                       ? "Subscribe to a plan below to keep creating and editing. Your data stays safe and exportable in the meantime."
                       : trialDaysLeft !== null
@@ -310,7 +310,7 @@ function RouteComponent() {
                         "rounded-[0.3rem] px-3 py-1 font-medium capitalize transition-colors",
                         interval === value
                           ? "bg-background text-foreground shadow-sm"
-                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
+                          : "text-sidebar-foreground hover:text-sidebar-foreground",
                       )}
                     >
                       {value}

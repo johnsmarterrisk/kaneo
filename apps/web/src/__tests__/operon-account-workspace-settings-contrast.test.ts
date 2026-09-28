@@ -61,7 +61,10 @@ describe("settings surface colors beyond page titles", () => {
   });
 
   it("navy cards carry sidebar foreground and do not put the global muted token on hints", () => {
-    for (const [source, expectedCards, expectedDarkHints] of [
+    // John, 2026-09-28 (O1/O2): the hints beside these cards' titles now carry
+    // full-strength text-sidebar-foreground (no reduced-opacity/muted variant) at
+    // text-sm, one step up from the pre-O1 text-xs .../70.
+    for (const [source, expectedCards, expectedHints] of [
       [informationSource, 2, 2],
       [preferencesSource, 2, 10],
       [workspaceGeneralSource, 3, 4],
@@ -69,21 +72,24 @@ describe("settings surface colors beyond page titles", () => {
       expect(source.match(/bg-sidebar text-sidebar-foreground/g)?.length).toBe(
         expectedCards,
       );
-      expect(source.match(/text-xs text-sidebar-foreground\/70/g)?.length).toBe(
-        expectedDarkHints,
-      );
+      expect(
+        source.match(/<p className="text-sm text-sidebar-foreground">/g)
+          ?.length,
+      ).toBe(expectedHints);
+      expect(source).not.toMatch(/text-sidebar-foreground\/70/);
     }
     expect(rolesSource).toContain("bg-sidebar text-sidebar-foreground");
     expect(rolesSource).not.toContain(
       "text-xs font-normal text-muted-foreground",
     );
+    expect(rolesSource).not.toMatch(/text-sidebar-foreground\/70/);
     expect(
       rolesSource.match(
         /AccordionPanel className="px-0 pt-0 pb-0 text-sidebar-foreground"/g,
       )?.length,
     ).toBe(2);
     expect(rolesSource).toContain(
-      '<EmptyDescription className="text-sidebar-foreground/70">',
+      '<EmptyDescription className="text-sidebar-foreground">',
     );
   });
 
@@ -252,14 +258,17 @@ describe("visibility.tsx — Labels and hints on the bg-sidebar card are readabl
     }
   });
 
-  it("the hints inside the bg-sidebar card use text-sidebar-foreground/70, not the global muted token", () => {
+  it("the hints inside the bg-sidebar card use full-strength text-sidebar-foreground (John, 2026-09-28, O1/O2), not the global muted token", () => {
     // The page-level subtitle (outside the bg-sidebar card, on the card frame) is
-    // correctly still text-muted-foreground — only the two hints INSIDE the card change.
+    // correctly still text-muted-foreground — only the two hints INSIDE the card
+    // change. O1: no reduced-opacity/muted grey on a navy card. O2: one step up the
+    // type scale (text-xs -> text-sm).
     const hints = [
       ...visibilitySource.matchAll(
-        /<p className="text-xs text-sidebar-foreground\/70">/g,
+        /<p className="text-sm text-sidebar-foreground">/g,
       ),
     ];
     expect(hints.length).toBe(2);
+    expect(visibilitySource).not.toMatch(/text-sidebar-foreground\/70/);
   });
 });

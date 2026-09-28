@@ -463,7 +463,7 @@ export function GiteaIntegrationSettings({ projectId }: { projectId: string }) {
       <div className="space-y-4 border border-border rounded-md p-4 bg-card">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium text-card-foreground">
               {t("settings:giteaIntegration.connectionStatus")}
             </p>
             {isConnected ? (
@@ -494,7 +494,7 @@ export function GiteaIntegrationSettings({ projectId }: { projectId: string }) {
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:giteaIntegration.repository")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -521,7 +521,7 @@ export function GiteaIntegrationSettings({ projectId }: { projectId: string }) {
             <Separator />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1 space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:giteaIntegration.commentTaskLinkTitle")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -741,7 +741,7 @@ export function GiteaIntegrationSettings({ projectId }: { projectId: string }) {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-card-foreground">
                   {t("settings:giteaIntegration.actionsTitle")}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -850,7 +850,7 @@ export function GiteaIntegrationSettings({ projectId }: { projectId: string }) {
         <div className="space-y-4 border border-border rounded-md p-4 bg-card">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <p className="text-sm font-medium">
+              <p className="text-sm font-medium text-card-foreground">
                 {t("settings:giteaIntegration.importSectionTitle")}
               </p>
               <p className="text-xs text-muted-foreground">
