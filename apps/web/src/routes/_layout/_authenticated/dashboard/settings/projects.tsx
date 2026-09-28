@@ -101,12 +101,17 @@ function RouteComponent() {
     <div className="flex gap-6 h-full">
       <SettingsSidebar>
         <div className="p-2">
-          {/* This aside sits on the settings frame's white bg-card panel (settings.tsx),
-              not the app's navy ground. Every class below was originally one of the
-              sidebar-scoped rail tokens (correct only on the navy sidebar surface);
-              on this white panel they rendered as white-on-white or near-invisible
-              dark-on-transparent. Swapped for the white-panel equivalents instead —
-              same GUI-4 pattern as the rest of the navy-theme fix. */}
+          {/* SettingsSidebar renders these children on TWO different surfaces at once: a
+              desktop <aside> on the settings frame's white bg-card panel (md and up), and
+              a mobile <Sheet> that is bg-sidebar (navy) at every theme
+              (SettingsSidebar.tsx). A single static class can't be correct on both, so
+              every text/active-state token below is a pair: the bg-sidebar-safe token
+              with no breakpoint prefix (mobile, where the Sheet is the only visible
+              instance) and its md: override (desktop aside). Both instances share this
+              exact JSX/className, so Tailwind's viewport-width breakpoint resolves the
+              right token to whichever surface is actually on screen — same GUI-4 pattern
+              as the rest of the navy-theme fix, extended to cover the mobile sheet (see
+              operon-project-settings-contrast.test.ts). */}
           <div className="mb-1 flex items-center gap-3 rounded-md px-2 py-2">
             <Avatar className="h-8 w-8">
               <AvatarImage
@@ -118,17 +123,17 @@ function RouteComponent() {
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col md:min-w-fit">
-              <p className="truncate text-sm text-card-foreground md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-sm text-sidebar-foreground md:text-card-foreground md:overflow-visible md:text-clip md:whitespace-normal">
                 {workspace?.name}
               </p>
-              <p className="truncate text-xs text-muted-foreground capitalize md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-xs text-sidebar-foreground/70 md:text-muted-foreground capitalize md:overflow-visible md:text-clip md:whitespace-normal">
                 {t(`team:roles.${role}`, { defaultValue: role })}
               </p>
             </div>
           </div>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70 md:text-muted-foreground">
               {t("navigation:projectSettings.projectLabel")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -147,10 +152,10 @@ function RouteComponent() {
                 }}
               >
                 <SelectTrigger
-                  className="h-8 text-sm font-normal text-card-foreground"
+                  className="h-8 text-sm font-normal text-sidebar-foreground md:text-card-foreground"
                   size="sm"
                 >
-                  <span className="truncate font-normal text-card-foreground">
+                  <span className="truncate font-normal text-sidebar-foreground md:text-card-foreground">
                     {selectedProject?.name ||
                       (projects?.length
                         ? t("settings:projectSwitcher.selectProject")
@@ -177,7 +182,7 @@ function RouteComponent() {
           </SidebarGroup>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70 md:text-muted-foreground">
               {t("navigation:page.settingsTitle")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -196,8 +201,9 @@ function RouteComponent() {
                         size="sm"
                         disabled={!selectedProject}
                         className={cn(
-                          "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-muted-foreground",
-                          isActive && "bg-accent text-accent-foreground",
+                          "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-sidebar-foreground/70 md:text-muted-foreground",
+                          isActive &&
+                            "bg-sidebar-accent text-sidebar-accent-foreground md:bg-accent md:text-accent-foreground",
                         )}
                       >
                         <item.icon className="h-3.5 w-3.5" />

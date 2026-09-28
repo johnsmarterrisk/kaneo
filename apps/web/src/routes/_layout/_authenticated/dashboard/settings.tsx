@@ -82,7 +82,11 @@ function SettingsLayout() {
 
               <div className="flex items-center gap-1 md:hidden">
                 <ChevronLeft className="size-4 text-muted-foreground" />
-                <span className="text-lg font-semibold">
+                {/* text-card-foreground: this mobile-only title sits on the same bg-card
+                    frame as the desktop h1 below — see that h1's comment. It inherited
+                    body text-foreground (white in navy mode, invisible on this white
+                    panel). */}
+                <span className="text-lg font-semibold text-card-foreground">
                   {t("navigation:page.settingsTitle")}
                 </span>
               </div>

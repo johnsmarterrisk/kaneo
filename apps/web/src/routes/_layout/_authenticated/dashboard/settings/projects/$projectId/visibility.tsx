@@ -90,7 +90,10 @@ function RouteComponent() {
       <PageTitle title={t("settings:projectVisibility.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this page renders on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx's own h1. */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:projectVisibility.title")}
           </h1>
           <p className="text-muted-foreground">
@@ -109,12 +112,18 @@ function RouteComponent() {
           </div>
 
           <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+            {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) — the shared
+                Label primitive defaults to text-card-foreground (dark, for a white card),
+                which is dark-on-navy here; the muted hints beside it use the global
+                text-muted-foreground token, dark gray in both light and navy theme, also
+                dark-on-navy — same GUI-4 pattern as general.tsx's Project Information
+                card. */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium">
+                <Label className="text-sm font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicAccess")}
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:projectVisibility.publicAccessHint")}
                 </p>
               </div>
@@ -129,10 +138,12 @@ function RouteComponent() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium">
+                {/* text-sidebar-foreground(/70): same bg-sidebar card, same contrast fix
+                    as the Public Access Label above. */}
+                <Label className="text-sm font-medium text-sidebar-foreground">
                   {t("settings:projectVisibility.publicUrl")}
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:projectVisibility.publicUrlHint")}
                 </p>
               </div>

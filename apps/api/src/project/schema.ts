@@ -23,7 +23,10 @@ export const updateProjectBody = z.object({
   icon: z.string(),
   slug: z.string(),
   description: z.string(),
-  isPublic: z.boolean(),
+  // Optional: the general-settings save (name/slug/description/icon) never sends
+  // this field, so an update that omits it must leave stored visibility alone
+  // (see update-project.ts controller) rather than defaulting it to false.
+  isPublic: z.boolean().optional(),
 });
 
 export const reorderProjectsBody = z.object({

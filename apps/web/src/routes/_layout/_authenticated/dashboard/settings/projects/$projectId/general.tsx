@@ -190,21 +190,43 @@ function RouteComponent() {
         // current. Two saves in a row (rename, then a key change seconds later) sent that
         // stale field back and silently reverted the first save (operator report,
         // 2026-09-28). The form is what the person sees, so it is the source of truth for
-        // every field it owns; only isPublic (not a form field) still reads from `project`.
+        // every field it owns.
+        //
+        // isPublic is intentionally left off this payload. General settings has no
+        // visibility control of its own — Visibility.tsx owns that — and this page's
+        // `project` (from useGetTasks's 30s-stale snapshot) is not a safe source for a
+        // field it doesn't display: a rename here could otherwise silently reverse a
+        // visibility change made on the other tab. The API leaves isPublic untouched on
+        // the server when it's absent from the request (apps/api update-project.ts).
         const updatePayload = {
           id: project.id,
           name: normalizedData.name,
           slug: normalizedData.slug,
           description: normalizedData.description,
           icon: normalizedData.icon,
-          isPublic: !!project.isPublic,
         };
 
         await updateProject(updatePayload);
 
-        projectForm.reset(normalizedData, { keepDirty: false });
         lastSavedRef.current = normalizedData;
-        queuedSaveRef.current = null;
+
+        // A newer edit may have landed while the request was in flight — typed directly
+        // (the live form no longer matches what we just saved) or queued by a concurrent
+        // saveProject call (queuedSaveRef, set below when isSavingRef was true, or by the
+        // unmount-flush effect). Resetting the form here would silently discard either, so
+        // only reset when NEITHER happened — the form already shows exactly what we saved.
+        const liveValues = normalizeProjectValues(
+          projectForm.getValues() as ProjectFormValues,
+        );
+        const hasNewerEdit =
+          liveValues.name !== normalizedData.name ||
+          liveValues.slug !== normalizedData.slug ||
+          liveValues.description !== normalizedData.description ||
+          liveValues.icon !== normalizedData.icon;
+
+        if (!queuedSaveRef.current && !hasNewerEdit) {
+          projectForm.reset(normalizedData, { keepDirty: false });
+        }
 
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["projects"] }),
@@ -235,15 +257,7 @@ function RouteComponent() {
         }
       }
     },
-    [
-      project?.id,
-      project?.isPublic,
-      updateProject,
-      queryClient,
-      workspace?.id,
-      projectForm,
-      t,
-    ],
+    [project?.id, updateProject, queryClient, workspace?.id, projectForm, t],
   );
 
   const saveProjectRef = useRef(saveProject);
@@ -354,12 +368,18 @@ function RouteComponent() {
           </div>
 
           <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+            {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) — the plain
+                <p> labels here have no color class and inherit body text-foreground, which
+                reads dark-on-navy in light theme; the muted hints beside them use the
+                global text-muted-foreground token, which is dark gray in both light and
+                navy theme and reads dark-on-navy there too. Both need the sidebar's own
+                foreground token instead, same GUI-4 pattern as the FormLabels below. */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-sidebar-foreground">
                   {t("settings:projectGeneral.iconLabel")}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:projectGeneral.iconHint")}
                 </p>
               </div>
@@ -470,7 +490,11 @@ function RouteComponent() {
                           <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.projectNameLabel")}
                           </FormLabel>
-                          <p className="text-xs text-muted-foreground">
+                          {/* text-sidebar-foreground/70: same bg-sidebar card as the
+                              FormLabel above — see its comment. text-muted-foreground is
+                              dark gray in light and navy theme, unreadable on this navy
+                              card in both. */}
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t("settings:projectGeneral.projectNameHint")}
                           </p>
                         </div>
@@ -511,7 +535,9 @@ function RouteComponent() {
                           <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.keyLabel")}
                           </FormLabel>
-                          <p className="text-xs text-muted-foreground">
+                          {/* text-sidebar-foreground/70: same bg-sidebar card, same
+                              contrast fix as the Project name hint above. */}
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t("settings:projectGeneral.keyHint", {
                               slug: projectForm.watch("slug") || "ABC",
                             })}
@@ -554,7 +580,9 @@ function RouteComponent() {
                           <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:projectGeneral.descriptionLabel")}
                           </FormLabel>
-                          <p className="text-xs text-muted-foreground">
+                          {/* text-sidebar-foreground/70: same bg-sidebar card, same
+                              contrast fix as the Project name hint above. */}
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t("settings:projectGeneral.descriptionHint")}
                           </p>
                         </div>
@@ -578,10 +606,12 @@ function RouteComponent() {
             <Separator />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">
+                {/* text-sidebar-foreground(/70): same bg-sidebar card as the Icon row —
+                    see its comment. */}
+                <p className="text-sm font-medium text-sidebar-foreground">
                   {t("settings:projectGeneral.importExportTasks")}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:projectGeneral.importExportTasksDescription")}
                 </p>
               </div>
@@ -604,10 +634,12 @@ function RouteComponent() {
             <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5">
-                  <p className="text-sm font-medium">
+                  {/* text-sidebar-foreground(/70): this card is bg-sidebar (navy) too —
+                      same contrast fix as the Project Information card above. */}
+                  <p className="text-sm font-medium text-sidebar-foreground">
                     {t("settings:projectGeneral.deleteProject")}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-sidebar-foreground/70">
                     {t("settings:projectGeneral.deleteProjectDescription")}
                   </p>
                 </div>

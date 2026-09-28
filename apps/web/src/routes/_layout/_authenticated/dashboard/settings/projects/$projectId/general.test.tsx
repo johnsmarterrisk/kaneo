@@ -159,4 +159,117 @@ describe("project general settings — two saves in a row (operator report, 2026
     expect(secondPayload.name).toBe("bug-board");
     expect(savedNames()).toEqual(["bug-board", "bug-board"]);
   });
+
+  it("never sends isPublic — general settings must not be able to flip visibility", async () => {
+    render(<GeneralRoute />);
+
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "renamed" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+
+    expect(mocks.mutateAsync.mock.calls[0][0]).not.toHaveProperty("isPublic");
+  });
+});
+
+/**
+ * Regression guard for review finding 1 (fork/initiative-settings, round 1): a save that
+ * completes while the person keeps editing must not clobber what they typed, and an edit
+ * queued during the in-flight request (by the debounce, or by the unmount flush which
+ * drives the same `saveProject`/`queuedSaveRef` path) must still reach the server.
+ * Pre-fix, the success path unconditionally called `projectForm.reset(normalizedData)`
+ * with the JUST-SAVED (now stale) values and nulled `queuedSaveRef` before the `finally`
+ * block's drain ever ran — so a newer edit was both reverted in the form and discarded
+ * from the queue.
+ */
+describe("project general settings — an edit made mid-save is never lost (review finding 1)", () => {
+  it("does not revert the input to the stale saved value once the in-flight save resolves", async () => {
+    let resolveFirstSave: (value: unknown) => void = () => {};
+    mocks.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+
+    render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+
+    // First edit — triggers the debounced save, which we hold pending (mocked above).
+    fireEvent.change(nameInput, { target: { value: "first-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+
+    // A newer edit lands while that save is still in flight. Pre-fix, `reset` would
+    // later stomp this back to "first-edit" as soon as the save resolved.
+    fireEvent.change(nameInput, { target: { value: "second-edit" } });
+    expect(nameInput.value).toBe("second-edit");
+
+    resolveFirstSave({});
+
+    // Give the resolved save's synchronous success path (including the guarded
+    // `reset`) a chance to run, well inside the second edit's own 800ms debounce
+    // window — on pre-fix code the input reverts to "first-edit" right here.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(nameInput.value).toBe("second-edit");
+
+    // The second edit's own debounce now fires and saves the retained value.
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    const secondPayload = mocks.mutateAsync.mock.calls[1][0];
+    expect(secondPayload.name).toBe("second-edit");
+    expect(secondPayload).not.toHaveProperty("isPublic");
+  });
+
+  it("queues an edit whose debounce fires while a save is in flight, and drains it once that save resolves", async () => {
+    // Two real 800ms+ debounce windows plus the drain wait can exceed vitest's default
+    // 5000ms test timeout on a slow run — this is exercising real timers, not a hang.
+    let resolveFirstSave: (value: unknown) => void = () => {};
+    mocks.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+
+    render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+
+    fireEvent.change(nameInput, { target: { value: "first-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+
+    // The second edit's OWN debounce timer fires here, while the first save is still
+    // pending — `saveProject` sees `isSavingRef.current` true and must queue this
+    // rather than fire a second concurrent request.
+    fireEvent.change(nameInput, { target: { value: "second-edit" } });
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 200));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+
+    // Resolving the in-flight save must drain the queued edit — this is the "drain
+    // the queued save" half of the fix (pre-fix, the success path nulled the queue
+    // before the `finally` block's drain ever ran).
+    resolveFirstSave({});
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+
+    const [firstPayload, secondPayload] = mocks.mutateAsync.mock.calls.map(
+      (call) => call[0],
+    );
+    expect(firstPayload.name).toBe("first-edit");
+    expect(secondPayload.name).toBe("second-edit");
+    expect(firstPayload).not.toHaveProperty("isPublic");
+    expect(secondPayload).not.toHaveProperty("isPublic");
+  }, 10_000);
 });

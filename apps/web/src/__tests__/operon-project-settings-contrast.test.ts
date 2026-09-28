@@ -13,6 +13,12 @@ import { describe, expect, it } from "vitest";
 // primitive's own text-card-foreground default). Same GUI-4 pattern as
 // operon-create-project-button-contrast.test.ts; this file guards the settings
 // pages that test did not cover.
+//
+// This is a SOURCE-TEXT tripwire, not proof of what actually renders: it matches
+// className strings, so it would still pass if a class computed to the wrong color at
+// runtime, and it can't see the mobile Sheet vs. desktop <aside> the same markup
+// renders into (round-1 review finding 7). The rendered proof is
+// <scratchpad>/settings-contrast-check.mjs, run by hand against the local stack.
 
 const generalSource = readFileSync(
   fileURLToPath(
@@ -54,6 +60,27 @@ describe("project general settings page contrast (John, 2026-09-28: title/labels
     );
   });
 
+  it("the settings frame's mobile-only title also carries text-card-foreground (finding 6)", () => {
+    expect(settingsSource).toMatch(
+      /<span className="text-lg font-semibold text-card-foreground">/,
+    );
+  });
+
+  it("the bg-sidebar cards' plain labels and muted hints use text-sidebar-foreground (finding 4)", () => {
+    // Icon, Import/Export and Delete Project — the plain <p> labels (no color class
+    // before this fix) and the text-xs hints beside them, all inside a bg-sidebar card.
+    expect(generalSource).not.toMatch(/<p className="text-sm font-medium">/);
+    expect(generalSource).not.toMatch(
+      /<p className="text-xs text-muted-foreground">\s*\n\s*\{t\("settings:projectGeneral\.(iconHint|importExportTasksDescription|deleteProjectDescription)"\)\}/,
+    );
+    const sidebarHints = [
+      ...generalSource.matchAll(
+        /<p className="text-xs text-sidebar-foreground\/70">/g,
+      ),
+    ];
+    expect(sidebarHints.length).toBeGreaterThanOrEqual(6);
+  });
+
   it("every FormLabel on the navy Project Information card is readable (text-sidebar-foreground)", () => {
     const formLabelOpenTags = [
       ...generalSource.matchAll(/<FormLabel className="([^"]*)">/g),
@@ -65,28 +92,25 @@ describe("project general settings page contrast (John, 2026-09-28: title/labels
     }
   });
 
-  it("the left column's avatar, project switcher and settings menu use white-panel tokens", () => {
-    // These were the exact broken tokens (verified white-on-white / dark-on-transparent
-    // via computed style against the local stack): sidebar-accent assumes a navy ground,
-    // text-sidebar-foreground assumes a navy ground, and a bare text-foreground resolves
-    // to white in navy mode — all three are wrong on this white bg-card aside.
-    expect(projectsSource).not.toMatch(/bg-sidebar-accent/);
-    expect(projectsSource).not.toMatch(/text-sidebar-accent-foreground/);
-    expect(projectsSource).not.toMatch(/text-sidebar-foreground/);
+  it("the left column's avatar, project switcher and settings menu are surface-paired", () => {
+    // SettingsSidebar renders this exact markup into BOTH a desktop <aside> (white
+    // bg-card, md and up) and a mobile Sheet (bg-sidebar navy, every theme) — see
+    // account.tsx's comment on the same pattern. Every text/active-state token here must
+    // therefore be a bg-sidebar-safe base class (correct on the mobile Sheet, the only
+    // visible instance below md) plus an md: override (correct on the desktop aside).
     expect(projectsSource).not.toMatch(/text-foreground"/);
 
-    // The corrected white-panel equivalents are present at the sites that needed them.
     expect(projectsSource).toMatch(
       /<AvatarFallback className="border border-border\/70 text-xs font-medium">/,
     );
     expect(projectsSource).toMatch(
-      /<p className="truncate text-sm text-card-foreground /,
+      /<p className="truncate text-sm text-sidebar-foreground md:text-card-foreground /,
     );
     expect(projectsSource).toMatch(
-      /<SelectTrigger\s*\n\s*className="h-8 text-sm font-normal text-card-foreground"/,
+      /<SelectTrigger\s*\n\s*className="h-8 text-sm font-normal text-sidebar-foreground md:text-card-foreground"/,
     );
     expect(projectsSource).toMatch(
-      /text-sm font-normal text-muted-foreground",\s*\n\s*isActive && "bg-accent text-accent-foreground",/,
+      /text-sm font-normal text-sidebar-foreground\/70 md:text-muted-foreground",\s*\n\s*isActive &&\s*\n?\s*"bg-sidebar-accent text-sidebar-accent-foreground md:bg-accent md:text-accent-foreground",/,
     );
   });
 });

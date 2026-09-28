@@ -9,7 +9,7 @@ async function updateProject(
   icon: string,
   slug: string,
   description: string,
-  isPublic: boolean,
+  isPublic: boolean | undefined,
   workspaceId: string,
 ) {
   const [existingProject] = await db
@@ -35,7 +35,10 @@ async function updateProject(
       icon,
       slug,
       description,
-      isPublic,
+      // The general-settings save omits isPublic (visibility.tsx owns it via its
+      // own call to this same route) — leave the stored value untouched rather
+      // than defaulting it, so a rename can never silently flip visibility.
+      ...(isPublic === undefined ? {} : { isPublic }),
     })
     .where(eq(projectTable.id, id))
     .returning();

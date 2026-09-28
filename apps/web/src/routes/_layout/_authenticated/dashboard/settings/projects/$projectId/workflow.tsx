@@ -19,7 +19,10 @@ function RouteComponent() {
       <PageTitle title={t("settings:projectWorkflow.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this page renders on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx's own h1. */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:projectWorkflow.title")}
           </h1>
           <p className="text-muted-foreground">
