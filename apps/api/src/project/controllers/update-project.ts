@@ -5,10 +5,10 @@ import { projectTable } from "../../database/schema";
 
 async function updateProject(
   id: string,
-  name: string,
-  icon: string,
-  slug: string,
-  description: string,
+  name: string | undefined,
+  icon: string | undefined,
+  slug: string | undefined,
+  description: string | undefined,
   isPublic: boolean | undefined,
   workspaceId: string,
 ) {
@@ -31,13 +31,16 @@ async function updateProject(
   const [updatedWorkspace] = await db
     .update(projectTable)
     .set({
-      name,
-      icon,
-      slug,
-      description,
-      // The general-settings save omits isPublic (visibility.tsx owns it via its
-      // own call to this same route) — leave the stored value untouched rather
-      // than defaulting it, so a rename can never silently flip visibility.
+      // Every field is optional and only written when the caller sent it: the
+      // general-settings save omits isPublic (visibility.tsx owns it), and the
+      // visibility toggle omits name/icon/slug/description (general.tsx owns
+      // those) — each save must leave the fields it doesn't own untouched, not
+      // default or overwrite them, so the two pages can never revert each
+      // other's concurrent edit.
+      ...(name === undefined ? {} : { name }),
+      ...(icon === undefined ? {} : { icon }),
+      ...(slug === undefined ? {} : { slug }),
+      ...(description === undefined ? {} : { description }),
       ...(isPublic === undefined ? {} : { isPublic }),
     })
     .where(eq(projectTable.id, id))

@@ -52,12 +52,15 @@ function RouteComponent() {
     if (savingRef.current) return;
     savingRef.current = true;
     try {
+      // Send only the field this page owns. `project` here comes from
+      // useGetProject, a snapshot that can be stale relative to a concurrent
+      // edit on the General tab; sending name/slug/description/icon back
+      // from that snapshot would silently revert such an edit (the mirror
+      // image of the general.tsx bug this pattern already fixes there — see
+      // apps/api update-project.ts, which now leaves every omitted field
+      // untouched).
       await updateProject({
         id: project.id,
-        name: project.name,
-        slug: project.slug,
-        description: project.description || "",
-        icon: project.icon || "Layout",
         isPublic: !project.isPublic,
       });
       await Promise.all([

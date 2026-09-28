@@ -127,7 +127,8 @@ const updateProjectRoute = createRoute({
   tags: ["Projects"],
   summary: "Update project",
   description:
-    "Replace a project's name, icon, slug, and description; change visibility when isPublic is provided.",
+    "Update a project's name, icon, slug, description, and/or visibility. " +
+    "Every field is optional; a field left out of the request is not changed.",
   middleware: [
     workspaceAccess.fromProject(),
     requireWorkspacePermission({ project: ["update"] }),

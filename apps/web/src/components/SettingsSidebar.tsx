@@ -70,6 +70,13 @@ export default function SettingsSidebar({
         <SheetPopup
           side="left"
           className="w-64 bg-sidebar p-0 text-sidebar-foreground md:hidden"
+          // text-sidebar-foreground: this sheet is bg-sidebar (navy) — the shared close
+          // button's ghost variant defaults to text-card-foreground (dark, for a white
+          // bg-card panel), which reads dark-on-navy here, same fault as the back button
+          // above. hover:bg-sidebar-accent/10 replaces ghost's default hover:bg-secondary
+          // (a light fill, also wrong on navy). Scoped to this sheet only — sheet.tsx's
+          // shared default is unchanged for every other sheet.
+          closeButtonClassName="text-sidebar-foreground hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{t("common:sidebar.title")}</SheetTitle>
@@ -82,7 +89,12 @@ export default function SettingsSidebar({
               variant="ghost"
               size="sm"
               disabled={!workspaceId}
-              className="w-full justify-start text-sm font-normal"
+              // text-sidebar-foreground: this sheet is bg-sidebar (navy) — ghost's default
+              // text-card-foreground is dark, for a white bg-card panel, and reads
+              // dark-on-navy here. hover:bg-sidebar-accent/10 replaces ghost's default
+              // hover:bg-secondary (a light fill that would also read wrong on navy), same
+              // pattern as notification-dropdown.tsx's groundContext override.
+              className="w-full justify-start text-sm font-normal text-sidebar-foreground hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
               onClick={() => {
                 if (!workspaceId) return;
 

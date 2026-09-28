@@ -19,13 +19,16 @@ export const createProjectBody = z.object({
 });
 
 export const updateProjectBody = z.object({
-  name: z.string(),
-  icon: z.string(),
-  slug: z.string(),
-  description: z.string(),
-  // Optional: the general-settings save (name/slug/description/icon) never sends
-  // this field, so an update that omits it must leave stored visibility alone
-  // (see update-project.ts controller) rather than defaulting it to false.
+  // All fields are optional: every settings page (General, Visibility) sends
+  // only the fields it owns, so an update that omits a field must leave the
+  // stored value untouched rather than defaulting or overwriting it (see
+  // update-project.ts controller). This is the same pattern already used for
+  // isPublic, extended to name/icon/slug/description so the Visibility save
+  // can no longer overwrite a concurrent General edit and vice versa.
+  name: z.string().optional(),
+  icon: z.string().optional(),
+  slug: z.string().optional(),
+  description: z.string().optional(),
   isPublic: z.boolean().optional(),
 });
 

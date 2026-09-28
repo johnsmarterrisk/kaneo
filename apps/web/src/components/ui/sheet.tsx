@@ -61,11 +61,17 @@ function SheetPopup({
   className,
   children,
   showCloseButton = true,
+  closeButtonClassName,
   side = "right",
   variant = "default",
   ...props
 }: SheetPrimitive.Popup.Props & {
   showCloseButton?: boolean;
+  // Escape hatch for a sheet whose popup renders on a non-default surface (e.g. a
+  // bg-sidebar/navy sheet): lets that ONE call site override the close button's
+  // classes without changing this shared default, which other sheets still rely on.
+  // Left unset, behavior is unchanged.
+  closeButtonClassName?: string;
   side?: "right" | "left" | "top" | "bottom";
   variant?: "default" | "inset";
 }) {
@@ -96,7 +102,13 @@ function SheetPopup({
             <SheetPrimitive.Close
               aria-label={i18n.t("common:actions.close")}
               className="absolute end-2 top-2"
-              render={<Button size="icon" variant="ghost" />}
+              render={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={closeButtonClassName}
+                />
+              }
             >
               <XIcon />
             </SheetPrimitive.Close>

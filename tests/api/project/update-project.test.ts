@@ -7,6 +7,13 @@ import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 // visibility change made on the Visibility tab. The API-level fix is that `isPublic` is
 // optional on update, and an update that omits it must leave the stored value untouched
 // — never default it to false or anything else.
+//
+// Regression guard for review finding A (fork/initiative-settings, round 2): the mirror
+// image bug — a visibility toggle must never be able to revert a concurrent general edit
+// (rename, key change, etc), because it saves against a query snapshot that can be stale
+// relative to an edit made on the General tab. The fix extends the same optional-field
+// pattern to name/icon/slug/description, so every field on this route is optional and an
+// omitted field leaves the stored value untouched.
 
 const mockSelect = vi.fn();
 const mockUpdate = vi.fn();
@@ -100,6 +107,90 @@ describe("updateProject", () => {
       slug: existingProject.slug,
       description: existingProject.description,
       isPublic: false,
+    });
+  });
+
+  it("leaves name/icon/slug/description out of the SQL update when the caller sends only isPublic (visibility toggle payload)", async () => {
+    const updateChain = makeUpdateMock({ ...existingProject, isPublic: false });
+    mockUpdate.mockReturnValue(updateChain);
+
+    await updateProject(
+      "project-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      "workspace-1",
+    );
+
+    // This is the assertion that fails without the fix: a visibility toggle that sent a
+    // name/icon/slug/description snapshot back (the bug this route now guards against)
+    // would silently revert a concurrent general-settings edit.
+    expect(updateChain.set).toHaveBeenCalledWith({ isPublic: false });
+  });
+
+  describe.each([
+    ["name", "New name"],
+    ["icon", "Rocket"],
+    ["slug", "NEW"],
+    ["description", "new description"],
+  ] as const)("%s field", (field, newValue) => {
+    it("is left out of the SQL update when the caller omits it", async () => {
+      const updateChain = makeUpdateMock({
+        ...existingProject,
+        isPublic: false,
+      });
+      mockUpdate.mockReturnValue(updateChain);
+
+      const args: Record<string, string | boolean | undefined> = {
+        name: undefined,
+        icon: undefined,
+        slug: undefined,
+        description: undefined,
+        isPublic: false,
+      };
+
+      await updateProject(
+        "project-1",
+        args.name as string | undefined,
+        args.icon as string | undefined,
+        args.slug as string | undefined,
+        args.description as string | undefined,
+        args.isPublic as boolean | undefined,
+        "workspace-1",
+      );
+
+      expect(updateChain.set.mock.calls[0][0]).not.toHaveProperty(field);
+    });
+
+    it("is written to the SQL update when the caller sends it", async () => {
+      const updateChain = makeUpdateMock({
+        ...existingProject,
+        [field]: newValue,
+      });
+      mockUpdate.mockReturnValue(updateChain);
+
+      const args: Record<string, string | boolean | undefined> = {
+        name: undefined,
+        icon: undefined,
+        slug: undefined,
+        description: undefined,
+        isPublic: undefined,
+      };
+      args[field] = newValue;
+
+      await updateProject(
+        "project-1",
+        args.name as string | undefined,
+        args.icon as string | undefined,
+        args.slug as string | undefined,
+        args.description as string | undefined,
+        args.isPublic as boolean | undefined,
+        "workspace-1",
+      );
+
+      expect(updateChain.set).toHaveBeenCalledWith({ [field]: newValue });
     });
   });
 
