@@ -99,7 +99,7 @@
 				"searchIcons": "Search icons...",
 				"projectName": "Project name",
 				"keyLabel": "Key:",
-				"keyHint": "Used for ticket IDs (e.g., {{example}}-123)",
+				"keyHint": "Used for Task IDs (e.g., {{example}}-123)",
 				"createButton": "Create Project",
 				"successToast": "Project created successfully",
 				"errorToast": "Failed to create project"
@@ -818,7 +818,7 @@
 			"projectNameHint": "The name of your project",
 			"projectNamePlaceholder": "Enter project name",
 			"keyLabel": "Key",
-			"keyHint": "Used for ticket IDs (e.g., {{slug}}-123)",
+			"keyHint": "Used for Task IDs (e.g., {{slug}}-123)",
 			"keyPlaceholder": "PRO",
 			"descriptionLabel": "Description",
 			"descriptionHint": "A brief description of your project",
