@@ -136,7 +136,12 @@ function RouteComponent() {
       <>
         <PageTitle title="Billing" />
         <div className="mx-auto max-w-4xl space-y-2">
-          <h1 className="font-semibold text-2xl">Billing</h1>
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx and information.tsx. */}
+          <h1 className="font-semibold text-2xl text-card-foreground">
+            Billing
+          </h1>
           <p className="text-muted-foreground text-sm">
             Billing isn't enabled on this instance. Self-hosted Kaneo includes
             every feature, free forever.
@@ -166,7 +171,12 @@ function RouteComponent() {
       <PageTitle title="Billing" />
       <div className="mx-auto max-w-4xl space-y-8">
         <div className="space-y-2">
-          <h1 className="font-semibold text-2xl">Billing</h1>
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx and information.tsx. */}
+          <h1 className="font-semibold text-2xl text-card-foreground">
+            Billing
+          </h1>
           <p className="text-muted-foreground">
             Manage the Kaneo Cloud subscription for this workspace.
           </p>

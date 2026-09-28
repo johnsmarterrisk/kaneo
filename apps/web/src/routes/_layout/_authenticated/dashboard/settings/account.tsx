@@ -52,26 +52,32 @@ function RouteComponent() {
   return (
     <div className="flex gap-6 h-full">
       <SettingsSidebar>
+        {/* This aside sits on the settings frame's white bg-card panel (settings.tsx),
+            not the app's navy ground. Every class below was originally one of the
+            sidebar-scoped rail tokens (correct only on the navy sidebar surface); on
+            this white panel they rendered as white-on-white or near-invisible
+            dark-on-transparent. Swapped for the white-panel equivalents — same GUI-4
+            pattern as projects.tsx (see operon-project-settings-contrast.test.ts). */}
         <div className="p-2">
           <div className="mb-1 flex items-center gap-3 rounded-md px-2 py-2">
             <Avatar className="h-9 w-9">
               <AvatarImage src={user?.image ?? ""} alt={user?.name || ""} />
-              <AvatarFallback className="text-xs font-medium border border-border/30">
+              <AvatarFallback className="border border-border/70 text-xs font-medium">
                 {getInitials(user?.name)}
               </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-col md:min-w-fit">
-              <p className="truncate text-sm md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-sm text-card-foreground md:overflow-visible md:text-clip md:whitespace-normal">
                 {user?.name}
               </p>
-              <p className="truncate text-xs text-sidebar-foreground/70 md:overflow-visible md:text-clip md:whitespace-normal">
+              <p className="truncate text-xs text-muted-foreground md:overflow-visible md:text-clip md:whitespace-normal">
                 {user?.email}
               </p>
             </div>
           </div>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
               {t("settings:account")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -83,9 +89,9 @@ function RouteComponent() {
                       variant="ghost"
                       size="sm"
                       className={cn(
-                        "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-sidebar-foreground/80",
+                        "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-muted-foreground",
                         isActivePath(item.url) &&
-                          "bg-sidebar-accent text-sidebar-accent-foreground",
+                          "bg-accent text-accent-foreground",
                       )}
                     >
                       <item.icon className="h-4 w-4" />
@@ -98,7 +104,7 @@ function RouteComponent() {
           </SidebarGroup>
 
           <SidebarGroup className="gap-1 p-1">
-            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
+            <SidebarGroupLabel className="h-7 px-2 text-xs uppercase tracking-wide text-muted-foreground">
               {t("settings:developer")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -109,9 +115,9 @@ function RouteComponent() {
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-sidebar-foreground/80",
+                      "h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-muted-foreground",
                       isActivePath("/dashboard/settings/account/developer") &&
-                        "bg-sidebar-accent text-sidebar-accent-foreground",
+                        "bg-accent text-accent-foreground",
                     )}
                   >
                     <Code className="h-4 w-4" />

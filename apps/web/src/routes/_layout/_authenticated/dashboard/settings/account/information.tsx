@@ -265,7 +265,12 @@ function RouteComponent() {
       <PageTitle title={t("settings:informationPage.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground, so it needs the
+              light-panel foreground token explicitly rather than inheriting body's
+              text-foreground (white in navy mode, invisible on white — GUI-4 pattern,
+              same as general.tsx). */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:informationPage.title")}
           </h1>
           <p className="text-muted-foreground">
@@ -358,7 +363,12 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: this FormField sits on the bg-sidebar
+                              (navy) Profile card. The shared Label/FormLabel primitive
+                              defaults to text-card-foreground (dark, for a white bg-card
+                              panel), which reads as invisible dark-on-navy text here —
+                              same GUI-4 pattern as general.tsx's Project name/Key labels. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:informationPage.fullName")}
                           </FormLabel>
                         </div>
@@ -386,7 +396,10 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: same reason as the Full name
+                              FormLabel above — this FormField sits on the same
+                              bg-sidebar (navy) Profile card. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:informationPage.email")}
                           </FormLabel>
                         </div>

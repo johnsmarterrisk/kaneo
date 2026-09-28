@@ -229,7 +229,10 @@ function RouteComponent() {
         <PageTitle title={t("settings:workspaceRoles.pageTitle")} />
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold">
+            {/* text-card-foreground: this heading sits on the settings frame's white
+                bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+                pattern as general.tsx and information.tsx. */}
+            <h1 className="text-2xl font-semibold text-card-foreground">
               {t("settings:workspaceRoles.title")}
             </h1>
             <p className="text-muted-foreground">
@@ -246,7 +249,10 @@ function RouteComponent() {
       <PageTitle title={t("settings:workspaceRoles.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx and information.tsx. */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:workspaceRoles.title")}
           </h1>
           <p className="text-muted-foreground">
@@ -499,7 +505,13 @@ function PermissionList({
                     {idx > 0 && <Separator className="mb-4" />}
                     <div className="flex items-center justify-between gap-6">
                       <div className="space-y-0.5 flex-1 min-w-0">
-                        <Label className="text-sm font-medium">
+                        {/* text-sidebar-foreground: this Label sits inside the
+                            AccordionPanel of the roles list's bg-sidebar (navy)
+                            card (see the container at the top of this file). The
+                            shared Label primitive defaults to text-card-foreground
+                            (dark, for a white bg-card panel), invisible dark-on-navy
+                            here — same GUI-4 pattern as general.tsx. */}
+                        <Label className="text-sm font-medium text-sidebar-foreground">
                           {t(
                             `settings:workspaceRoles.permissions.${labelKey}`,
                             {
@@ -604,7 +616,9 @@ function DraftEditor({
       <div className="border-t border-border">
         <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">
+            {/* text-sidebar-foreground: same reason as PermissionList's Label above —
+                this draft row sits inside the roles list's bg-sidebar (navy) card. */}
+            <Label className="text-sm font-medium text-sidebar-foreground">
               {t("settings:workspaceRoles.nameLabel")}
             </Label>
             <p className="text-xs text-muted-foreground">

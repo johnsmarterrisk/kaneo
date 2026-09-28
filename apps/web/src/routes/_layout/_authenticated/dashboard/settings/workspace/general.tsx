@@ -316,7 +316,10 @@ function RouteComponent() {
       <PageTitle title={t("settings:workspaceGeneral.pageTitle")} />
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
+          {/* text-card-foreground: this heading sits on the settings frame's white
+              bg-card panel (settings.tsx), not the app's navy ground — same GUI-4
+              pattern as general.tsx (projects) and information.tsx. */}
+          <h1 className="text-2xl font-semibold text-card-foreground">
             {t("settings:workspaceGeneral.title")}
           </h1>
           <p className="text-muted-foreground">
@@ -344,7 +347,12 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: this FormField sits on the
+                              bg-sidebar (navy) Workspace Info card. The shared
+                              Label/FormLabel primitive defaults to text-card-foreground
+                              (dark, for a white bg-card panel), invisible dark-on-navy
+                              here — same GUI-4 pattern as general.tsx (projects). */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.nameLabel")}
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
@@ -376,7 +384,10 @@ function RouteComponent() {
                     <FormItem>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="space-y-0.5">
-                          <FormLabel className="text-sm font-medium">
+                          {/* text-sidebar-foreground: same reason as the Name FormLabel
+                              above — this FormField sits on the same bg-sidebar (navy)
+                              Workspace Info card. */}
+                          <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.descriptionLabel")}
                           </FormLabel>
                           <p className="text-xs text-muted-foreground">
