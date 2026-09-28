@@ -280,7 +280,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:informationPage.sectionTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -288,13 +288,13 @@ function RouteComponent() {
             </p>
           </div>
 
-          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">
                   {t("settings:informationPage.profilePicture")}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:informationPage.avatar.hint")}
                 </p>
               </div>
@@ -426,7 +426,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:informationPage.deleteAccount.sectionTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -434,13 +434,13 @@ function RouteComponent() {
             </p>
           </div>
 
-          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
             <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">
                   {t("settings:informationPage.deleteAccount.title")}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/70">
                   {t("settings:informationPage.deleteAccount.description")}
                 </p>
               </div>

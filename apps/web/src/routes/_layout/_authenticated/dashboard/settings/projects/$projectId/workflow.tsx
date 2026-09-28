@@ -32,7 +32,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:projectWorkflow.columnsTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -44,7 +44,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:projectWorkflow.automationTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">

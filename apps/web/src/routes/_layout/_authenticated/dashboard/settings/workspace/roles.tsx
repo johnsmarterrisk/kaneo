@@ -266,7 +266,7 @@ function RouteComponent() {
         <div className="space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <h2 className="text-md font-medium">
+              <h2 className="text-md font-medium text-card-foreground">
                 {t("settings:workspaceRoles.sectionTitle")}
               </h2>
               <p className="text-xs text-muted-foreground">
@@ -288,9 +288,9 @@ function RouteComponent() {
               {t("settings:workspaceRoles.newRole")}
             </Button>
           </div>
-          <div className="border border-border rounded-md bg-sidebar">
+          <div className="border border-border rounded-md bg-sidebar text-sidebar-foreground">
             {isLoading && !draftActive ? (
-              <p className="text-xs text-muted-foreground px-4 py-6">
+              <p className="text-xs text-sidebar-foreground/70 px-4 py-6">
                 {t("settings:workspaceRoles.loading")}
               </p>
             ) : customRolesError ? (
@@ -308,7 +308,7 @@ function RouteComponent() {
                   <EmptyTitle>
                     {t("settings:workspaceRoles.emptyTitle")}
                   </EmptyTitle>
-                  <EmptyDescription>
+                  <EmptyDescription className="text-sidebar-foreground/70">
                     {t("settings:workspaceRoles.emptyDescription")}
                   </EmptyDescription>
                 </EmptyHeader>
@@ -328,13 +328,13 @@ function RouteComponent() {
                   >
                     <AccordionTrigger className="px-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <Shield className="w-3.5 h-3.5 text-sidebar-foreground/70 shrink-0" />
                         <p className="text-sm font-medium italic">
                           {t("settings:workspaceRoles.newRole")}
                         </p>
                       </div>
                     </AccordionTrigger>
-                    <AccordionPanel className="px-0 pt-0 pb-0">
+                    <AccordionPanel className="px-0 pt-0 pb-0 text-sidebar-foreground">
                       <DraftEditor
                         workspaceId={workspaceId}
                         existingNames={[
@@ -383,7 +383,7 @@ function RouteComponent() {
                       <AccordionTrigger className="px-4">
                         <div className="flex items-center justify-between gap-4 flex-1 min-w-0">
                           <div className="flex items-center gap-3 min-w-0">
-                            <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <Shield className="w-3.5 h-3.5 text-sidebar-foreground/70 shrink-0" />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <p
@@ -400,20 +400,20 @@ function RouteComponent() {
                                 )}
                               </div>
                               {description && (
-                                <p className="text-xs font-normal text-muted-foreground truncate">
+                                <p className="text-xs font-normal text-sidebar-foreground/70 truncate">
                                   {description}
                                 </p>
                               )}
                             </div>
                           </div>
-                          <p className="text-xs font-normal text-muted-foreground shrink-0">
+                          <p className="text-xs font-normal text-sidebar-foreground/70 shrink-0">
                             {t("settings:workspaceRoles.permissionCount", {
                               count: permissionCount(role.permission),
                             })}
                           </p>
                         </div>
                       </AccordionTrigger>
-                      <AccordionPanel className="px-0 pt-0 pb-0">
+                      <AccordionPanel className="px-0 pt-0 pb-0 text-sidebar-foreground">
                         <CustomRoleEditor
                           key={role.id}
                           workspaceId={workspaceId}
@@ -485,7 +485,7 @@ function PermissionList({
         <div key={resource}>
           {groupIndex > 0 && <Separator />}
           <div className="space-y-4 p-4">
-            <p className="text-sm font-medium capitalize">
+            <p className="text-sm font-medium capitalize text-sidebar-foreground">
               {t(`settings:workspaceRoles.resources.${resource}`, {
                 defaultValue:
                   RESOURCE_LABELS[resource] ??
@@ -520,7 +520,7 @@ function PermissionList({
                           )}
                         </Label>
                         {meta.description && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t(
                               `settings:workspaceRoles.permissions.${descriptionKey}`,
                               {
@@ -621,7 +621,7 @@ function DraftEditor({
             <Label className="text-sm font-medium text-sidebar-foreground">
               {t("settings:workspaceRoles.nameLabel")}
             </Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-sidebar-foreground/70">
               {t("settings:workspaceRoles.nameHint")}
             </p>
           </div>
@@ -745,7 +745,7 @@ function CustomRoleEditor({
       <Separator />
       <div className="flex items-center justify-between gap-2 px-4 py-3 bg-sidebar">
         {isDefault ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-sidebar-foreground/70">
             {t("settings:workspaceRoles.defaultRoleHelp")}
           </span>
         ) : (
@@ -761,7 +761,7 @@ function CustomRoleEditor({
           </Button>
         )}
         <div className="flex items-center gap-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-sidebar-foreground/70">
             {dirty
               ? t("settings:workspaceRoles.unsavedChanges")
               : t("settings:workspaceRoles.allChangesSaved")}

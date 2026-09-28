@@ -107,7 +107,7 @@ function SectionHeader({
 }) {
   return (
     <div className="space-y-1">
-      <h2 className="font-medium text-md">{title}</h2>
+      <h2 className="font-medium text-md text-card-foreground">{title}</h2>
       <p className="text-muted-foreground text-xs">{subtitle}</p>
     </div>
   );
@@ -190,9 +190,9 @@ function RouteComponent() {
           />
 
           {billing.foundingFree ? (
-            <div className="overflow-hidden rounded-md border border-primary/30 bg-sidebar">
+            <div className="overflow-hidden rounded-md border border-primary/30 bg-sidebar text-sidebar-foreground">
               <div className="flex items-start gap-3 p-5">
-                <div className="mt-0.5 flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <div className="mt-0.5 flex size-9 items-center justify-center rounded-md bg-white/10 text-sidebar-foreground">
                   <Sparkles className="size-4.5" />
                 </div>
                 <div className="space-y-1">
@@ -202,7 +202,7 @@ function RouteComponent() {
                       Free
                     </Badge>
                   </div>
-                  <p className="text-muted-foreground text-sm leading-relaxed">
+                  <p className="text-sidebar-foreground/70 text-sm leading-relaxed">
                     This workspace has free access to Kaneo Cloud as an early
                     supporter. Thank you for being here from the start.
                   </p>
@@ -210,7 +210,7 @@ function RouteComponent() {
               </div>
             </div>
           ) : hasSubscription ? (
-            <div className="rounded-md border border-border bg-sidebar">
+            <div className="rounded-md border border-border bg-sidebar text-sidebar-foreground">
               <div className="flex flex-wrap items-start justify-between gap-4 p-5">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ function RouteComponent() {
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-sidebar-foreground/70 text-sm">
                     {billing.plan === "team"
                       ? `$${billing.billingInterval === "annual" ? 50 : 5} / user / ${pricePer}`
                       : `$${billing.billingInterval === "annual" ? 40 : 4} / ${pricePer}`}
@@ -232,7 +232,7 @@ function RouteComponent() {
                 </div>
                 <div className="text-right">
                   {renews ? (
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-sidebar-foreground/70 text-xs">
                       {billing.canceledAt ? "Access ends" : "Renews"}
                     </p>
                   ) : null}
@@ -243,7 +243,7 @@ function RouteComponent() {
               </div>
               <Separator />
               <div className="flex flex-col items-start gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-muted-foreground text-xs">
+                <p className="text-sidebar-foreground/70 text-xs">
                   Update payment method, view invoices, or cancel anytime.
                 </p>
                 {billing.hasCustomer ? (
@@ -262,19 +262,12 @@ function RouteComponent() {
           ) : (
             <div
               className={cn(
-                "rounded-md border bg-sidebar p-5",
+                "rounded-md border bg-sidebar p-5 text-sidebar-foreground",
                 trialExpired ? "border-warning/40" : "border-border",
               )}
             >
               <div className="flex items-start gap-3">
-                <div
-                  className={cn(
-                    "mt-0.5 flex size-9 items-center justify-center rounded-md",
-                    trialExpired
-                      ? "bg-warning/10 text-warning-foreground"
-                      : "bg-primary/10 text-primary",
-                  )}
-                >
+                <div className="mt-0.5 flex size-9 items-center justify-center rounded-md bg-white/10 text-sidebar-foreground">
                   {trialExpired ? (
                     <TriangleAlert className="size-4.5" />
                   ) : (
@@ -285,7 +278,7 @@ function RouteComponent() {
                   <h3 className="font-medium text-sm">
                     {trialExpired ? "Your trial has ended" : "Free trial"}
                   </h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">
+                  <p className="text-sidebar-foreground/70 text-sm leading-relaxed">
                     {trialExpired
                       ? "Subscribe to a plan below to keep creating and editing. Your data stays safe and exportable in the meantime."
                       : trialDaysLeft !== null
@@ -317,7 +310,7 @@ function RouteComponent() {
                         "rounded-[0.3rem] px-3 py-1 font-medium capitalize transition-colors",
                         interval === value
                           ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
+                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
                       )}
                     >
                       {value}
@@ -340,7 +333,7 @@ function RouteComponent() {
                     <div
                       key={p.plan}
                       className={cn(
-                        "flex flex-col rounded-xl border p-6",
+                        "flex flex-col rounded-xl border p-6 text-card-foreground",
                         p.highlighted
                           ? "border-primary/40 bg-card shadow-[0_0_40px_-12px] shadow-primary/20"
                           : "border-border/70 bg-card",
@@ -354,7 +347,7 @@ function RouteComponent() {
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-foreground/60 text-sm">
+                      <p className="mt-1 text-card-foreground/70 text-sm">
                         {p.tagline}
                       </p>
 
@@ -362,11 +355,11 @@ function RouteComponent() {
                         <span className="font-medium text-4xl tracking-tight">
                           {price.price}
                         </span>
-                        <span className="text-foreground/60 text-sm">
+                        <span className="text-card-foreground/70 text-sm">
                           {price.suffix}
                         </span>
                       </div>
-                      <p className="mt-1.5 text-foreground/60 text-sm">
+                      <p className="mt-1.5 text-card-foreground/70 text-sm">
                         {price.note}
                       </p>
 
@@ -377,7 +370,7 @@ function RouteComponent() {
                             className="flex items-start gap-2.5"
                           >
                             <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                            <span className="text-foreground/90">
+                            <span className="text-card-foreground/90">
                               {feature}
                             </span>
                           </li>

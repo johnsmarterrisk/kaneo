@@ -45,6 +45,58 @@ const rolesSource = readRoute("settings/workspace/roles.tsx");
 const labelsSource = readRoute("settings/workspace/labels.tsx");
 const billingSource = readRoute("settings/workspace/billing.tsx");
 
+describe("settings surface colors beyond page titles", () => {
+  it("section headings on the card frame carry card foreground", () => {
+    for (const source of [
+      informationSource,
+      preferencesSource,
+      workspaceGeneralSource,
+      rolesSource,
+      billingSource,
+    ]) {
+      for (const [, className] of source.matchAll(/<h2 className="([^"]*)"/g)) {
+        expect(className).toContain("text-card-foreground");
+      }
+    }
+  });
+
+  it("navy cards carry sidebar foreground and do not put the global muted token on hints", () => {
+    for (const [source, expectedCards, expectedDarkHints] of [
+      [informationSource, 2, 2],
+      [preferencesSource, 2, 10],
+      [workspaceGeneralSource, 3, 4],
+    ] as const) {
+      expect(source.match(/bg-sidebar text-sidebar-foreground/g)?.length).toBe(
+        expectedCards,
+      );
+      expect(source.match(/text-xs text-sidebar-foreground\/70/g)?.length).toBe(
+        expectedDarkHints,
+      );
+    }
+    expect(rolesSource).toContain("bg-sidebar text-sidebar-foreground");
+    expect(rolesSource).not.toContain(
+      "text-xs font-normal text-muted-foreground",
+    );
+    expect(
+      rolesSource.match(
+        /AccordionPanel className="px-0 pt-0 pb-0 text-sidebar-foreground"/g,
+      )?.length,
+    ).toBe(2);
+    expect(rolesSource).toContain(
+      '<EmptyDescription className="text-sidebar-foreground/70">',
+    );
+  });
+
+  it("billing pairs text with its sidebar or card surface", () => {
+    expect(
+      billingSource.match(/bg-sidebar text-sidebar-foreground/g)?.length,
+    ).toBe(2);
+    expect(billingSource).toContain("bg-sidebar p-5 text-sidebar-foreground");
+    expect(billingSource).not.toContain("text-foreground/60");
+    expect(billingSource).not.toContain("text-foreground/90");
+  });
+});
+
 describe("Account settings left column (settings/account.tsx) — surface-paired tokens", () => {
   // SettingsSidebar renders this markup into both the desktop <aside> (bg-card) and the
   // mobile Sheet (bg-sidebar) at once — see the file header. Every text/active-state

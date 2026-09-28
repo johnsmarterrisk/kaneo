@@ -103,8 +103,9 @@ function RouteComponent() {
   const navigate = useNavigate();
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
-  const queuedSaveRef = useRef<ProjectFormValues | null>(null);
+  const queuedSaveRef = useRef(false);
   const lastSavedRef = useRef<NormalizedProjectValues | null>(null);
+  const initializedProjectIdRef = useRef<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [iconPopoverOpen, setIconPopoverOpen] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
@@ -127,6 +128,8 @@ function RouteComponent() {
   const { canManageProjects, canDeleteProjects } = useWorkspacePermission();
   const canEdit = canManageProjects();
   const canDelete = canDeleteProjects();
+  const canEditLoaded =
+    canEdit && initializedProjectIdRef.current === projectId;
 
   const projectForm = useForm<ProjectFormValues>({
     resolver: standardSchemaResolver(projectSchema),
@@ -140,28 +143,29 @@ function RouteComponent() {
   });
 
   useEffect(() => {
-    if (!project) return;
+    if (!fetchedProject || fetchedProject.id !== projectId) return;
+    if (initializedProjectIdRef.current === projectId) return;
 
     const nextValues = {
-      name: project.name || "",
-      slug: project.slug || "",
-      description: project.description || "",
-      icon: project.icon || "Layout",
+      name: fetchedProject.name || "",
+      slug: fetchedProject.slug || "",
+      description: fetchedProject.description || "",
+      icon: fetchedProject.icon || "Layout",
     };
+    initializedProjectIdRef.current = projectId;
     lastSavedRef.current = normalizeProjectValues(nextValues);
-
-    if (projectForm.formState.isDirty) return;
-
     projectForm.reset(nextValues, {
       keepDirty: false,
       keepTouched: false,
       keepIsValid: true,
     });
-  }, [project, projectForm]);
+    // The tasks query polls and can deliver an older snapshot after a local save.
+    // Only seed this form once per project; a poll must not replace local edits.
+  }, [fetchedProject, projectId, projectForm]);
 
   const saveProject = useCallback(
     async (data: ProjectFormValues) => {
-      if (!project?.id) return;
+      if (!project?.id || initializedProjectIdRef.current !== projectId) return;
 
       const normalizedData = normalizeProjectValues(data);
       const nameChanged = lastSavedRef.current?.name !== normalizedData.name;
@@ -172,12 +176,14 @@ function RouteComponent() {
       const hasChanges =
         nameChanged || slugChanged || descriptionChanged || iconChanged;
 
-      if (!hasChanges) return;
-
       if (isSavingRef.current) {
-        queuedSaveRef.current = data;
+        // Compare against the completed request only after it finishes. The user
+        // may have reverted to the old saved value while a newer value is in flight.
+        queuedSaveRef.current = true;
         return;
       }
+
+      if (!hasChanges) return;
 
       isSavingRef.current = true;
 
@@ -251,19 +257,34 @@ function RouteComponent() {
         isSavingRef.current = false;
 
         if (queuedSaveRef.current) {
-          const queuedData = queuedSaveRef.current;
-          queuedSaveRef.current = null;
-          await saveProject(queuedData);
+          queuedSaveRef.current = false;
+          // A queued snapshot may itself be older than a later keystroke. Drain
+          // the current form, including edits made after the debounce or flush.
+          const latest = projectForm.getValues() as ProjectFormValues;
+          if (projectSchema.safeParse(latest).success) {
+            await saveProject(latest);
+          }
         }
       }
     },
-    [project?.id, updateProject, queryClient, workspace?.id, projectForm, t],
+    [
+      project?.id,
+      projectId,
+      updateProject,
+      queryClient,
+      workspace?.id,
+      projectForm,
+      projectSchema,
+      t,
+    ],
   );
 
   const saveProjectRef = useRef(saveProject);
   const projectFormRef = useRef(projectForm);
+  const projectSchemaRef = useRef(projectSchema);
   saveProjectRef.current = saveProject;
   projectFormRef.current = projectForm;
+  projectSchemaRef.current = projectSchema;
 
   const debouncedSave = useCallback(() => {
     if (debounceTimeoutRef.current) {
@@ -275,13 +296,15 @@ function RouteComponent() {
       if (isValid) {
         // Always save latest values to avoid staleness while typing
         const latest = projectForm.getValues();
-        saveProject(latest as ProjectFormValues);
+        if (projectSchema.safeParse(latest).success) {
+          void saveProject(latest as ProjectFormValues);
+        }
       }
     }, 800);
-  }, [projectForm, saveProject]);
+  }, [projectForm, projectSchema, saveProject]);
 
   useEffect(() => {
-    if (!canEdit) return;
+    if (!canEditLoaded) return;
     // Do not gate on formState.isDirty here: after setValue (e.g. icon pick), the
     // watch callback can run before RHF updates isDirty, so the debounced save never runs.
     const subscription = projectForm.watch(() => {
@@ -289,7 +312,7 @@ function RouteComponent() {
     });
 
     return () => subscription.unsubscribe();
-  }, [projectForm, debouncedSave, canEdit]);
+  }, [projectForm, debouncedSave, canEditLoaded]);
 
   useEffect(() => {
     return () => {
@@ -310,8 +333,7 @@ function RouteComponent() {
           last.icon !== normalized.icon;
         if (!hasPendingChanges) return;
 
-        const isValid = await projectFormRef.current.trigger();
-        if (isValid) {
+        if (projectSchemaRef.current.safeParse(latest).success) {
           await saveProjectRef.current(latest);
         }
       })();
@@ -359,7 +381,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:projectGeneral.projectInfoTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -399,7 +421,7 @@ function RouteComponent() {
                       size="sm"
                       className="h-8 w-auto justify-start gap-2 font-normal"
                       title={t("settings:projectGeneral.pickIconTitle")}
-                      disabled={!canEdit}
+                      disabled={!canEditLoaded}
                     >
                       {(() => {
                         const selectedKey =
@@ -504,7 +526,7 @@ function RouteComponent() {
                             placeholder={t(
                               "settings:projectGeneral.projectNamePlaceholder",
                             )}
-                            disabled={!canEdit}
+                            disabled={!canEditLoaded}
                             {...field}
                           />
                         </FormControl>
@@ -549,7 +571,7 @@ function RouteComponent() {
                             placeholder={t(
                               "settings:projectGeneral.keyPlaceholder",
                             )}
-                            disabled={!canEdit}
+                            disabled={!canEditLoaded}
                             {...field}
                           />
                         </FormControl>
@@ -592,7 +614,7 @@ function RouteComponent() {
                             placeholder={t(
                               "settings:projectGeneral.descriptionPlaceholder",
                             )}
-                            disabled={!canEdit}
+                            disabled={!canEditLoaded}
                             {...field}
                           />
                         </FormControl>
@@ -623,7 +645,7 @@ function RouteComponent() {
         {canDelete && (
           <div className="space-y-6">
             <div className="space-y-1">
-              <h2 className="text-md font-medium">
+              <h2 className="text-md font-medium text-card-foreground">
                 {t("settings:projectGeneral.dangerZone")}
               </h2>
               <p className="text-xs text-muted-foreground">

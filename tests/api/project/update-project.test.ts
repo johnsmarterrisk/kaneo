@@ -1,3 +1,4 @@
+import { HTTPException } from "hono/http-exception";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
 // Regression guard for review finding 2 (fork/initiative-settings, round 1): the general
@@ -100,5 +101,22 @@ describe("updateProject", () => {
       description: existingProject.description,
       isPublic: false,
     });
+  });
+
+  it("does not update a project outside the authorized workspace", async () => {
+    mockSelect.mockReturnValue(makeSelectMock([]));
+
+    await expect(
+      updateProject(
+        "project-1",
+        "New name",
+        "Layout",
+        "OLD",
+        "old description",
+        undefined,
+        "other-workspace",
+      ),
+    ).rejects.toBeInstanceOf(HTTPException);
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

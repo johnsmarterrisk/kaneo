@@ -139,7 +139,9 @@ function IntegrationSection({
         <div className="flex min-w-0 items-start gap-3">
           <div className="mt-0.5 text-muted-foreground">{icon}</div>
           <div className="min-w-0">
-            <h2 className="text-md font-medium">{title}</h2>
+            <h2 className="text-md font-medium text-card-foreground">
+              {title}
+            </h2>
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
         </div>

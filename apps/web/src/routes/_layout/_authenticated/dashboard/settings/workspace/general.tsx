@@ -329,7 +329,7 @@ function RouteComponent() {
 
         <div className="space-y-6">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:workspaceGeneral.workspaceInfoTitle")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -337,7 +337,7 @@ function RouteComponent() {
             </p>
           </div>
 
-          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+          <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
             <Form {...workspaceForm}>
               <form className="space-y-4">
                 <FormField
@@ -355,7 +355,7 @@ function RouteComponent() {
                           <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.nameLabel")}
                           </FormLabel>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t("settings:workspaceGeneral.nameHint")}
                           </p>
                         </div>
@@ -390,7 +390,7 @@ function RouteComponent() {
                           <FormLabel className="text-sm font-medium text-sidebar-foreground">
                             {t("settings:workspaceGeneral.descriptionLabel")}
                           </FormLabel>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-sidebar-foreground/70">
                             {t("settings:workspaceGeneral.descriptionHint")}
                           </p>
                         </div>
@@ -417,7 +417,7 @@ function RouteComponent() {
         {isOwner ? (
           <div className="space-y-6">
             <div className="space-y-1">
-              <h2 className="text-md font-medium">
+              <h2 className="text-md font-medium text-card-foreground">
                 {t("settings:workspaceGeneral.transferOwnership.title", {
                   defaultValue: "Transfer ownership",
                 })}
@@ -430,7 +430,7 @@ function RouteComponent() {
               </p>
             </div>
 
-            <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+            <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5 min-w-0">
                   <p className="text-sm font-medium">
@@ -439,7 +439,7 @@ function RouteComponent() {
                       { defaultValue: "New owner" },
                     )}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-sidebar-foreground/70">
                     {eligibleNewOwners.length === 0
                       ? t(
                           "settings:workspaceGeneral.transferOwnership.noEligibleMembers",
@@ -508,7 +508,7 @@ function RouteComponent() {
         {canDelete && (
           <div className="space-y-6">
             <div className="space-y-1">
-              <h2 className="text-md font-medium">
+              <h2 className="text-md font-medium text-card-foreground">
                 {t("settings:workspaceGeneral.dangerZone")}
               </h2>
               <p className="text-xs text-muted-foreground">
@@ -516,13 +516,13 @@ function RouteComponent() {
               </p>
             </div>
 
-            <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+            <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">
                     {t("settings:workspaceGeneral.deleteWorkspace")}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-sidebar-foreground/70">
                     {t("settings:workspaceGeneral.deleteWorkspaceDescription")}
                   </p>
                 </div>

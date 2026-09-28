@@ -122,10 +122,10 @@ function SettingsLayout() {
               value={activeTab}
               className="w-full pt-4 md:w-[400px] md:pt-2"
             >
-              <TabsList className="bg-sidebar gap-2">
+              <TabsList className="bg-sidebar gap-2 text-sidebar-foreground/70">
                 <TabsTrigger
                   value="account"
-                  className="[&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
+                  className="hover:text-sidebar-foreground [&[data-active]:hover]:text-card-foreground [&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
                   onClick={() =>
                     navigate({
                       to: "/dashboard/settings/account/information",
@@ -136,7 +136,7 @@ function SettingsLayout() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="workspace"
-                  className="[&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
+                  className="hover:text-sidebar-foreground [&[data-active]:hover]:text-card-foreground [&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
                   onClick={() =>
                     navigate({
                       to: "/dashboard/settings/workspace/general",
@@ -148,7 +148,7 @@ function SettingsLayout() {
                 <TabsTrigger
                   disabled={projects?.length === 0}
                   value="project"
-                  className="[&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
+                  className="hover:text-sidebar-foreground [&[data-active]:hover]:text-card-foreground [&[data-state=active]]:rounded-md [&[data-state=active]]:border [&[data-state=active]]:border-border [&[data-state=active]]:bg-card"
                   onClick={() =>
                     navigate({
                       to: "/dashboard/settings/projects",

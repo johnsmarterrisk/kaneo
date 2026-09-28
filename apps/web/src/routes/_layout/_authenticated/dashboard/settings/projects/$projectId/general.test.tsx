@@ -42,6 +42,8 @@ const routeParams = { projectId: "proj-1" };
 
 const mocks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
+  invalidateQueries: vi.fn().mockResolvedValue(undefined),
+  loadingProject: false,
   fetchedProject: {
     id: "proj-1",
     workspaceId: "workspace-1",
@@ -68,7 +70,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
-    invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    invalidateQueries: mocks.invalidateQueries,
   }),
 }));
 
@@ -80,7 +82,9 @@ vi.mock("react-i18next", () => ({
 // refetch happened since the last save" looks like — the same shape a real 30s poll gap
 // produces. This is what lets the test catch the stale-`project` bug deterministically.
 vi.mock("@/hooks/queries/task/use-get-tasks", () => ({
-  useGetTasks: () => ({ data: mocks.fetchedProject }),
+  useGetTasks: () => ({
+    data: mocks.loadingProject ? undefined : mocks.fetchedProject,
+  }),
 }));
 
 vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
@@ -122,6 +126,13 @@ function savedNames() {
 beforeEach(() => {
   mocks.mutateAsync.mockReset();
   mocks.mutateAsync.mockResolvedValue({});
+  mocks.invalidateQueries.mockClear();
+  mocks.loadingProject = false;
+  mocks.fetchedProject = {
+    ...mocks.fetchedProject,
+    name: "Testt",
+    slug: "ZS1",
+  };
   useProjectStore.setState({ project: undefined });
 });
 
@@ -130,6 +141,20 @@ afterEach(() => {
 });
 
 describe("project general settings — two saves in a row (operator report, 2026-09-28)", () => {
+  it("does not allow edits before the first project snapshot seeds the form", async () => {
+    mocks.loadingProject = true;
+    const view = render(<GeneralRoute />);
+    const nameInput = screen.getByRole("textbox", {
+      name: "settings:projectGeneral.projectNameLabel",
+    }) as HTMLInputElement;
+    expect(nameInput).toBeDisabled();
+
+    mocks.loadingProject = false;
+    view.rerender(<GeneralRoute />);
+    await waitFor(() => expect(nameInput).not.toBeDisabled());
+    expect(nameInput.value).toBe("Testt");
+  });
+
   it("the second save's payload carries the NEW name, not the stale pre-save value", async () => {
     render(<GeneralRoute />);
 
@@ -158,6 +183,9 @@ describe("project general settings — two saves in a row (operator report, 2026
     // "Testt" (`project.name`, stale) rather than "bug-board" (the form's own value).
     expect(secondPayload.name).toBe("bug-board");
     expect(savedNames()).toEqual(["bug-board", "bug-board"]);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["tasks", "proj-1"],
+    });
   });
 
   it("never sends isPublic — general settings must not be able to flip visibility", async () => {
@@ -186,6 +214,18 @@ describe("project general settings — two saves in a row (operator report, 2026
  * from the queue.
  */
 describe("project general settings — an edit made mid-save is never lost (review finding 1)", () => {
+  it("flushes a valid edit on unmount before the debounce fires", async () => {
+    const view = render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "leaving-now" } });
+    view.unmount();
+
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mocks.mutateAsync.mock.calls[0][0].name).toBe("leaving-now");
+  });
+
   it("does not revert the input to the stale saved value once the in-flight save resolves", async () => {
     let resolveFirstSave: (value: unknown) => void = () => {};
     mocks.mutateAsync.mockImplementationOnce(
@@ -272,4 +312,115 @@ describe("project general settings — an edit made mid-save is never lost (revi
     expect(firstPayload).not.toHaveProperty("isPublic");
     expect(secondPayload).not.toHaveProperty("isPublic");
   }, 10_000);
+
+  it("drains the latest edit even when the queued debounce captured an older value", async () => {
+    let resolveFirstSave: (value: unknown) => void = () => {};
+    mocks.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+
+    render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "first-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    fireEvent.change(nameInput, { target: { value: "queued-edit" } });
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 100));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+    fireEvent.change(nameInput, { target: { value: "latest-edit" } });
+
+    resolveFirstSave({});
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    expect(mocks.mutateAsync.mock.calls[1][0].name).toBe("latest-edit");
+    expect(nameInput.value).toBe("latest-edit");
+  }, 10_000);
+
+  it("saves a revert to the original value made while an earlier save is pending", async () => {
+    let resolveFirstSave: (value: unknown) => void = () => {};
+    mocks.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+
+    render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "first-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    fireEvent.change(nameInput, { target: { value: "Testt" } });
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 100));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+
+    resolveFirstSave({});
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    expect(mocks.mutateAsync.mock.calls[1][0].name).toBe("Testt");
+    expect(nameInput.value).toBe("Testt");
+  }, 10_000);
+
+  it("flushes a newer edit on unmount while the first save is pending", async () => {
+    let resolveFirstSave: (value: unknown) => void = () => {};
+    mocks.mutateAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+    );
+
+    const view = render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "first-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    fireEvent.change(nameInput, { target: { value: "unmount-edit" } });
+    view.unmount();
+    resolveFirstSave({});
+
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    expect(mocks.mutateAsync.mock.calls[1][0].name).toBe("unmount-edit");
+  });
+
+  it("does not let a stale tasks poll restore an older name after a successful save", async () => {
+    const view = render(<GeneralRoute />);
+    const nameInput = (await screen.findByDisplayValue(
+      "Testt",
+    )) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "saved-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(1), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    await waitFor(() =>
+      expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["tasks", "proj-1"],
+      }),
+    );
+
+    mocks.fetchedProject = { ...mocks.fetchedProject, name: "Testt" };
+    view.rerender(<GeneralRoute />);
+    expect(nameInput.value).toBe("saved-edit");
+    fireEvent.change(nameInput, { target: { value: "next-edit" } });
+    await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2), {
+      timeout: DEBOUNCE_MS * 4,
+    });
+    expect(mocks.mutateAsync.mock.calls[1][0].name).toBe("next-edit");
+  });
 });

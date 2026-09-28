@@ -50,7 +50,31 @@ const projectsSource = readFileSync(
   "utf8",
 );
 
+const projectPageSources = [
+  generalSource,
+  ...["visibility", "workflow", "integrations"].map((page) =>
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          `../routes/_layout/_authenticated/dashboard/settings/projects/$projectId/${page}.tsx`,
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  ),
+];
+
 describe("project general settings page contrast (John, 2026-09-28: title/labels invisible, left column blank)", () => {
+  it("section headings on the card frame use card foreground in every project page", () => {
+    for (const source of projectPageSources) {
+      const headings = [...source.matchAll(/<h2 className="([^"]*)"/g)];
+      for (const [, className] of headings) {
+        expect(className).toContain("text-card-foreground");
+      }
+    }
+  });
+
   it("the settings frame's h1 and the project general page's own h1 carry text-card-foreground", () => {
     expect(settingsSource).toMatch(
       /<h1 className="mt-4 hidden pl-1 text-2xl font-semibold text-card-foreground md:block">/,
@@ -64,6 +88,17 @@ describe("project general settings page contrast (John, 2026-09-28: title/labels
     expect(settingsSource).toMatch(
       /<span className="text-lg font-semibold text-card-foreground">/,
     );
+  });
+
+  it("inactive settings tabs on the sidebar surface carry sidebar foreground", () => {
+    expect(settingsSource).toContain(
+      '<TabsList className="bg-sidebar gap-2 text-sidebar-foreground/70">',
+    );
+    expect(
+      settingsSource.match(
+        /hover:text-sidebar-foreground \[&\[data-active\]:hover\]:text-card-foreground/g,
+      )?.length,
+    ).toBe(3);
   });
 
   it("the bg-sidebar cards' plain labels and muted hints use text-sidebar-foreground (finding 4)", () => {

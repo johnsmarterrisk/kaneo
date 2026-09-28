@@ -102,7 +102,7 @@ function RouteComponent() {
 
       <div className="space-y-6">
         <div className="space-y-1">
-          <h2 className="text-md font-medium">
+          <h2 className="text-md font-medium text-card-foreground">
             {t("settings:preferencesPage.appearanceTitle")}
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -110,7 +110,7 @@ function RouteComponent() {
           </p>
         </div>
 
-        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="space-y-0.5">
               {/* text-sidebar-foreground: this Label sits on a bg-sidebar (navy) card;
@@ -121,7 +121,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.theme")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.themeDescription")}
               </p>
             </div>
@@ -157,7 +157,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.language")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.languageDescription")}
               </p>
             </div>
@@ -193,7 +193,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.firstDayOfWeek")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.firstDayOfWeekDescription")}
               </p>
             </div>
@@ -237,7 +237,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.defaultView")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.defaultViewDescription")}
               </p>
             </div>
@@ -270,7 +270,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.sidebarDefault")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.sidebarDefaultDescription")}
               </p>
             </div>
@@ -285,7 +285,7 @@ function RouteComponent() {
       <div className="space-y-6">
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="space-y-1">
-            <h2 className="text-md font-medium">
+            <h2 className="text-md font-medium text-card-foreground">
               {t("settings:preferencesPage.displayOptions")}
             </h2>
             <p className="text-xs text-muted-foreground">
@@ -303,13 +303,13 @@ function RouteComponent() {
           </Button>
         </div>
 
-        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar">
+        <div className="space-y-4 border border-border rounded-md p-4 bg-sidebar text-sidebar-foreground">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.taskNumbers")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.taskNumbersDescription")}
               </p>
             </div>
@@ -326,7 +326,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.assignees")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.assigneesDescription")}
               </p>
             </div>
@@ -343,7 +343,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.dueDates")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.dueDatesDescription")}
               </p>
             </div>
@@ -357,7 +357,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.labels")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.labelsDescription")}
               </p>
             </div>
@@ -371,7 +371,7 @@ function RouteComponent() {
               <Label className="text-sm font-medium text-sidebar-foreground">
                 {t("settings:preferencesPage.priority")}
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-sidebar-foreground/70">
                 {t("settings:preferencesPage.priorityDescription")}
               </p>
             </div>
