@@ -182,14 +182,21 @@ function RouteComponent() {
       isSavingRef.current = true;
 
       try {
+        // The payload always carries every field from the FORM's normalized values, never
+        // a conditional pick between the form and `project`. `project` comes from
+        // useGetTasks(projectId) (query key ["tasks", projectId]), which this save did not
+        // invalidate — it only refreshes on its own 30s poll — so on a second save that
+        // lands inside that window, `project.<field>` for an unchanged field was stale, not
+        // current. Two saves in a row (rename, then a key change seconds later) sent that
+        // stale field back and silently reverted the first save (operator report,
+        // 2026-09-28). The form is what the person sees, so it is the source of truth for
+        // every field it owns; only isPublic (not a form field) still reads from `project`.
         const updatePayload = {
           id: project.id,
-          name: nameChanged ? normalizedData.name : project.name,
-          slug: slugChanged ? normalizedData.slug : project.slug,
-          description: descriptionChanged
-            ? normalizedData.description
-            : (project.description ?? ""),
-          icon: iconChanged ? normalizedData.icon : (project.icon ?? "Layout"),
+          name: normalizedData.name,
+          slug: normalizedData.slug,
+          description: normalizedData.description,
+          icon: normalizedData.icon,
           isPublic: !!project.isPublic,
         };
 
@@ -207,6 +214,9 @@ function RouteComponent() {
           queryClient.invalidateQueries({
             queryKey: ["projects", workspace?.id, project.id],
           }),
+          // Also invalidate the tasks query that seeds `project` (see comment above) so a
+          // second save in the same session reads fresh data, not a stale 30s-old snapshot.
+          queryClient.invalidateQueries({ queryKey: ["tasks", project.id] }),
         ]);
         toast.success(t("settings:projectGeneral.toastUpdated"));
       } catch (error) {
@@ -228,10 +238,6 @@ function RouteComponent() {
     [
       project?.id,
       project?.isPublic,
-      project?.name,
-      project?.slug,
-      project?.description,
-      project?.icon,
       updateProject,
       queryClient,
       workspace?.id,
