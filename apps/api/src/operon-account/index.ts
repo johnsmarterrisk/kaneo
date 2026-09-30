@@ -1,4 +1,4 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -13,10 +13,17 @@ import {
 import db from "../database";
 import {
   accountTable,
+  activityTable,
   apikeyTable,
+  projectTable,
+  sessionTable,
+  taskTable,
+  teamMemberTable,
+  teamTable,
   userTable,
   workspaceUserTable,
 } from "../database/schema";
+import { publishEvent } from "../events";
 import type { BaseVariables } from "../openapi";
 
 /**
@@ -656,6 +663,290 @@ operonAccount.post("/user", async (c) => {
       409,
     );
   }
+});
+
+/**
+ * Operon fork route — remove a revoked person's workspace membership on Operon's word
+ * (Operon spec `revoke-initiative-membership-spec.md` R1–R7).
+ *
+ * ── WHY THIS EXISTS AT ALL ───────────────────────────────────────────────────────────
+ *
+ * Operon's "Revoke access" locks a person out of Operon, but their `workspace_member`
+ * row here stayed, so they kept appearing in the task assignee picker, and Initiative's
+ * Members page is read-only under Operon — nobody could remove them by hand. Operon's
+ * `POST /auth/revoke` (and its 5-minute provisioner backstop) now call this route.
+ *
+ * ── WHY NOT `auth.api.removeMember` ──────────────────────────────────────────────────
+ *
+ * Better Auth's `/organization/remove-member` is session-only: it runs `orgMiddleware` and
+ * `orgSessionMiddleware`, reads the CALLER's own member row and checks `member: ["delete"]`.
+ * Our caller is the Operon service key, which this fork deliberately refuses on
+ * `/api/auth/*`, so that endpoint cannot be called from here. What it does underneath is
+ * the organization adapter's `deleteMember`: delete the `member` row, then (teams are
+ * enabled) the user's `teamMember` rows for that organization's teams. That adapter is not
+ * exported, so its two statements are transcribed below — the same precedent `POST /user`
+ * set when it wrote the membership with a direct INSERT instead of `auth.api.addMember`.
+ * `afterRemoveMember` only runs `syncWorkspaceSeats`, a no-op with billing off, so it is
+ * not called.
+ *
+ * ── THE OWNER RULE IS IN THE DELETE'S PREDICATE ──────────────────────────────────────
+ *
+ * Same fixed point as `reconcileWorkspaceMemberRole` in `auth.ts`: the workspace OWNER is
+ * never removed, and a rule checked only in application memory is not one. The DELETE
+ * names the row id, the workspace, the user, the role this call READ and `role <> 'owner'`;
+ * a promotion landing between the read and the delete makes it match zero rows, and zero
+ * rows is the re-read signal — owner → 409, absent → idempotent success. The service key's
+ * holder is refused outright for the same reason: removing it would strand Operon's key.
+ *
+ * ── SESSIONS GO TOO, WHATEVER THE MEMBERSHIP SAID ────────────────────────────────────
+ *
+ * Every `session` row for an Operon-managed person (one carrying the `custom`-provider
+ * account `POST /user` links) is deleted, including when the membership was already
+ * absent and when they belong to another workspace. An instance admin passes
+ * `hasWorkspacePermission` / `validateWorkspaceAccess` BEFORE the membership lookup, and
+ * `bearer()` / device clients authenticate by `session` rows, so a live session would
+ * outlive the revoke otherwise. The `user` and `account` rows are never touched: tasks,
+ * comments and activity keep their author. This workspace's tasks assigned to the person
+ * are unassigned (open-items 182), each with an `unassigned` activity row.
+ */
+class MembershipChangedTwice extends Error {}
+
+class ProtectedMember extends Error {}
+
+/** Better Auth stores multi-role members as a comma-separated role string. */
+function hasOwnerRole(role: string): boolean {
+  return role.split(",").some((part) => part.trim() === "owner");
+}
+
+operonAccount.post("/remove-member", async (c) => {
+  const contextKey = c.get("apiKey") as ContextApiKey;
+  if (!contextKey?.id) {
+    throw new HTTPException(403, {
+      message: "This route requires an API key, not a user session",
+    });
+  }
+
+  const holderId = await resolveOperonServiceKeyHolder(contextKey.id);
+  if (!holderId) {
+    throw new HTTPException(403, {
+      message: "This route requires the Operon service key",
+    });
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    kaneoUserId?: unknown;
+  } | null;
+  const kaneoUserId = body?.kaneoUserId;
+  if (typeof kaneoUserId !== "string" || kaneoUserId.trim() === "") {
+    throw new HTTPException(400, { message: "kaneoUserId is required" });
+  }
+
+  const workspaceId = await workspaceIdForHolder(holderId);
+  if (!workspaceId) {
+    throw new HTTPException(409, {
+      message: "No workspace exists for the Operon service key's holder yet",
+    });
+  }
+
+  if (kaneoUserId === holderId) {
+    console.warn(
+      `[operon] operon.member_remove_refused: kaneo user ${kaneoUserId} holds the Operon service key`,
+    );
+    throw new HTTPException(409, {
+      message: "The Operon service key's holder cannot be removed",
+    });
+  }
+
+  // Only a person Operon provisioned is Operon's to remove. `POST /user` links every
+  // Operon-managed user with a `custom`-provider account row (kept through a re-key and
+  // never deleted by this route), so that row is the proof. Any other id — unknown, or an
+  // Initiative user Operon never managed — answers removed 0 with NO side effects: the
+  // session delete below would otherwise let the service key sign an unrelated user out
+  // of every other workspace.
+  const [operonAccountRow] = await db
+    .select({ id: accountTable.id })
+    .from(accountTable)
+    .where(
+      and(
+        eq(accountTable.userId, kaneoUserId),
+        eq(accountTable.providerId, OPERON_PROVIDER_ID),
+      ),
+    )
+    .limit(1);
+  if (!operonAccountRow) {
+    console.warn(
+      `[operon] operon.member_remove_skipped: kaneo user ${kaneoUserId} is not an Operon-managed user; nothing was touched`,
+    );
+    return c.json(
+      { kaneoUserId, removed: 0, sessionsRevoked: 0, tasksUnassigned: 0 },
+      200,
+    );
+  }
+
+  let result: {
+    removed: number;
+    sessionsRevoked: number;
+    unassignedTasks: { id: string; projectId: string; title: string }[];
+  };
+  try {
+    result = await db.transaction(async (tx) => {
+      let removed = 0;
+      let settled = false;
+      for (let attempt = 0; attempt < 2 && !settled; attempt += 1) {
+        const [member] = await tx
+          .select({
+            id: workspaceUserTable.id,
+            role: workspaceUserTable.role,
+          })
+          .from(workspaceUserTable)
+          .where(
+            and(
+              eq(workspaceUserTable.workspaceId, workspaceId),
+              eq(workspaceUserTable.userId, kaneoUserId),
+            ),
+          )
+          .limit(1);
+
+        if (!member) {
+          settled = true;
+          break;
+        }
+        if (hasOwnerRole(member.role)) throw new ProtectedMember();
+
+        const deleted = await tx
+          .delete(workspaceUserTable)
+          .where(
+            and(
+              eq(workspaceUserTable.id, member.id),
+              eq(workspaceUserTable.workspaceId, workspaceId),
+              eq(workspaceUserTable.userId, kaneoUserId),
+              eq(workspaceUserTable.role, member.role),
+              ne(workspaceUserTable.role, "owner"),
+            ),
+          )
+          .returning({ id: workspaceUserTable.id });
+
+        if (deleted.length > 0) {
+          removed = deleted.length;
+          settled = true;
+        }
+      }
+      if (!settled) throw new MembershipChangedTwice();
+
+      // The adapter's second statement: this user's team rows for THIS workspace's teams.
+      await tx
+        .delete(teamMemberTable)
+        .where(
+          and(
+            eq(teamMemberTable.userId, kaneoUserId),
+            inArray(
+              teamMemberTable.teamId,
+              tx
+                .select({ id: teamTable.id })
+                .from(teamTable)
+                .where(eq(teamTable.workspaceId, workspaceId)),
+            ),
+          ),
+        );
+
+      // Operon open-items 182 (John, 2026-09-30): the `user` row is kept, so a task
+      // assigned to the removed person would keep them as assignee while the picker can
+      // no longer show them. Unassign ONLY this workspace's tasks (project → workspace);
+      // their tasks in any other workspace are not Operon's to touch. Runs even when the
+      // membership was already absent, and a second call finds nothing (0).
+      const unassigned = await tx
+        .update(taskTable)
+        .set({ userId: null })
+        .where(
+          and(
+            eq(taskTable.userId, kaneoUserId),
+            inArray(
+              taskTable.projectId,
+              tx
+                .select({ id: projectTable.id })
+                .from(projectTable)
+                .where(eq(projectTable.workspaceId, workspaceId)),
+            ),
+          ),
+        )
+        .returning({
+          id: taskTable.id,
+          projectId: taskTable.projectId,
+          title: taskTable.title,
+        });
+
+      // The same `unassigned` activity row `update-task-assignee` writes through the
+      // `task.unassigned` subscriber, with the service key's holder as actor — the user
+      // every Operon service-key write already acts as. Inserted here so it commits (or
+      // rolls back) with the unassignment itself; `task.unassigned` is published only after
+      // the commit (below), marked `activityRecorded` so the activity subscriber skips it.
+      if (unassigned.length > 0) {
+        await tx.insert(activityTable).values(
+          unassigned.map((task) => ({
+            taskId: task.id,
+            type: "unassigned",
+            userId: holderId,
+            content: null,
+            eventData: {},
+          })),
+        );
+      }
+
+      const sessions = await tx
+        .delete(sessionTable)
+        .where(eq(sessionTable.userId, kaneoUserId))
+        .returning({ id: sessionTable.id });
+
+      return {
+        removed,
+        sessionsRevoked: sessions.length,
+        unassignedTasks: unassigned,
+      };
+    });
+  } catch (error) {
+    if (error instanceof ProtectedMember) {
+      console.warn(
+        `[operon] operon.member_remove_refused: kaneo user ${kaneoUserId} owns workspace ${workspaceId}`,
+      );
+      throw new HTTPException(409, {
+        message: "The workspace owner cannot be removed",
+      });
+    }
+    if (error instanceof MembershipChangedTwice) {
+      console.warn(
+        `[operon] operon.member_remove_conflict: membership for kaneo user ${kaneoUserId} changed twice under the remove; nothing was removed`,
+      );
+      throw new HTTPException(409, {
+        message: "The membership changed while it was being removed; retry",
+      });
+    }
+    throw error;
+  }
+
+  const { removed, sessionsRevoked, unassignedTasks } = result;
+  const tasksUnassigned = unassignedTasks.length;
+  // After the commit, never inside it: the same `task.unassigned` event the normal
+  // unassign path publishes, once per task, so open Initiative views refresh and
+  // webhook subscribers (Operon's included) hear of it. The activity row is already
+  // written in the transaction, hence `activityRecorded`.
+  for (const task of unassignedTasks) {
+    await publishEvent("task.unassigned", {
+      taskId: task.id,
+      projectId: task.projectId,
+      userId: holderId,
+      title: task.title,
+      type: "unassigned",
+      activityRecorded: true,
+    });
+  }
+
+  console.log(
+    `[operon] operon.member_removed: kaneo user ${kaneoUserId} workspace ${workspaceId} removed=${removed} sessions_revoked=${sessionsRevoked} tasks_unassigned=${tasksUnassigned}`,
+  );
+  return c.json(
+    { kaneoUserId, removed, sessionsRevoked, tasksUnassigned },
+    200,
+  );
 });
 
 export default operonAccount;

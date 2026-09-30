@@ -244,7 +244,12 @@ subscribeToEvent<{
   userId: string;
   title: string;
   type: string;
+  activityRecorded?: boolean;
 }>("task.unassigned", async (data) => {
+  // Operon fork (open-items 182): Operon's remove-member route writes this activity row
+  // inside its own transaction and publishes afterwards only for live views and webhooks;
+  // `activityRecorded` keeps this subscriber from writing a second row for the same change.
+  if (data.activityRecorded) return;
   await createActivity(data.taskId, data.type, data.userId, null, {});
 });
 
