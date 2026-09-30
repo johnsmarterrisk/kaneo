@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "../../apps/api/src/auth";
 import db, { getDatabase, schema } from "../../apps/api/src/database";
+import { subscribeToEvent } from "../../apps/api/src/events";
 import { createApp } from "../../apps/api/src/index";
 import { mockAuthenticatedSession } from "./helpers/auth";
 import { resetTestDatabase } from "./helpers/database";
@@ -161,12 +162,25 @@ async function teamRowsOf(userId: string) {
     .where(eq(schema.teamMemberTable.userId, userId));
 }
 
+const unassignedEvents: Record<string, unknown>[] = [];
+let unassignedSubscribed = false;
+
+function recordUnassignedEvents() {
+  if (unassignedSubscribed) return;
+  unassignedSubscribed = true;
+  subscribeToEvent<Record<string, unknown>>("task.unassigned", async (data) => {
+    unassignedEvents.push(data);
+  });
+}
+
 let holder: Awaited<ReturnType<typeof createWorkspaceMember>>;
 let serviceKey: string;
 let target: typeof schema.userTable.$inferSelect;
 
 beforeEach(async () => {
   await resetTestDatabase();
+  recordUnassignedEvents();
+  unassignedEvents.length = 0;
   holder = await createWorkspaceMember({ role: "owner" });
   serviceKey = await serviceKeyFor(holder.user.id);
   target = await newUser();
@@ -347,6 +361,35 @@ describe("removal", () => {
     );
     expect(activity.every((row) => row.userId === holder.user.id)).toBe(true);
 
+    // Published after the commit, once per task, in the normal unassign path's shape.
+    expect(
+      [...unassignedEvents].sort((a, b) =>
+        String(a.taskId).localeCompare(String(b.taskId)),
+      ),
+    ).toEqual(
+      [inFirst, inSecond]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((t) =>
+          expect.objectContaining({
+            taskId: t.id,
+            projectId: t.projectId,
+            userId: holder.user.id,
+            title: t.title,
+            type: "unassigned",
+            activityRecorded: true,
+          }),
+        ),
+    );
+    // The activity subscriber runs async off the bus: let it settle, then prove it wrote
+    // no second row for an event the route already recorded.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(
+      await db
+        .select()
+        .from(schema.activityTable)
+        .where(eq(schema.activityTable.type, "unassigned")),
+    ).toHaveLength(2);
+
     const again = await removeMember(
       app,
       { kaneoUserId: target.id },
@@ -354,6 +397,7 @@ describe("removal", () => {
     );
     expect(again.status).toBe(200);
     expect(await again.json()).toMatchObject({ tasksUnassigned: 0 });
+    expect(unassignedEvents).toHaveLength(2);
     expect(
       await db
         .select()

@@ -23,6 +23,7 @@ import {
   userTable,
   workspaceUserTable,
 } from "../database/schema";
+import { publishEvent } from "../events";
 import type { BaseVariables } from "../openapi";
 
 /**
@@ -785,7 +786,7 @@ operonAccount.post("/remove-member", async (c) => {
   let result: {
     removed: number;
     sessionsRevoked: number;
-    tasksUnassigned: number;
+    unassignedTasks: { id: string; projectId: string; title: string }[];
   };
   try {
     result = await db.transaction(async (tx) => {
@@ -868,13 +869,17 @@ operonAccount.post("/remove-member", async (c) => {
             ),
           ),
         )
-        .returning({ id: taskTable.id });
+        .returning({
+          id: taskTable.id,
+          projectId: taskTable.projectId,
+          title: taskTable.title,
+        });
 
       // The same `unassigned` activity row `update-task-assignee` writes through the
       // `task.unassigned` subscriber, with the service key's holder as actor — the user
-      // every Operon service-key write already acts as. Inserted here rather than via
-      // `publishEvent` so it commits (or rolls back) with the unassignment itself; the
-      // bus is fire-and-forget and would also fan the change out to webhooks.
+      // every Operon service-key write already acts as. Inserted here so it commits (or
+      // rolls back) with the unassignment itself; `task.unassigned` is published only after
+      // the commit (below), marked `activityRecorded` so the activity subscriber skips it.
       if (unassigned.length > 0) {
         await tx.insert(activityTable).values(
           unassigned.map((task) => ({
@@ -895,7 +900,7 @@ operonAccount.post("/remove-member", async (c) => {
       return {
         removed,
         sessionsRevoked: sessions.length,
-        tasksUnassigned: unassigned.length,
+        unassignedTasks: unassigned,
       };
     });
   } catch (error) {
@@ -918,10 +923,30 @@ operonAccount.post("/remove-member", async (c) => {
     throw error;
   }
 
+  const { removed, sessionsRevoked, unassignedTasks } = result;
+  const tasksUnassigned = unassignedTasks.length;
+  // After the commit, never inside it: the same `task.unassigned` event the normal
+  // unassign path publishes, once per task, so open Initiative views refresh and
+  // webhook subscribers (Operon's included) hear of it. The activity row is already
+  // written in the transaction, hence `activityRecorded`.
+  for (const task of unassignedTasks) {
+    await publishEvent("task.unassigned", {
+      taskId: task.id,
+      projectId: task.projectId,
+      userId: holderId,
+      title: task.title,
+      type: "unassigned",
+      activityRecorded: true,
+    });
+  }
+
   console.log(
-    `[operon] operon.member_removed: kaneo user ${kaneoUserId} workspace ${workspaceId} removed=${result.removed} sessions_revoked=${result.sessionsRevoked} tasks_unassigned=${result.tasksUnassigned}`,
+    `[operon] operon.member_removed: kaneo user ${kaneoUserId} workspace ${workspaceId} removed=${removed} sessions_revoked=${sessionsRevoked} tasks_unassigned=${tasksUnassigned}`,
   );
-  return c.json({ kaneoUserId, ...result }, 200);
+  return c.json(
+    { kaneoUserId, removed, sessionsRevoked, tasksUnassigned },
+    200,
+  );
 });
 
 export default operonAccount;
