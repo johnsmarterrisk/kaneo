@@ -13,8 +13,11 @@ import {
 import db from "../database";
 import {
   accountTable,
+  activityTable,
   apikeyTable,
+  projectTable,
   sessionTable,
+  taskTable,
   teamMemberTable,
   teamTable,
   userTable,
@@ -702,7 +705,8 @@ operonAccount.post("/user", async (c) => {
  * `hasWorkspacePermission` / `validateWorkspaceAccess` BEFORE the membership lookup, and
  * `bearer()` / device clients authenticate by `session` rows, so a live session would
  * outlive the revoke otherwise. The `user` and `account` rows are never touched: tasks,
- * comments and activity keep their author and assignee.
+ * comments and activity keep their author. This workspace's tasks assigned to the person
+ * are unassigned (open-items 182), each with an `unassigned` activity row.
  */
 class MembershipChangedTwice extends Error {}
 
@@ -772,10 +776,17 @@ operonAccount.post("/remove-member", async (c) => {
     console.warn(
       `[operon] operon.member_remove_skipped: kaneo user ${kaneoUserId} is not an Operon-managed user; nothing was touched`,
     );
-    return c.json({ kaneoUserId, removed: 0, sessionsRevoked: 0 }, 200);
+    return c.json(
+      { kaneoUserId, removed: 0, sessionsRevoked: 0, tasksUnassigned: 0 },
+      200,
+    );
   }
 
-  let result: { removed: number; sessionsRevoked: number };
+  let result: {
+    removed: number;
+    sessionsRevoked: number;
+    tasksUnassigned: number;
+  };
   try {
     result = await db.transaction(async (tx) => {
       let removed = 0;
@@ -837,12 +848,55 @@ operonAccount.post("/remove-member", async (c) => {
           ),
         );
 
+      // Operon open-items 182 (John, 2026-09-30): the `user` row is kept, so a task
+      // assigned to the removed person would keep them as assignee while the picker can
+      // no longer show them. Unassign ONLY this workspace's tasks (project → workspace);
+      // their tasks in any other workspace are not Operon's to touch. Runs even when the
+      // membership was already absent, and a second call finds nothing (0).
+      const unassigned = await tx
+        .update(taskTable)
+        .set({ userId: null })
+        .where(
+          and(
+            eq(taskTable.userId, kaneoUserId),
+            inArray(
+              taskTable.projectId,
+              tx
+                .select({ id: projectTable.id })
+                .from(projectTable)
+                .where(eq(projectTable.workspaceId, workspaceId)),
+            ),
+          ),
+        )
+        .returning({ id: taskTable.id });
+
+      // The same `unassigned` activity row `update-task-assignee` writes through the
+      // `task.unassigned` subscriber, with the service key's holder as actor — the user
+      // every Operon service-key write already acts as. Inserted here rather than via
+      // `publishEvent` so it commits (or rolls back) with the unassignment itself; the
+      // bus is fire-and-forget and would also fan the change out to webhooks.
+      if (unassigned.length > 0) {
+        await tx.insert(activityTable).values(
+          unassigned.map((task) => ({
+            taskId: task.id,
+            type: "unassigned",
+            userId: holderId,
+            content: null,
+            eventData: {},
+          })),
+        );
+      }
+
       const sessions = await tx
         .delete(sessionTable)
         .where(eq(sessionTable.userId, kaneoUserId))
         .returning({ id: sessionTable.id });
 
-      return { removed, sessionsRevoked: sessions.length };
+      return {
+        removed,
+        sessionsRevoked: sessions.length,
+        tasksUnassigned: unassigned.length,
+      };
     });
   } catch (error) {
     if (error instanceof ProtectedMember) {
@@ -865,7 +919,7 @@ operonAccount.post("/remove-member", async (c) => {
   }
 
   console.log(
-    `[operon] operon.member_removed: kaneo user ${kaneoUserId} workspace ${workspaceId} removed=${result.removed} sessions_revoked=${result.sessionsRevoked}`,
+    `[operon] operon.member_removed: kaneo user ${kaneoUserId} workspace ${workspaceId} removed=${result.removed} sessions_revoked=${result.sessionsRevoked} tasks_unassigned=${result.tasksUnassigned}`,
   );
   return c.json({ kaneoUserId, ...result }, 200);
 });

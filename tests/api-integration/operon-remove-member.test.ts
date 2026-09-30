@@ -251,6 +251,7 @@ describe("removal", () => {
       kaneoUserId: target.id,
       removed: 1,
       sessionsRevoked: 2,
+      tasksUnassigned: 1,
     });
     expect(await membership(holder.workspace.id, target.id)).toHaveLength(0);
     expect(await sessionsOf(target.id)).toHaveLength(0);
@@ -273,7 +274,92 @@ describe("removal", () => {
       .from(schema.taskTable)
       .where(eq(schema.taskTable.id, task.id));
     expect(after.title).toBe("Assigned before revoke");
-    expect(after.userId).toBe(target.id);
+    expect(after.userId).toBeNull();
+  });
+
+  it("unassigns the person's tasks in every project of this workspace only, with an activity row each", async () => {
+    const first = await createProjectFixture({
+      workspaceId: holder.workspace.id,
+    });
+    const second = await createProjectFixture({
+      workspaceId: holder.workspace.id,
+    });
+    const other = await createWorkspaceMember();
+    await join(other.workspace.id, target.id);
+    const elsewhere = await createProjectFixture({
+      workspaceId: other.workspace.id,
+    });
+    const someoneElse = await newUser();
+    await join(holder.workspace.id, someoneElse.id);
+    const task = async (
+      fixture: Awaited<ReturnType<typeof createProjectFixture>>,
+      userId: string,
+      title: string,
+      number = 1,
+    ) =>
+      (
+        await db
+          .insert(schema.taskTable)
+          .values({
+            projectId: fixture.project.id,
+            userId,
+            title,
+            status: "to-do",
+            columnId: fixture.columns.todo.id,
+            number,
+            position: number,
+          })
+          .returning()
+      )[0];
+    const inFirst = await task(first, target.id, "First project");
+    const inSecond = await task(second, target.id, "Second project");
+    const inOther = await task(elsewhere, target.id, "Other workspace");
+    const notTheirs = await task(first, someoneElse.id, "Someone else's", 2);
+    const { app } = createApp();
+
+    const response = await removeMember(
+      app,
+      { kaneoUserId: target.id },
+      { "x-api-key": serviceKey },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ tasksUnassigned: 2 });
+    const assigneeOf = async (id: string) =>
+      (
+        await db
+          .select()
+          .from(schema.taskTable)
+          .where(eq(schema.taskTable.id, id))
+      )[0];
+    expect((await assigneeOf(inFirst.id)).userId).toBeNull();
+    expect((await assigneeOf(inSecond.id)).userId).toBeNull();
+    expect((await assigneeOf(inFirst.id)).title).toBe("First project");
+    expect((await assigneeOf(inOther.id)).userId).toBe(target.id);
+    expect((await assigneeOf(notTheirs.id)).userId).toBe(someoneElse.id);
+
+    const activity = await db
+      .select()
+      .from(schema.activityTable)
+      .where(eq(schema.activityTable.type, "unassigned"));
+    expect(activity.map((row) => row.taskId).sort()).toEqual(
+      [inFirst.id, inSecond.id].sort(),
+    );
+    expect(activity.every((row) => row.userId === holder.user.id)).toBe(true);
+
+    const again = await removeMember(
+      app,
+      { kaneoUserId: target.id },
+      { "x-api-key": serviceKey },
+    );
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({ tasksUnassigned: 0 });
+    expect(
+      await db
+        .select()
+        .from(schema.activityTable)
+        .where(eq(schema.activityTable.type, "unassigned")),
+    ).toHaveLength(2);
   });
 
   it("is idempotent: a second call answers removed 0", async () => {
@@ -291,7 +377,10 @@ describe("removal", () => {
       { "x-api-key": serviceKey },
     );
     expect(second.status).toBe(200);
-    expect(await second.json()).toMatchObject({ removed: 0 });
+    expect(await second.json()).toMatchObject({
+      removed: 0,
+      tasksUnassigned: 0,
+    });
   });
 
   it("answers removed 0 for an unknown id", async () => {
@@ -305,6 +394,7 @@ describe("removal", () => {
     expect(await response.json()).toMatchObject({
       removed: 0,
       sessionsRevoked: 0,
+      tasksUnassigned: 0,
     });
   });
 
@@ -331,6 +421,7 @@ describe("removal", () => {
       kaneoUserId: stranger.id,
       removed: 0,
       sessionsRevoked: 0,
+      tasksUnassigned: 0,
     });
     expect(await membership(holder.workspace.id, stranger.id)).toHaveLength(1);
     expect(await membership(other.workspace.id, stranger.id)).toHaveLength(1);
