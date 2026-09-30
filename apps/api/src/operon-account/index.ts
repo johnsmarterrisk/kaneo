@@ -696,7 +696,8 @@ operonAccount.post("/user", async (c) => {
  *
  * ── SESSIONS GO TOO, WHATEVER THE MEMBERSHIP SAID ────────────────────────────────────
  *
- * Every `session` row for the person is deleted, including when the membership was already
+ * Every `session` row for an Operon-managed person (one carrying the `custom`-provider
+ * account `POST /user` links) is deleted, including when the membership was already
  * absent and when they belong to another workspace. An instance admin passes
  * `hasWorkspacePermission` / `validateWorkspaceAccess` BEFORE the membership lookup, and
  * `bearer()` / device clients authenticate by `session` rows, so a live session would
@@ -749,6 +750,29 @@ operonAccount.post("/remove-member", async (c) => {
     throw new HTTPException(409, {
       message: "The Operon service key's holder cannot be removed",
     });
+  }
+
+  // Only a person Operon provisioned is Operon's to remove. `POST /user` links every
+  // Operon-managed user with a `custom`-provider account row (kept through a re-key and
+  // never deleted by this route), so that row is the proof. Any other id — unknown, or an
+  // Initiative user Operon never managed — answers removed 0 with NO side effects: the
+  // session delete below would otherwise let the service key sign an unrelated user out
+  // of every other workspace.
+  const [operonAccountRow] = await db
+    .select({ id: accountTable.id })
+    .from(accountTable)
+    .where(
+      and(
+        eq(accountTable.userId, kaneoUserId),
+        eq(accountTable.providerId, OPERON_PROVIDER_ID),
+      ),
+    )
+    .limit(1);
+  if (!operonAccountRow) {
+    console.warn(
+      `[operon] operon.member_remove_skipped: kaneo user ${kaneoUserId} is not an Operon-managed user; nothing was touched`,
+    );
+    return c.json({ kaneoUserId, removed: 0, sessionsRevoked: 0 }, 200);
   }
 
   let result: { removed: number; sessionsRevoked: number };

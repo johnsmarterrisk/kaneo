@@ -124,6 +124,17 @@ async function addSession(userId: string) {
   return token;
 }
 
+/** Link a user the way Operon's `POST /user` does: a `custom`-provider account row. */
+async function linkOperon(userId: string) {
+  await db.insert(schema.accountTable).values({
+    accountId: randomUUID().replace(/-/g, "").padEnd(64, "0"),
+    providerId: "custom",
+    userId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
 async function membership(workspaceId: string, userId: string) {
   return db
     .select()
@@ -297,6 +308,38 @@ describe("removal", () => {
     });
   });
 
+  it("touches nothing for an Initiative user Operon never managed", async () => {
+    // A real member of the Operon workspace AND of another one, with live sessions and
+    // team rows, but no `custom`-provider account: not Operon's to remove.
+    const stranger = await newUser();
+    await join(holder.workspace.id, stranger.id);
+    const other = await createWorkspaceMember();
+    await join(other.workspace.id, stranger.id);
+    const operonTeam = await addTeam(holder.workspace.id, stranger.id);
+    await addSession(stranger.id);
+    await addSession(stranger.id);
+    const { app } = createApp();
+
+    const response = await removeMember(
+      app,
+      { kaneoUserId: stranger.id },
+      { "x-api-key": serviceKey },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      kaneoUserId: stranger.id,
+      removed: 0,
+      sessionsRevoked: 0,
+    });
+    expect(await membership(holder.workspace.id, stranger.id)).toHaveLength(1);
+    expect(await membership(other.workspace.id, stranger.id)).toHaveLength(1);
+    expect(await sessionsOf(stranger.id)).toHaveLength(2);
+    expect((await teamRowsOf(stranger.id)).map((row) => row.teamId)).toEqual([
+      operonTeam,
+    ]);
+  });
+
   it("still deletes sessions when the membership is already absent", async () => {
     await db
       .delete(schema.workspaceUserTable)
@@ -320,6 +363,7 @@ describe("removal", () => {
 
   it("signs out a revoked instance admin everywhere, so the admin bypass cannot reach the Operon workspace", async () => {
     const admin = await newUser("admin");
+    await linkOperon(admin.id);
     await join(holder.workspace.id, admin.id);
     const second = await createWorkspaceMember();
     await join(second.workspace.id, admin.id);
@@ -353,6 +397,7 @@ describe("removal", () => {
 describe("protected identities", () => {
   it("refuses the workspace owner with 409", async () => {
     const owner = await newUser();
+    await linkOperon(owner.id);
     await join(holder.workspace.id, owner.id, "admin, owner");
     await addSession(owner.id);
     const { app } = createApp();
