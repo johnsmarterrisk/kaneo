@@ -61,6 +61,8 @@ const { rememberOperonOidcClaims, __resetOperonOidcClaims } = await import(
 const { verifyApiKey } = await import(
   "../../apps/api/src/utils/verify-api-key"
 );
+// Profile avatars R11: Better Auth's own sign-in user-info step, driven directly.
+const { handleOAuthUserInfo } = await import("better-auth/oauth2");
 
 afterAll(() => {
   if (previousOidcOnly === undefined) {
@@ -934,5 +936,100 @@ describe("Operon mode: provisioning is wired to session creation", () => {
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0]?.apiKey).toBeTypeOf("string");
     expect(await roleOf(user.id)).toBe("admin");
+  });
+});
+
+describe("Operon mode: each sign-in rewrites the user from Operon's claims (profile avatars R11)", () => {
+  type OAuthConfig = { providerId: string; overrideUserInfo?: boolean };
+
+  /** The `custom` provider as the generic-OAuth plugin was configured in `auth.ts`. */
+  function customProvider(instance: typeof auth) {
+    const plugin = (
+      instance.options.plugins as unknown as Array<{
+        id: string;
+        options?: { config: OAuthConfig[] };
+      }>
+    ).find((p) => p.id === "generic-oauth");
+    return plugin?.options?.config.find((c) => c.providerId === "custom");
+  }
+
+  it("sets overrideUserInfo in Operon mode, and not with the mode off", async () => {
+    expect(customProvider(auth)?.overrideUserInfo).toBe(true);
+
+    // `auth.ts` reads the switch once at module scope, so the off case is a fresh import.
+    setEnv(OIDC_ONLY, "");
+    vi.resetModules();
+    try {
+      const { auth: plainAuth } = await import("../../apps/api/src/auth");
+      expect(customProvider(plainAuth)?.overrideUserInfo).toBe(false);
+    } finally {
+      setEnv(OIDC_ONLY, "true");
+      vi.resetModules();
+    }
+  });
+
+  const SUB = "c".repeat(64);
+  const ADDRESS = `https://api.operon.test/identity/avatar/${SUB}`;
+
+  async function signInWithClaims(claims: {
+    email: string;
+    name: string;
+    image: string;
+  }) {
+    const context = await auth.$context;
+    return handleOAuthUserInfo(
+      { context } as never,
+      {
+        userInfo: { id: SUB, emailVerified: true, ...claims },
+        account: { providerId: "custom", accountId: SUB },
+        overrideUserInfo: customProvider(auth)?.overrideUserInfo,
+      } as never,
+    );
+  }
+
+  async function userRow(id: string) {
+    const [row] = await db
+      .select()
+      .from(schema.userTable)
+      .where(eq(schema.userTable.id, id));
+    return row;
+  }
+
+  it("rewrites an existing linked user's name and image on sign-in", async () => {
+    const user = await seedUser("ada@operon.local");
+    await stageOidcLogin(user, "member", SUB, "Ada New");
+
+    const outcome = await signInWithClaims({
+      email: "ada@operon.local",
+      name: "Ada New",
+      image: ADDRESS,
+    });
+
+    expect((outcome as { error?: unknown }).error).toBeFalsy();
+    const after = await userRow(user.id);
+    expect(after?.name).toBe("Ada New");
+    expect(after?.image).toBe(ADDRESS);
+  });
+
+  it("fails when the Operon email is held by another user, leaving both users and the link unchanged", async () => {
+    const user = await seedUser("ada@operon.local");
+    const other = await seedUser("bea@operon.local");
+    await stageOidcLogin(user, "member", SUB, "Ada New");
+    const before = [await userRow(user.id), await userRow(other.id)];
+
+    await expect(
+      signInWithClaims({
+        email: "bea@operon.local",
+        name: "Ada New",
+        image: ADDRESS,
+      }),
+    ).rejects.toBeDefined();
+
+    expect([await userRow(user.id), await userRow(other.id)]).toEqual(before);
+    const links = await db
+      .select({ userId: schema.accountTable.userId })
+      .from(schema.accountTable)
+      .where(eq(schema.accountTable.accountId, SUB));
+    expect(links).toEqual([{ userId: user.id }]);
   });
 });

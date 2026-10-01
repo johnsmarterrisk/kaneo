@@ -2536,6 +2536,10 @@ export const auth = betterAuth({
           discoveryUrl: process.env.CUSTOM_OAUTH_DISCOVERY_URL || "",
           pkce: process.env.CUSTOM_AUTH_PKCE !== "false",
           mapProfileToUser: mapCustomOAuthProfileToUser,
+          // Operon profile avatars (R11): in Operon mode every sign-in rewrites the user's
+          // name, image (Operon's `picture` claim — its image address) and email from
+          // Operon's claims; a non-Operon Kaneo keeps upstream's create-only behaviour.
+          overrideUserInfo: isOperonOidcOnly,
         },
       ],
     }),

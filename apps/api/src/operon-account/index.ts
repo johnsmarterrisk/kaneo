@@ -497,12 +497,14 @@ operonAccount.post("/user", async (c) => {
     email?: unknown;
     name?: unknown;
     role?: unknown;
+    image?: unknown;
   } | null;
 
   const sub = body?.sub;
   const email = body?.email;
   const name = body?.name;
   const role = body?.role;
+  const image = body?.image;
 
   if (typeof sub !== "string" || !PUBKEY.test(sub)) {
     throw new HTTPException(400, {
@@ -517,6 +519,18 @@ operonAccount.post("/user", async (c) => {
   }
   if (role !== "admin" && role !== "member") {
     throw new HTTPException(400, { message: "role must be admin or member" });
+  }
+  // Operon profile avatars (R10): optional `image`, Operon's image address for this `sub`.
+  // Absent is fine; anything present must be an http(s) URL of at most 2048 characters.
+  if (
+    image !== undefined &&
+    (typeof image !== "string" ||
+      image.length > 2048 ||
+      !/^https?:\/\/\S+$/.test(image))
+  ) {
+    throw new HTTPException(400, {
+      message: "image must be an http(s) URL of at most 2048 characters",
+    });
   }
 
   const workspaceId = await workspaceIdForHolder(holderId);
@@ -536,6 +550,7 @@ operonAccount.post("/user", async (c) => {
         .values({
           name: name.trim(),
           email: email.trim(),
+          image: image ?? null,
           // Decision 110 — see the header: an unverified email makes the first OIDC
           // sign-in either refuse the link or mint a second user.
           emailVerified: true,
