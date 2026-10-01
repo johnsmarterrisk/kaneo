@@ -434,6 +434,46 @@ describe("one call makes a provisioned person assignable", () => {
   });
 });
 
+describe("the optional image is Operon's avatar address (profile avatars R10)", () => {
+  const ADDRESS = `https://api.operon.test/identity/avatar/${SUB_A}`;
+
+  async function imageOf(kaneoUserId: string) {
+    const [user] = await db
+      .select({ image: schema.userTable.image })
+      .from(schema.userTable)
+      .where(eq(schema.userTable.id, kaneoUserId));
+    return user?.image;
+  }
+
+  it("stores a valid image on the new user", async () => {
+    const response = await provision(personBody({ image: ADDRESS }));
+    expect(response.status).toBe(200);
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+    expect(await imageOf(kaneoUserId)).toBe(ADDRESS);
+  });
+
+  it("stores null when no image is sent", async () => {
+    const response = await provision(personBody());
+    const { kaneoUserId } = (await response.json()) as { kaneoUserId: string };
+    expect(await imageOf(kaneoUserId)).toBeNull();
+  });
+
+  it.each([
+    ["not a string", 42],
+    ["null", null],
+    ["not an http(s) URL", "javascript:alert(1)"],
+    ["carrying whitespace", "https://api.operon.test/a b"],
+    ["over 2048 characters", `https://api.operon.test/${"a".repeat(2048)}`],
+  ])(
+    "answers 400 for an image %s and creates nothing",
+    async (_label, image) => {
+      const response = await provision(personBody({ image }));
+      expect(response.status).toBe(400);
+      expect(await usersWithEmail("provisioned@operon.local")).toHaveLength(0);
+    },
+  );
+});
+
 describe("the credential has to be the Operon service key", () => {
   it("refuses a caller presenting no key at all", async () => {
     const response = await provision(personBody(), {});
