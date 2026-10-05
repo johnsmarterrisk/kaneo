@@ -1,3 +1,4 @@
+import type { Member } from "better-auth/plugins/organization";
 import { authClient } from "@/lib/auth-client";
 
 export type GetActiveWorkspaceUsersRequest = {
@@ -12,16 +13,21 @@ export type GetActiveWorkspaceUsersRequest = {
 // honours `limit`, `offset` and `sortBy` here and applies no maximum page size.
 export const WORKSPACE_MEMBERS_PAGE_SIZE = 200;
 
-type MembersPage = NonNullable<
-  Awaited<ReturnType<typeof authClient.organization.listMembers>>["data"]
->;
+// Better Auth's client currently infers this endpoint as `any`; keep the returned
+// page typed so the member hooks and their UI callers retain checked member fields.
+type MembersPage = {
+  members: (Member & {
+    user: { id: string; name: string; email: string; image?: string | null };
+  })[];
+  total: number;
+};
 
 async function getActiveWorkspaceUsers({
   workspaceId,
 }: GetActiveWorkspaceUsersRequest): Promise<MembersPage> {
   const members: MembersPage["members"] = [];
   const seen = new Set<string>();
-  let total = 0;
+  let total: number | undefined;
 
   for (let offset = 0; ; offset += WORKSPACE_MEMBERS_PAGE_SIZE) {
     const { data, error } = await authClient.organization.listMembers({
@@ -39,23 +45,35 @@ async function getActiveWorkspaceUsers({
       throw new Error(error?.message || "Failed to fetch workspace users");
     }
 
-    let added = 0;
-    for (const member of data.members) {
-      if (seen.has(member.id)) continue;
-      seen.add(member.id);
-      members.push(member);
-      added += 1;
+    // A page or count that changes under offset paging cannot prove a complete list.
+    // Fail the query so its callers never receive a silently incomplete result.
+    if (
+      !Array.isArray(data.members) ||
+      !Number.isSafeInteger(data.total) ||
+      data.total < 0 ||
+      data.members.length > WORKSPACE_MEMBERS_PAGE_SIZE ||
+      (total !== undefined && data.total !== total)
+    ) {
+      throw new Error("Workspace member paging returned an inconsistent page");
     }
     total = data.total;
-
-    if (data.members.length < WORKSPACE_MEMBERS_PAGE_SIZE) break;
-    // A full page of rows already seen means the server ignored the offset; stop loudly
-    // rather than loop forever or hand back a list that only looks complete.
-    if (added === 0) {
-      throw new Error("Workspace member paging did not advance");
+    for (const member of data.members) {
+      if (seen.has(member.id)) {
+        throw new Error("Workspace member paging repeated a member");
+      }
+      seen.add(member.id);
+      members.push(member);
     }
+
+    if (members.length > total) {
+      throw new Error("Workspace member paging exceeded the reported total");
+    }
+    if (data.members.length < WORKSPACE_MEMBERS_PAGE_SIZE) break;
   }
 
+  if (members.length !== total) {
+    throw new Error("Workspace member paging ended before the reported total");
+  }
   return { members, total };
 }
 

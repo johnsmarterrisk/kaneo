@@ -96,6 +96,20 @@ describe("getActiveWorkspaceUsers pages to a complete list", () => {
     expect(listMembers).toHaveBeenCalledTimes(2);
   });
 
+  it("answers an empty workspace in one request", async () => {
+    serve(0);
+    const result = await getActiveWorkspaceUsers({ workspaceId: "ws" });
+    expect(result).toEqual({ members: [], total: 0 });
+    expect(listMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers one member in one request", async () => {
+    serve(1);
+    const result = await getActiveWorkspaceUsers({ workspaceId: "ws" });
+    expect(result.members.map((entry) => entry.id)).toEqual([member(0).id]);
+    expect(listMembers).toHaveBeenCalledTimes(1);
+  });
+
   it("answers a small workspace in one request", async () => {
     serve(3);
     const result = await getActiveWorkspaceUsers({ workspaceId: "ws" });
@@ -120,7 +134,61 @@ describe("getActiveWorkspaceUsers pages to a complete list", () => {
     });
     await expect(
       getActiveWorkspaceUsers({ workspaceId: "ws" }),
-    ).rejects.toThrow("did not advance");
+    ).rejects.toThrow("repeated a member");
+  });
+
+  it("fails when a short page omits members reported by the server", async () => {
+    listMembers.mockResolvedValue({
+      data: { members: [member(0)], total: 2 },
+      error: null,
+    });
+    await expect(
+      getActiveWorkspaceUsers({ workspaceId: "ws" }),
+    ).rejects.toThrow("ended before the reported total");
+  });
+
+  it("fails when a later page repeats a member among otherwise new rows", async () => {
+    serve(WORKSPACE_MEMBERS_PAGE_SIZE + 1);
+    const first = Array.from({ length: WORKSPACE_MEMBERS_PAGE_SIZE }, (_, i) =>
+      member(i),
+    );
+    listMembers.mockResolvedValueOnce({
+      data: { members: first, total: WORKSPACE_MEMBERS_PAGE_SIZE + 1 },
+      error: null,
+    });
+    listMembers.mockResolvedValueOnce({
+      data: {
+        members: [member(0), member(WORKSPACE_MEMBERS_PAGE_SIZE)],
+        total: WORKSPACE_MEMBERS_PAGE_SIZE + 1,
+      },
+      error: null,
+    });
+    await expect(
+      getActiveWorkspaceUsers({ workspaceId: "ws" }),
+    ).rejects.toThrow("repeated a member");
+  });
+
+  it("fails when the reported total changes between pages", async () => {
+    serve(WORKSPACE_MEMBERS_PAGE_SIZE + 1);
+    listMembers.mockResolvedValueOnce({
+      data: {
+        members: Array.from({ length: WORKSPACE_MEMBERS_PAGE_SIZE }, (_, i) =>
+          member(i),
+        ),
+        total: WORKSPACE_MEMBERS_PAGE_SIZE + 1,
+      },
+      error: null,
+    });
+    listMembers.mockResolvedValueOnce({
+      data: {
+        members: [member(WORKSPACE_MEMBERS_PAGE_SIZE)],
+        total: WORKSPACE_MEMBERS_PAGE_SIZE + 2,
+      },
+      error: null,
+    });
+    await expect(
+      getActiveWorkspaceUsers({ workspaceId: "ws" }),
+    ).rejects.toThrow("inconsistent page");
   });
 });
 
