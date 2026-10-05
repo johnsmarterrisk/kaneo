@@ -106,14 +106,17 @@ function UserHoverName({
   user: WorkspaceUser | null;
   fallbackName: string;
 }) {
+  // Navy: the drawer and hover card are white panels (bg-popover); text-foreground is the navy ground's white.
   if (!user?.user) {
-    return <span className="font-medium text-foreground">{fallbackName}</span>;
+    return (
+      <span className="font-medium text-card-foreground">{fallbackName}</span>
+    );
   }
 
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
-        <span className="cursor-pointer font-medium text-foreground transition-colors hover:text-primary">
+        <span className="cursor-pointer font-medium text-card-foreground transition-colors hover:text-primary">
           {user.user.name}
         </span>
       </HoverCardTrigger>
@@ -129,7 +132,7 @@ function UserHoverName({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground leading-none">
+            <p className="text-sm font-medium text-card-foreground leading-none">
               {user.user.name}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -480,7 +483,7 @@ function Activity({
         {activityIcon}
       </span>
       <ActorAvatar user={user || null} fallbackName={actorName} />
-      <TimelineContent className="text-sm leading-6 text-foreground">
+      <TimelineContent className="text-sm leading-6 text-card-foreground">
         <UserHoverName user={user || null} fallbackName={actorName} />{" "}
         {renderActivityContent({
           activity,

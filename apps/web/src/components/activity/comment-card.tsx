@@ -121,7 +121,8 @@ export default function CommentCard({
                     {getInitials(user?.name)}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium text-foreground/92 hover:text-foreground transition-colors">
+                {/* Navy: the comment card is a white panel (bg-card); text-foreground is the navy ground's white. */}
+                <span className="text-sm font-medium text-card-foreground/92 hover:text-card-foreground transition-colors">
                   {user?.name}
                 </span>
               </div>
@@ -135,7 +136,7 @@ export default function CommentCard({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground leading-none">
+                  <p className="text-sm font-medium text-card-foreground leading-none">
                     {user?.name}
                   </p>
                   {user?.email && (
