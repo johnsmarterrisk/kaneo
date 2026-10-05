@@ -29,7 +29,8 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
      sign-in is disabled by environment, and the post-login hook reports the new
-     Kaneo user back to Operon.
+     Kaneo user back to Operon, and each Operon agent receives a member-scoped key
+     minted by Operon.
   2. Branding and chrome — the product is called Initiative inside Operon, and
      the sidebar carries Operon's surface switcher (Stream, Telegraph,
      Initiative, Stash, Desk, Settings).

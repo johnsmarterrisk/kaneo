@@ -66,7 +66,7 @@ import { getGithubSsoOAuthCredentials } from "./utils/github-sso-env";
 import { isCloud } from "./utils/is-cloud";
 import { isDisposableEmail } from "./utils/is-disposable-email";
 import { isLocalSignInPath } from "./utils/is-local-sign-in-path";
-import { apiKeyEnabledCondition, verifyApiKey } from "./utils/verify-api-key";
+import { apiKeyEnabledCondition } from "./utils/verify-api-key";
 import { verifyTurnstile } from "./utils/verify-turnstile";
 
 config();
@@ -803,6 +803,47 @@ async function mintOperonApiKey(userId: string): Promise<string | null> {
 }
 
 /**
+ * An Operon agent's own Initiative key (Operon agent-initiative spec D3, D4, D5, D6).
+ *
+ * The ceiling is the WHOLE reviewed Operon member payload, so it never refuses what a
+ * member may do, and if the agent's role were ever raised here it still stops at member.
+ * The marker is metadata for the same reason the service key's is: only this
+ * server-side mint can write it. The prefix lets secret scanners find a leaked key; it is
+ * never an authorization (`classifyOperonKey` reads the row's marker).
+ */
+export const OPERON_AGENT_KEY_PREFIX = "operon_agt_";
+export const OPERON_AGENT_KEY_METADATA = { operonAgent: true } as const;
+export const OPERON_AGENT_KEY_PERMISSIONS: Record<string, string[]> =
+  operonMemberPayload;
+export const OPERON_AGENT_KEY_TTL_S = 7 * 24 * 60 * 60;
+
+export async function mintOperonAgentApiKey(
+  userId: string,
+): Promise<{ key: string; id: string; expiresAt: Date | null } | null> {
+  const created = await auth.api.createApiKey({
+    body: {
+      userId,
+      name: "operon-agent",
+      prefix: OPERON_AGENT_KEY_PREFIX,
+      expiresIn: OPERON_AGENT_KEY_TTL_S,
+      permissions: { ...OPERON_AGENT_KEY_PERMISSIONS },
+      metadata: { ...OPERON_AGENT_KEY_METADATA },
+      // Set on the row explicitly (D6): the plugin's unconfigured default is 10 per day,
+      // which would break `whoami`. It meters only `/api/auth/*`.
+      rateLimitEnabled: true,
+      rateLimitTimeWindow: 60 * 1000,
+      rateLimitMax: 100,
+    },
+  });
+  if (!created?.key || !created.id) return null;
+  return {
+    key: created.key,
+    id: created.id,
+    expiresAt: created.expiresAt ? new Date(created.expiresAt) : null,
+  };
+}
+
+/**
  * Turn off every `operonService`-marked key on this instance.
  *
  * Called immediately before a re-mint, so the instance never carries two credentials that
@@ -1045,7 +1086,7 @@ export function hasOperonServiceMarker(
 }
 
 /** The same question asked of an already-parsed `metadata` value. */
-function metadataHasOperonServiceMarker(value: unknown): boolean {
+export function metadataHasOperonServiceMarker(value: unknown): boolean {
   // The plugin's historical double-stringified shape: a JSON string INSIDE the column.
   if (typeof value === "string") return hasOperonServiceMarker(value);
   return (
@@ -1054,43 +1095,6 @@ function metadataHasOperonServiceMarker(value: unknown): boolean {
     !Array.isArray(value) &&
     (value as Record<string, unknown>).operonService === true
   );
-}
-
-/**
- * Is the credential presented on this request the Operon service key?
- *
- * The question the `/api/auth/*` guard in `index.ts` asks, and it has to be asked of the
- * ROW rather than of the string: the prefix is a routing marker anyone can type, while
- * `{ operonService: true }` in `metadata` can only have been written by a server-side
- * mint. A prefixed string that does not verify is simply not a key and is left to Better
- * Auth to refuse as one.
- *
- * Both spellings are checked because `index.ts`'s existing `/auth/*` handler REWRITES a
- * `Authorization: Bearer <key>` into `x-api-key` before calling `auth.handler` — a guard
- * that only read `x-api-key` would be walked around by sending the same key as a bearer.
- */
-export async function requestCarriesOperonServiceKey(
-  headers: Headers,
-): Promise<boolean> {
-  const candidates = [
-    headers.get("x-api-key")?.trim(),
-    headers
-      .get("authorization")
-      ?.match(/^Bearer\s+(\S+)$/i)?.[1]
-      ?.trim(),
-  ].filter((value): value is string => !!value);
-
-  for (const candidate of candidates) {
-    const verified = await verifyApiKey(candidate).catch(() => null);
-    if (
-      verified?.valid &&
-      metadataHasOperonServiceMarker(verified.key?.metadata)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 /**
@@ -1175,6 +1179,26 @@ function operonNeedsServiceKey(ack: OperonCallbackAck): boolean {
   return ack.serviceKeyOnFile === false;
 }
 
+/**
+ * The fork's signed channel to Operon's platform (decision 48): the in-network base URL and
+ * the hex HMAC-SHA256 of a raw body under `OPERON_KANEO_S2S_SECRET`, or `null` when either
+ * is unset. Shared by {@link postOperonKaneoUser} and the agent liveness check
+ * (`operon-agent-liveness.ts`, agent-initiative D20) so there is one signing scheme. Read at
+ * call time, never cached.
+ */
+export function operonS2SChannel(): {
+  base: string;
+  sign: (body: string) => string;
+} | null {
+  const base = (process.env.OPERON_INTERNAL_API_URL || "").replace(/\/+$/, "");
+  const secret = process.env.OPERON_KANEO_S2S_SECRET || "";
+  if (!base || !secret) return null;
+  return {
+    base,
+    sign: (body) => createHmac("sha256", secret).update(body).digest("hex"),
+  };
+}
+
 async function postOperonKaneoUser(payload: {
   sub: string;
   kaneoUserId: string;
@@ -1190,9 +1214,8 @@ async function postOperonKaneoUser(payload: {
    */
   enabledServiceKeyIds?: string[];
 }): Promise<OperonCallbackAck> {
-  const base = (process.env.OPERON_INTERNAL_API_URL || "").replace(/\/+$/, "");
-  const secret = process.env.OPERON_KANEO_S2S_SECRET || "";
-  if (!base || !secret) {
+  const channel = operonS2SChannel();
+  if (!channel) {
     console.warn(
       "[operon] OPERON_INTERNAL_API_URL or OPERON_KANEO_S2S_SECRET is unset; kaneo_user_id was not reported",
     );
@@ -1215,13 +1238,11 @@ async function postOperonKaneoUser(payload: {
   const timeoutId = setTimeout(() => controller.abort(), OPERON_S2S_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${base}/internal/kaneo/user`, {
+    const response = await fetch(`${channel.base}/internal/kaneo/user`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Operon-Signature": createHmac("sha256", secret)
-          .update(body)
-          .digest("hex"),
+        "X-Operon-Signature": channel.sign(body),
       },
       body,
       signal: controller.signal,

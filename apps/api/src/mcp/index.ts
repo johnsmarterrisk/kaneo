@@ -9,6 +9,11 @@ import { Hono } from "hono";
 import { auth } from "../auth";
 import { apiRouter, createRoute, jsonResponse } from "../openapi";
 import {
+  assertOperonAgentAlive,
+  classifyOperonKey,
+  classifyOperonRequestKeys,
+} from "../operon-agent-liveness";
+import {
   beginMcpAuthorization,
   decideMcpAuthorizationRequest,
   getMcpAuthorizationRequest,
@@ -61,6 +66,21 @@ async function validateBearerToken(
   const match = authHeader.match(/^Bearer\s+(\S+)$/i);
   if (!match?.[1]) return null;
   const token = match[1];
+
+  // Operon agent-initiative D13: an Operon agent key is admitted only while Operon vouches
+  // for the agent (D20), on every request, including on an existing MCP session. The tools
+  // then call the REST API with the same Bearer, so the key's member ceiling applies.
+  // Any other key, and a dead agent key, keeps the 401 and challenge below.
+  const operonKey = await classifyOperonKey(token);
+  if (operonKey?.kind === "agent") {
+    const alive = await assertOperonAgentAlive(
+      operonKey.key.userId,
+      operonKey.key.id,
+    )
+      .then(() => true)
+      .catch(() => false);
+    return alive ? { userId: operonKey.key.userId, token } : null;
+  }
 
   const headers = new Headers();
   headers.set("authorization", `Bearer ${token}`);
@@ -176,6 +196,17 @@ mcp
     ),
   )
   .openapi(decideAuthorizationRequestRoute, async (c) => {
+    // Operon agent-initiative D13: an agent key, live or not, in either header, never
+    // approves consent. A code would become a 30-day session that the liveness check never
+    // sees, and a trusted Origin is no proof of a human: a key holder can send one. Not
+    // gated on Operon mode: only an Operon instance mints agent keys.
+    if (
+      (await classifyOperonRequestKeys(c.req.raw.headers)).some(
+        (candidate) => candidate.kind === "agent",
+      )
+    ) {
+      return c.json({ error: "agent_key_cannot_authorize" }, 403);
+    }
     const redirect = await decideMcpAuthorizationRequest({
       requestId: c.req.valid("param").requestId,
       decision: c.req.valid("json"),

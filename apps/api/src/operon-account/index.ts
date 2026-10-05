@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
-import { Hono } from "hono";
+import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
+import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
+  mintOperonAgentApiKey,
   OPERON_ACCOUNT_RECOVERY_ATTEMPTS,
   OPERON_ACCOUNT_RECOVERY_DELAY_MS,
   OPERON_PROVIDER_ID,
@@ -962,6 +963,146 @@ operonAccount.post("/remove-member", async (c) => {
     { kaneoUserId, removed, sessionsRevoked, tasksUnassigned },
     200,
   );
+});
+
+/**
+ * Operon fork routes — an Operon agent's own Initiative key (Operon agent-initiative spec
+ * D3, D11). Same guard as `remove-member`: the Operon service key only, Operon-managed
+ * users only, never the holder. Mint refuses anyone whose workspace role is not exactly
+ * `member` and any instance admin, so an agent key never does more than a member. Revoke
+ * disables every enabled key of the user, idempotently, and removes nothing else.
+ */
+async function requireServiceKeyAndAgentUser(
+  c: Context<{ Variables: BaseVariables }>,
+  action: "mint" | "revoke",
+) {
+  const contextKey = c.get("apiKey") as ContextApiKey;
+  if (!contextKey?.id) {
+    throw new HTTPException(403, {
+      message: "This route requires an API key, not a user session",
+    });
+  }
+  const holderId = await resolveOperonServiceKeyHolder(contextKey.id);
+  if (!holderId) {
+    throw new HTTPException(403, {
+      message: "This route requires the Operon service key",
+    });
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    kaneoUserId?: unknown;
+  } | null;
+  const kaneoUserId = body?.kaneoUserId;
+  if (typeof kaneoUserId !== "string" || kaneoUserId.trim() === "") {
+    throw new HTTPException(400, { message: "kaneoUserId is required" });
+  }
+
+  const refuse = (status: 404 | 409, reason: string, message: string) => {
+    console.warn(
+      `[operon] operon.agent_key_refused: kaneo user ${kaneoUserId} key ${contextKey.id} action ${action} reason ${reason}`,
+    );
+    return new HTTPException(status, { message });
+  };
+  if (kaneoUserId === holderId) {
+    throw refuse(
+      409,
+      "holder",
+      "The Operon service key's holder cannot hold an agent key",
+    );
+  }
+  // `remove-member`'s proof that Operon provisioned this person: the `custom` account row.
+  const [operonAccountRow] = await db
+    .select({ id: accountTable.id })
+    .from(accountTable)
+    .where(
+      and(
+        eq(accountTable.userId, kaneoUserId),
+        eq(accountTable.providerId, OPERON_PROVIDER_ID),
+      ),
+    )
+    .limit(1);
+  if (!operonAccountRow) {
+    throw refuse(404, "not_operon_managed", "Not an Operon-managed user");
+  }
+  return { holderId, kaneoUserId, refuse };
+}
+
+operonAccount.post("/agent-key", async (c) => {
+  const { holderId, kaneoUserId, refuse } = await requireServiceKeyAndAgentUser(
+    c,
+    "mint",
+  );
+  const workspaceId = await workspaceIdForHolder(holderId);
+  if (!workspaceId) {
+    throw new HTTPException(409, {
+      message: "No workspace exists for the Operon service key's holder yet",
+    });
+  }
+  const [member] = await db
+    .select({ role: workspaceUserTable.role, userRole: userTable.role })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        eq(workspaceUserTable.userId, kaneoUserId),
+      ),
+    )
+    .limit(1);
+  if (!member) {
+    throw refuse(404, "no_membership", "Not a member of the Operon workspace");
+  }
+  // The ceiling caps permissions, not access: an instance admin passes workspace access
+  // checks without a membership (see `remove-member`), so only a plain member gets a key.
+  if (member.role !== "member" || member.userRole === "admin") {
+    throw refuse(
+      409,
+      "not_plain_member",
+      "An agent key is minted only for a plain member",
+    );
+  }
+
+  const minted = await mintOperonAgentApiKey(kaneoUserId);
+  if (!minted) {
+    throw new HTTPException(500, { message: "The agent key was not minted" });
+  }
+  console.log(
+    `[operon] operon.agent_key_minted: kaneo user ${kaneoUserId} key ${minted.id}`,
+  );
+  // The answer carries the key itself: never cached anywhere on the way back.
+  c.header("Cache-Control", "no-store");
+  return c.json(
+    {
+      kaneoUserId,
+      key: minted.key,
+      keyId: minted.id,
+      expiresAt: minted.expiresAt,
+    },
+    200,
+  );
+});
+
+operonAccount.post("/agent-key/revoke", async (c) => {
+  const { kaneoUserId } = await requireServiceKeyAndAgentUser(c, "revoke");
+  const revoked = await db
+    .update(apikeyTable)
+    .set({ enabled: false })
+    .where(
+      and(
+        or(
+          eq(apikeyTable.referenceId, kaneoUserId),
+          eq(apikeyTable.userId, kaneoUserId),
+        ),
+        eq(apikeyTable.enabled, true),
+      ),
+    )
+    .returning({ id: apikeyTable.id });
+  for (const row of revoked) {
+    console.log(
+      `[operon] operon.agent_key_revoked: kaneo user ${kaneoUserId} key ${row.id}`,
+    );
+  }
+  return c.json({ kaneoUserId, revoked: revoked.length }, 200);
 });
 
 export default operonAccount;

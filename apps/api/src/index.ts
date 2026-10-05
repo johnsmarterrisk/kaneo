@@ -2,6 +2,7 @@ import "./instrument";
 
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { API_KEY_ERROR_CODES } from "@better-auth/api-key";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { OpenAPIHono } from "@hono/zod-openapi";
@@ -18,7 +19,6 @@ import {
   auth,
   ensureOperonServiceKeyCeiling,
   isOperonOidcOnlyInstance,
-  requestCarriesOperonServiceKey,
 } from "./auth";
 import { organizationRoutes } from "./auth-openapi";
 import billing from "./billing";
@@ -47,6 +47,10 @@ import notificationPreferences from "./notification-preferences";
 import oauth from "./oauth";
 import { createRoute, jsonResponse, z } from "./openapi";
 import operonAccount from "./operon-account";
+import {
+  assertOperonAgentAlive,
+  classifyOperonRequestKeys,
+} from "./operon-agent-liveness";
 import operonMaintenanceState from "./operon-maintenance-state";
 import { initOperonProjectCreatedDelivery } from "./operon-project-created";
 import { initializePlugins } from "./plugins";
@@ -122,6 +126,26 @@ const SAFE_INLINE_ASSET_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+
+/**
+ * A Bearer that is not a Better Auth session is handed to the api-key plugin as
+ * `x-api-key`, which is the only header the plugin reads. Extracted from the `/auth/*`
+ * catch-all so `/auth/get-session` shares it (Operon agent-initiative D8).
+ */
+async function authRequestWithBearerAsApiKey(req: Request): Promise<Request> {
+  const bearerToken = req.headers
+    .get("Authorization")
+    ?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  if (!bearerToken || req.headers.get("x-api-key")) return req;
+
+  // Preserve Better Auth bearer session tokens on auth routes.
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (session?.session && session.user) return req;
+
+  const headers = new Headers(req.headers);
+  headers.set("x-api-key", bearerToken);
+  return new Request(req, { headers });
+}
 
 function buildContentDisposition(filename: string, inline: boolean) {
   const normalized = filename
@@ -233,10 +257,9 @@ export function createApp() {
   // itself loses nothing: `kaneoApiFetch` only ever calls Kaneo's own `/api/*` routes,
   // which authenticate through `authenticateApiRequest`, never through Better Auth.
   api.use("/auth/*", async (c, next) => {
-    if (
-      isOperonOidcOnlyInstance &&
-      (await requestCarriesOperonServiceKey(c.req.raw.headers))
-    ) {
+    if (!isOperonOidcOnlyInstance) return next();
+    const presented = await classifyOperonRequestKeys(c.req.raw.headers);
+    if (presented.some((candidate) => candidate.kind === "service")) {
       return c.json(
         {
           error:
@@ -245,7 +268,72 @@ export function createApp() {
         403,
       );
     }
-    return next();
+    const agents = presented.filter((candidate) => candidate.kind === "agent");
+    const [first] = agents;
+    if (!first) return next();
+
+    // ── Operon agent keys: two exact reads, liveness-checked (agent-initiative D7, D8, D20)
+    //
+    // An exact allowlist (method and path, no prefix match), so an auth path upstream adds
+    // later is refused too: an agent never logs in, so a self-rename would never be
+    // repaired, and the key must not reach delete-user, device approval or api-key/*.
+    const read = `${c.req.method} ${c.req.path}`;
+    if (
+      read !== "GET /api/auth/get-session" &&
+      read !== "GET /api/auth/organization/list"
+    ) {
+      return c.json(
+        {
+          error:
+            "An Operon agent key may only read its own session and workspaces.",
+        },
+        403,
+      );
+    }
+    // A refusal is exactly the answer a disabled key gets on these two reads, so nothing
+    // says which check failed, and Better Auth never sees the still-enabled key. Two agent
+    // keys for different users are refused, never checked as one and answered as the other.
+    const refuse = () =>
+      c.json(
+        {
+          message: API_KEY_ERROR_CODES.KEY_DISABLED.message,
+          code: API_KEY_ERROR_CODES.KEY_DISABLED.code,
+        },
+        401,
+      );
+    if (new Set(agents.map((agent) => agent.key.userId)).size > 1) {
+      return refuse();
+    }
+    for (const agent of agents) {
+      const alive = await assertOperonAgentAlive(agent.key.userId, agent.key.id)
+        .then(() => true)
+        .catch(() => false);
+      if (!alive) return refuse();
+    }
+    // Only the verified agent key reaches Better Auth: no cookie, no competing credential.
+    const headers = new Headers(c.req.raw.headers);
+    headers.delete("cookie");
+    headers.delete("authorization");
+    headers.set("x-api-key", first.value);
+    if (read === "GET /api/auth/organization/list") {
+      return auth.handler(new Request(c.req.raw, { headers }));
+    }
+    // D8 (whoami): built from the session, never Better Auth's own body, whose
+    // `session.token` IS the key (api-key plugin session hook).
+    const session = await auth.api.getSession({ headers }).catch((error) => {
+      console.warn(
+        `[operon] operon.agent_session_failed: kaneo user ${first.key.userId} key ${first.key.id} ${error instanceof Error ? error.name : "error"}`,
+      );
+      return null;
+    });
+    if (!session?.user) return refuse();
+    return c.json({
+      user: { id: session.user.id, name: session.user.name },
+      session: {
+        userId: session.session.userId,
+        expiresAt: session.session.expiresAt,
+      },
+    });
   });
 
   api.openapi(
@@ -306,7 +394,9 @@ export function createApp() {
         },
       },
     }),
-    async (c) => auth.handler(c.req.raw),
+    // Operon agent-initiative D8: the catch-all's Bearer rewrite applies here too, so a key
+    // sent as Bearer is judged as a key (a dead one gets the same 401 in either header).
+    async (c) => auth.handler(await authRequestWithBearerAsApiKey(c.req.raw)),
   );
 
   api.openapi(
@@ -555,35 +645,9 @@ export function createApp() {
     },
   );
 
-  api.on(["POST", "GET", "PUT", "PATCH", "DELETE"], "/auth/*", async (c) => {
-    const authHeader = c.req.header("Authorization");
-    const apiKeyHeader = c.req.header("x-api-key");
-    const bearerToken = authHeader?.match(/^Bearer\s+(\S+)$/i)?.[1];
-
-    if (bearerToken && !apiKeyHeader) {
-      const session = await auth.api.getSession({
-        headers: c.req.raw.headers,
-      });
-
-      // Preserve Better Auth bearer session tokens on auth routes.
-      if (session?.session && session.user) {
-        return auth.handler(c.req.raw);
-      }
-
-      const headers = new Headers(c.req.raw.headers);
-
-      // Better Auth API key plugin validates from x-api-key by default.
-      headers.set("x-api-key", bearerToken);
-
-      return auth.handler(
-        new Request(c.req.raw, {
-          headers,
-        }),
-      );
-    }
-
-    return auth.handler(c.req.raw);
-  });
+  api.on(["POST", "GET", "PUT", "PATCH", "DELETE"], "/auth/*", async (c) =>
+    auth.handler(await authRequestWithBearerAsApiKey(c.req.raw)),
+  );
 
   api.route("/", mcpRoutes);
 
@@ -712,7 +776,11 @@ export function createApp() {
     "/ws/user",
     upgradeWebSocket(async (c) => {
       try {
-        await authenticateApiRequest(c);
+        // Operon agent-initiative D20: no tool opens a socket, and a socket authenticated
+        // once would outlive a disable, so an agent key is refused here.
+        if ((await authenticateApiRequest(c)).operonAgent) {
+          throw new HTTPException(401, { message: "Unauthorized" });
+        }
       } catch (error) {
         if (error instanceof HTTPException) {
           throw error;
@@ -763,7 +831,10 @@ export function createApp() {
       const projectId = c.req.param("projectId");
 
       try {
-        await authenticateApiRequest(c);
+        // Operon agent-initiative D20, as on `/ws/user` above.
+        if ((await authenticateApiRequest(c)).operonAgent) {
+          throw new HTTPException(401, { message: "Unauthorized" });
+        }
       } catch (error) {
         if (error instanceof HTTPException) {
           throw error;
