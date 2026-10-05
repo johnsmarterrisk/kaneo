@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import {
   afterAll,
   afterEach,
@@ -481,6 +481,117 @@ describe("every failure refuses exactly as a revoked key is refused", () => {
       `[operon] operon.agent_key_not_alive: kaneo user ${agentId} key ${keyId} reason not_active`,
     );
     expect(lines.some((line) => line.includes(key))).toBe(false);
+  });
+});
+
+describe("the plain-member test is re-applied on every use (D3 at use time)", () => {
+  async function setWorkspaceRole(role: string) {
+    await db
+      .update(schema.workspaceUserTable)
+      .set({ role })
+      .where(eq(schema.workspaceUserTable.userId, agentId));
+  }
+
+  const raises: [string, string, () => Promise<unknown>][] = [
+    [
+      "a workspace role raised to admin",
+      "not_plain_member",
+      () => setWorkspaceRole("admin"),
+    ],
+    [
+      "a workspace role raised to owner",
+      "not_plain_member",
+      () => setWorkspaceRole("owner"),
+    ],
+    [
+      "an instance admin flag",
+      "not_plain_member",
+      () =>
+        db
+          .update(schema.userTable)
+          .set({ role: "admin" })
+          .where(eq(schema.userTable.id, agentId)),
+    ],
+    [
+      "a membership removed",
+      "no_membership",
+      () =>
+        db
+          .delete(schema.workspaceUserTable)
+          .where(eq(schema.workspaceUserTable.userId, agentId)),
+    ],
+  ];
+
+  for (const [label, reason, raise] of raises) {
+    it(`refuses an existing key after ${label}, exactly as a revoked key`, async () => {
+      const expected = await revokedAnswers();
+      const { key, keyId } = await mintAgentKey();
+      await raise();
+      for (const probe of probes()) {
+        const answer = await snapshot(await probe.send(key));
+        expect([probe.name, answer]).toEqual([
+          probe.name,
+          expected.get(probe.name),
+        ]);
+      }
+      const lines = warn.mock.calls.map((call) => call.map(String).join(" "));
+      expect(lines).toContain(
+        `[operon] operon.agent_key_not_alive: kaneo user ${agentId} key ${keyId} reason ${reason}`,
+      );
+      expect(lines.some((line) => line.includes(key))).toBe(false);
+    });
+  }
+
+  it("still serves the key once the role is a plain member again", async () => {
+    const { key } = await mintAgentKey();
+    await setWorkspaceRole("admin");
+    const refused = await app.request(
+      `/api/project?workspaceId=${holder.workspace.id}`,
+      { headers: { authorization: `Bearer ${key}` } },
+    );
+    expect(refused.status).toBe(401);
+    await setWorkspaceRole("member");
+    const served = await app.request(
+      `/api/project?workspaceId=${holder.workspace.id}`,
+      { headers: { authorization: `Bearer ${key}` } },
+    );
+    expect(served.status).toBe(200);
+  });
+
+  it("refuses when no single Operon workspace can be resolved (fail closed)", async () => {
+    const { key } = await mintAgentKey();
+    await db
+      .update(schema.apikeyTable)
+      .set({ enabled: false })
+      .where(like(schema.apikeyTable.metadata, "%operonService%"));
+    const response = await app.request(
+      `/api/project?workspaceId=${holder.workspace.id}`,
+      { headers: { authorization: `Bearer ${key}` } },
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("never applies to a human workspace owner or the service key", async () => {
+    // The holder is the workspace OWNER: a role the agent test refuses.
+    const human = await humanSession(holder.user.id);
+    for (const headers of [
+      { cookie: human.cookie },
+      { authorization: human.bearer },
+      { "x-api-key": serviceKey },
+    ]) {
+      const response = await app.request(
+        `/api/project?workspaceId=${holder.workspace.id}`,
+        { headers },
+      );
+      expect([Object.keys(headers)[0], response.status]).toEqual([
+        Object.keys(headers)[0],
+        200,
+      ]);
+    }
+    const lines = warn.mock.calls.map((call) => call.map(String).join(" "));
+    expect(lines.some((line) => line.includes("agent_key_not_alive"))).toBe(
+      false,
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -26,6 +26,10 @@ import {
 } from "../database/schema";
 import { publishEvent } from "../events";
 import type { BaseVariables } from "../openapi";
+import {
+  operonPlainMemberRefusal,
+  workspaceIdForHolder,
+} from "../operon-agent-liveness";
 
 /**
  * Operon fork route — re-key a custom-provider account (Operon spec R33, decision 43).
@@ -394,24 +398,6 @@ function isEmailViolation(failure: PostgresFailure): boolean {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * The workspace the service key's holder belongs to.
- *
- * The holder is the workspace OWNER the bootstrap minted under, and Operon runs exactly
- * one workspace (decision 49) — so "the holder's workspace" is both the right answer and
- * a self-authorizing one: this route can only ever add somebody to a workspace the
- * credential presenting the request is already in.
- */
-async function workspaceIdForHolder(holderId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ workspaceId: workspaceUserTable.workspaceId })
-    .from(workspaceUserTable)
-    .where(eq(workspaceUserTable.userId, holderId))
-    .orderBy(asc(workspaceUserTable.joinedAt))
-    .limit(1);
-  return row?.workspaceId ?? null;
 }
 
 /** The Kaneo user carrying this Operon subject, if any. */
@@ -1038,23 +1024,13 @@ operonAccount.post("/agent-key", async (c) => {
       message: "No workspace exists for the Operon service key's holder yet",
     });
   }
-  const [member] = await db
-    .select({ role: workspaceUserTable.role, userRole: userTable.role })
-    .from(workspaceUserTable)
-    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
-    .where(
-      and(
-        eq(workspaceUserTable.workspaceId, workspaceId),
-        eq(workspaceUserTable.userId, kaneoUserId),
-      ),
-    )
-    .limit(1);
-  if (!member) {
+  // The plain-member test, shared with every USE of an agent key (D3; the liveness
+  // helper re-applies it on each request, so a later role change cannot outrun it).
+  const refusal = await operonPlainMemberRefusal(workspaceId, kaneoUserId);
+  if (refusal === "no_membership") {
     throw refuse(404, "no_membership", "Not a member of the Operon workspace");
   }
-  // The ceiling caps permissions, not access: an instance admin passes workspace access
-  // checks without a membership (see `remove-member`), so only a plain member gets a key.
-  if (member.role !== "member" || member.userRole === "admin") {
+  if (refusal === "not_plain_member") {
     throw refuse(
       409,
       "not_plain_member",

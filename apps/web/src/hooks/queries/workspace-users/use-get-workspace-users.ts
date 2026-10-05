@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { authClient } from "@/lib/auth-client";
+import getActiveWorkspaceUsers from "@/fetchers/workspace-user/get-active-workspace-users";
 
 type GetWorkspaceUsersRequest = {
   workspaceId?: string;
@@ -35,19 +35,11 @@ function useGetWorkspaceUsers({
       filterValue,
     ],
     enabled: !!workspaceId,
-    queryFn: async () => {
-      const { data, error } = await authClient.organization.listMembers({
-        query: {
-          organizationId: workspaceId,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || "Failed to get workspace users");
-      }
-
-      return data.members;
-    },
+    // Operon fork: the shared, paged fetch, so an actor past the first page is found
+    // (see `get-active-workspace-users.ts`). The paging arguments were never forwarded.
+    queryFn: async () =>
+      (await getActiveWorkspaceUsers({ workspaceId: workspaceId ?? "" }))
+        .members,
   });
 }
 
