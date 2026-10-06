@@ -51,6 +51,7 @@ import {
   assertOperonAgentAlive,
   classifyOperonRequestKeys,
 } from "./operon-agent-liveness";
+import operonGroups from "./operon-groups";
 import operonMaintenanceState from "./operon-maintenance-state";
 import { initOperonProjectCreatedDelivery } from "./operon-project-created";
 import { initializePlugins } from "./plugins";
@@ -750,6 +751,11 @@ export function createApp() {
   const workflowRuleApi = api.route("/workflow-rule", workflowRule);
   const invitationApi = api.route("/invitation", invitation);
   const workspaceApi = api.route("/workspace", workspace);
+  // Operon fork addition (Operon group-mentions spec D10, fork-discipline row 15): the
+  // editor's group items. After api.use("*") so a signed-out caller is 401; the handler
+  // answers a browser session with a real Operon-workspace membership only. A bare
+  // api.route, as /telegraph-integration, so it adds nothing to the RPC AppType union.
+  api.route("/operon", operonGroups);
   const userApi = api.route("/user", user);
 
   // Operon fork addition (Operon spec R33, decision 43): a server-to-server hook that

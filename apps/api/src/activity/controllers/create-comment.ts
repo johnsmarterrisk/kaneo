@@ -9,6 +9,7 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
+import { expandGroupMentionIds } from "../../operon-groups";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
 async function createComment(
@@ -64,7 +65,15 @@ async function createComment(
   }
 
   // Notify any workspace members @mentioned in the comment (not the author).
-  const mentionedIds = parseMentionIds(content).filter((id) => id !== userId);
+  // Operon fork (group mentions D11): a `group:<slug>` id is expanded through Operon
+  // into the task workspace's members first, so the author is removed after expansion
+  // and the assignee rule below sees everyone the group reached.
+  const mentionedIds = (
+    await expandGroupMentionIds(parseMentionIds(content), {
+      askerId: userId,
+      workspaceId: task?.workspaceId ?? null,
+    })
+  ).filter((id) => id !== userId);
   for (const mentionedId of mentionedIds) {
     await createNotification({
       userId: mentionedId,

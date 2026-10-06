@@ -41,7 +41,11 @@ import { EmbedBlock } from "@/components/task/extensions/embed-block";
 import { KaneoIssueLink } from "@/components/task/extensions/kaneo-issue-link";
 import { KaneoMention } from "@/components/task/extensions/kaneo-mention";
 import type { MentionMember } from "@/components/task/extensions/mention-list";
-import { MentionSuggestion } from "@/components/task/extensions/mention-suggestion";
+import {
+  type MentionGroup,
+  MentionSuggestion,
+  operonGroupMentionItems,
+} from "@/components/task/extensions/mention-suggestion";
 import { MermaidBlock } from "@/components/task/extensions/mermaid-block";
 import {
   SHIKI_CODEBLOCK_REFRESH_META,
@@ -59,6 +63,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
+import { useGetOperonGroups } from "@/hooks/queries/operon-groups/use-get-operon-groups";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { cn } from "@/lib/cn";
@@ -204,6 +209,13 @@ export default function CommentEditor({
         image: member.user?.image ?? null,
       })),
     [workspaceUsers],
+  );
+  // Operon fork (group mentions D10): Operon's people groups follow the people.
+  const { data: operonGroups } = useGetOperonGroups(!!activeWorkspace?.id);
+  const mentionGroupsRef = useRef<MentionGroup[]>([]);
+  mentionGroupsRef.current = useMemo(
+    () => operonGroupMentionItems(operonGroups ?? []),
+    [operonGroups],
   );
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -635,6 +647,7 @@ export default function CommentEditor({
         KaneoMention,
         MentionSuggestion.configure({
           getMembers: () => mentionMembersRef.current,
+          getGroups: () => mentionGroupsRef.current,
         }),
         TaskList,
         Image.configure({

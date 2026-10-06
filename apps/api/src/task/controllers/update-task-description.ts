@@ -1,9 +1,13 @@
 import { eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
-import { taskTable, userTable } from "../../database/schema";
+import { projectTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
+import {
+  expandGroupMentionIds,
+  OPERON_GROUP_ID_PREFIX,
+} from "../../operon-groups";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
@@ -54,9 +58,25 @@ async function updateTaskDescription({
   // Notify members newly @mentioned by this edit (skip ones already mentioned
   // in the previous description, and the editor themselves).
   const alreadyMentioned = new Set(parseMentionIds(existingTask.description));
-  const newlyMentioned = parseMentionIds(description).filter(
-    (mentionedId) =>
-      mentionedId !== currentUserId && !alreadyMentioned.has(mentionedId),
+  // Operon fork (group mentions D11): the diff runs on the RAW ids, so a group the
+  // description already named is not new; only newly added `group:<slug>` ids are
+  // expanded (through Operon, into the task workspace's members), then the editor goes.
+  const newRawIds = parseMentionIds(description).filter(
+    (mentionedId) => !alreadyMentioned.has(mentionedId),
+  );
+  let newlyMentioned = newRawIds;
+  if (newRawIds.some((id) => id.startsWith(OPERON_GROUP_ID_PREFIX))) {
+    const [project] = await db
+      .select({ workspaceId: projectTable.workspaceId })
+      .from(projectTable)
+      .where(eq(projectTable.id, updatedTask.projectId));
+    newlyMentioned = await expandGroupMentionIds(newRawIds, {
+      askerId: currentUserId,
+      workspaceId: project?.workspaceId ?? null,
+    });
+  }
+  newlyMentioned = newlyMentioned.filter(
+    (mentionedId) => mentionedId !== currentUserId,
   );
 
   if (newlyMentioned.length > 0) {

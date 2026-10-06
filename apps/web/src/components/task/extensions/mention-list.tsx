@@ -1,3 +1,4 @@
+import { Users } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/get-initials";
@@ -6,7 +7,15 @@ export type MentionMember = {
   id: string;
   label: string;
   image?: string | null;
+  /** Operon fork (group mentions D10): a second line, "group · N people". */
+  secondary?: string;
+  /** Operon fork: the row's hover text, "N of M in this group use Initiative". */
+  title?: string;
 };
+
+/** Operon fork: a people group's item id is `group:<slug>` (fork-discipline row 15). */
+export const isGroupMention = (item: MentionMember) =>
+  item.id.startsWith("group:");
 
 export type MentionListRef = {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -59,14 +68,29 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
             className={`kaneo-mention-item${index === selected ? " is-active" : ""}`}
             onClick={() => select(index)}
             onMouseEnter={() => setSelected(index)}
+            title={item.title}
           >
-            <Avatar className="h-5 w-5">
-              <AvatarImage src={item.image ?? ""} alt={item.label} />
-              <AvatarFallback className="text-[9px] font-medium">
-                {getInitials(item.label)}
-              </AvatarFallback>
-            </Avatar>
+            {isGroupMention(item) ? (
+              <span
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted"
+                data-testid="mention-group-badge"
+              >
+                <Users className="h-3 w-3" aria-hidden="true" />
+              </span>
+            ) : (
+              <Avatar className="h-5 w-5">
+                <AvatarImage src={item.image ?? ""} alt={item.label} />
+                <AvatarFallback className="text-[9px] font-medium">
+                  {getInitials(item.label)}
+                </AvatarFallback>
+              </Avatar>
+            )}
             <span className="truncate">{item.label}</span>
+            {item.secondary ? (
+              <span className="truncate text-xs text-muted-foreground">
+                {item.secondary}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
