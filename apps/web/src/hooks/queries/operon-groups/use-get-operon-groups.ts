@@ -10,7 +10,9 @@ import getOperonGroups from "@/fetchers/operon-groups/get-operon-groups";
 // same-tab account switch never shows the previous account's rows, and it is never kept
 // between editors (`gcTime: 0`) nor trusted as fresh (`staleTime: 0`), so a demotion in
 // Operon (which answers a guest `[]`) is seen the next time an editor opens or the window
-// refocuses. A failed refresh hides the last good list instead of showing it on.
+// refocuses. A failed refresh hides the last good list instead of showing it on, and so
+// does a refresh still in flight (Codex round 2): TanStack keeps the old rows until the
+// request settles, so a demoted person would see them while a refocus read is pending.
 export function useGetOperonGroups(enabled: boolean) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -22,5 +24,8 @@ export function useGetOperonGroups(enabled: boolean) {
     gcTime: 0,
     retry: false,
   });
-  return { ...query, data: query.isError ? undefined : query.data };
+  return {
+    ...query,
+    data: query.isError || query.isFetching ? undefined : query.data,
+  };
 }

@@ -217,6 +217,30 @@ describe("useGetOperonGroups", () => {
     await waitFor(() => expect(result.current.data).toBeUndefined());
   });
 
+  it("a refresh in flight shows no rows until the fresh answer lands", async () => {
+    fresh();
+    auth.user = { id: "user-a" };
+    let release!: (r: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => answer([OPS]))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useGetOperonGroups(true), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual([OPS]));
+    // A refocus read (or any refetch) starts; Operon has demoted this person meanwhile.
+    void result.current.refetch();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.data).toBeUndefined());
+    release(answer([]));
+    await waitFor(() => expect(result.current.data).toEqual([]));
+  });
+
   it("asks nothing while nobody is signed in", async () => {
     fresh();
     const fetchMock = vi.fn(async () => answer([OPS]));
