@@ -66,6 +66,31 @@ export function operonGroupMentionItems(
   }));
 }
 
+/**
+ * Where the popup goes (Operon fork, open-items row 390): below the caret when it fits,
+ * otherwise above it when there is more room there, and never past the window's left or
+ * right edge. Viewport coordinates in, page coordinates out (the popup is body-absolute).
+ */
+export function mentionPopupPosition(
+  caret: { top: number; bottom: number; left: number },
+  popup: { width: number; height: number },
+  view: { width: number; height: number; scrollX: number; scrollY: number },
+): { top: number; left: number } {
+  const gap = 4;
+  const margin = 8;
+  const spaceBelow = view.height - caret.bottom - gap - margin;
+  const spaceAbove = caret.top - gap - margin;
+  const flip = popup.height > spaceBelow && spaceAbove > spaceBelow;
+  const top = flip
+    ? Math.max(margin, caret.top - gap - popup.height)
+    : caret.bottom + gap;
+  const left = Math.max(
+    margin,
+    Math.min(caret.left, view.width - popup.width - margin),
+  );
+  return { top: top + view.scrollY, left: left + view.scrollX };
+}
+
 // Adds an @-triggered autocomplete of workspace members to an editor. On select
 // it inserts a `kaneoMention` node (which round-trips through Markdown). Built on
 // @tiptap/suggestion so it stays self-contained and does not touch the editor's
@@ -109,8 +134,18 @@ export const MentionSuggestion = Extension.create<MentionSuggestionOptions>({
           if (!popup || !clientRect) return;
           const rect = clientRect();
           if (!rect) return;
-          popup.style.top = `${rect.bottom + window.scrollY + 4}px`;
-          popup.style.left = `${rect.left + window.scrollX}px`;
+          const { top, left } = mentionPopupPosition(
+            rect,
+            { width: popup.offsetWidth, height: popup.offsetHeight },
+            {
+              width: document.documentElement.clientWidth,
+              height: window.innerHeight,
+              scrollX: window.scrollX,
+              scrollY: window.scrollY,
+            },
+          );
+          popup.style.top = `${top}px`;
+          popup.style.left = `${left}px`;
         };
 
         return {
@@ -124,10 +159,13 @@ export const MentionSuggestion = Extension.create<MentionSuggestionOptions>({
             popup.appendChild(component.element);
             document.body.appendChild(popup);
             place(props.clientRect);
+            // The list may draw after this call; place again once it has a height.
+            requestAnimationFrame(() => place(props.clientRect));
           },
           onUpdate: (props) => {
             component?.updateProps(props);
             place(props.clientRect);
+            requestAnimationFrame(() => place(props.clientRect));
           },
           onKeyDown: (props) => {
             if (props.event.key === "Escape") return false;

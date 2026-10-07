@@ -10,6 +10,7 @@ import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MentionList from "@/components/task/extensions/mention-list";
 import {
+  mentionPopupPosition,
   mentionSuggestionItems,
   operonGroupMentionItems,
 } from "@/components/task/extensions/mention-suggestion";
@@ -110,6 +111,59 @@ describe("group mention items", () => {
     );
     fireEvent.click(row);
     expect(command).toHaveBeenCalledWith(group);
+  });
+});
+
+// Open-items row 390: at 1280x720 the comment box sits near the bottom of the window, so a
+// list drawn below the caret ran off-screen and hid the group row (always last).
+describe("mention popup placement", () => {
+  const view = { width: 1280, height: 720, scrollX: 0, scrollY: 0 };
+  const list = { width: 240, height: 256 };
+
+  it("flips above the caret when the list does not fit below (the 1280x720 repro)", () => {
+    const caret = { top: 467, bottom: 487, left: 300 };
+    const { top, left } = mentionPopupPosition(caret, list, view);
+    expect(top + list.height).toBeLessThanOrEqual(caret.top);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(left).toBe(300);
+  });
+
+  it("stays below the caret when the list fits there", () => {
+    const caret = { top: 100, bottom: 120, left: 300 };
+    expect(mentionPopupPosition(caret, list, view).top).toBe(124);
+  });
+
+  it("stays below when there is even less room above", () => {
+    const caret = { top: 60, bottom: 80, left: 0 };
+    const short = { ...view, height: 300 };
+    expect(mentionPopupPosition(caret, list, short).top).toBe(84);
+  });
+
+  it("keeps the list inside the window's right and left edges", () => {
+    const right = mentionPopupPosition(
+      { top: 100, bottom: 120, left: 1200 },
+      list,
+      view,
+    );
+    expect(right.left + list.width).toBeLessThanOrEqual(view.width);
+    const narrow = mentionPopupPosition(
+      { top: 100, bottom: 120, left: -20 },
+      list,
+      view,
+    );
+    expect(narrow.left).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns page coordinates when the page is scrolled", () => {
+    const caret = { top: 467, bottom: 487, left: 300 };
+    const still = mentionPopupPosition(caret, list, view);
+    const scrolled = mentionPopupPosition(caret, list, {
+      ...view,
+      scrollX: 10,
+      scrollY: 500,
+    });
+    expect(scrolled.top).toBe(still.top + 500);
+    expect(scrolled.left).toBe(still.left + 10);
   });
 });
 
