@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { Client } from "pg";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
@@ -281,6 +282,61 @@ describe("API integration: Operon social revision (social agent S9)", () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     const changed = deliveries.filter((d) => d.event === "task.status_changed");
     expect(changed.map((d) => d.task.id)).toEqual([moving.id]);
+    expect(changed[0]?.data.oldStatus).toBe("to-do");
+    expect(changed[0]?.data.newStatus).toBe("in-review");
+  });
+
+  it("reads the prior status under the row lock, so a move out of the target status landing mid-request still emits the transition", async () => {
+    const { insertTask, send } = await seed();
+    const task = await insertTask("Raced post", 1);
+    expect(
+      (await send("PUT", `/status/${task.id}`, { status: "in-review" })).status,
+    ).toBe(200);
+    await waitForDeliveries(
+      (d) => d.filter((x) => x.event === "task.status_changed").length === 1,
+    );
+    deliveries = [];
+
+    // A second connection moves the card OUT of in-review and holds that row lock uncommitted,
+    // so the committed status every unlocked read sees is still in-review.
+    const mover = new Client({ connectionString: process.env.DATABASE_URL });
+    await mover.connect();
+    try {
+      await mover.query("BEGIN");
+      await mover.query("UPDATE task SET status = 'to-do' WHERE id = $1", [
+        task.id,
+      ]);
+
+      const bulk = send("PATCH", "/bulk", {
+        taskIds: [task.id],
+        operation: "updateStatus",
+        value: "in-review",
+      });
+
+      // Commit the move only once the bulk request is blocked on the row lock, so the
+      // interleaving is fixed: its unlocked read already ran and saw in-review.
+      let blocked = false;
+      for (let i = 0; i < 250 && !blocked; i += 1) {
+        const { rows } = await mover.query(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()",
+        );
+        blocked = rows[0].n > 0;
+        if (!blocked) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(blocked).toBe(true);
+      await mover.query("COMMIT");
+
+      expect((await bulk).status).toBe(200);
+    } finally {
+      await mover.end();
+    }
+
+    const all = await waitForDeliveries(
+      (d) => d.filter((x) => x.event === "task.status_changed").length >= 1,
+    );
+    const changed = all.filter((d) => d.event === "task.status_changed");
+    expect(changed).toHaveLength(1);
+    expect(changed[0]?.task.id).toBe(task.id);
     expect(changed[0]?.data.oldStatus).toBe("to-do");
     expect(changed[0]?.data.newStatus).toBe("in-review");
   });
