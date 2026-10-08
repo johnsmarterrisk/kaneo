@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   customType,
   foreignKey,
@@ -464,6 +465,14 @@ export const taskTable = pgTable(
     // collide, so human-created tasks are unaffected. The unique constraint below is
     // what makes a repeated or concurrent keyed create converge on one task.
     operonIdempotencyKey: text("operon_idempotency_key"),
+    // Operon fork addition (social agent S9): a monotonically increasing revision of the
+    // fields an approval covers (title, description, due date, status, project). Every write
+    // to one of those fields adds 1 in the SAME SQL UPDATE (`../operon-social-revision`), so
+    // concurrent edits never share a revision; Operon posts an approved card only when the
+    // revision it reads equals the one the status-change/move webhook carried.
+    socialRevision: bigint("social_revision", { mode: "number" })
+      .default(0)
+      .notNull(),
   },
   (table) => [
     index("task_projectId_idx").on(table.projectId),

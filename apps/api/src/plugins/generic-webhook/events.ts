@@ -325,6 +325,11 @@ export async function handleTaskStatusChanged(
       newStatus: event.newStatus,
       ...(oldStatusIsFinal === undefined ? {} : { oldStatusIsFinal }),
       ...(newStatusIsFinal === undefined ? {} : { newStatusIsFinal }),
+      // Operon fork addition (social agent S9): the revision the write returned, omitted
+      // when a producer did not supply one so the historical payload is unchanged.
+      ...(event.socialRevision === undefined
+        ? {}
+        : { socialRevision: event.socialRevision }),
     },
   );
 }
@@ -511,6 +516,11 @@ export async function handleTaskMoved(
       newStatus: event.newStatus,
       ...(oldStatusIsFinal === undefined ? {} : { oldStatusIsFinal }),
       ...(newStatusIsFinal === undefined ? {} : { newStatusIsFinal }),
+      // Operon fork addition (social agent S9): the revision the write returned, omitted
+      // when a producer did not supply one so the historical payload is unchanged.
+      ...(event.socialRevision === undefined
+        ? {}
+        : { socialRevision: event.socialRevision }),
     },
   );
 }

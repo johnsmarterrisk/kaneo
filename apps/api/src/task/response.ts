@@ -54,6 +54,13 @@ export const taskWithAssigneeSchema = taskSchema
     // key created this task with, or null. Operon's reconcile reads it here to prove a
     // named task is the one its own keyed create filed.
     operonIdempotencyKey: z.string().nullable(),
+    // Operon fork addition (social agent S9): the approved-card revision. Operon re-reads it
+    // here before it sends an approval, and posts only when it equals the revision the
+    // status-change or move webhook carried.
+    socialRevision: z.number().int().openapi({
+      description:
+        "Increases on every title, description, due date, status or project change.",
+    }),
   })
   .openapi("TaskWithAssignee");
 

@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import {
   assertAssignableUser,
@@ -77,6 +78,15 @@ async function updateTask(
       priority,
       position,
       userId: normalizedUserId ?? null,
+      // Operon fork (social agent S9): see ../../operon-social-revision. Only the covered
+      // fields count, so a reorder or priority change through this route adds 0.
+      socialRevision: nextSocialRevision({
+        title,
+        status,
+        dueDate: dueDate || null,
+        projectId,
+        description,
+      }),
     })
     .where(eq(taskTable.id, id))
     .returning();
@@ -96,6 +106,7 @@ async function updateTask(
       newStatus: status,
       title: updatedTask.title,
       assigneeId: updatedTask.userId,
+      socialRevision: updatedTask.socialRevision,
       type: "status_changed",
     });
 

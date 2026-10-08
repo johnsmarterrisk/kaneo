@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskReminderSentTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 
 async function updateTaskDueDate({
   id,
@@ -30,7 +31,11 @@ async function updateTaskDueDate({
 
   const [updatedTask] = await db
     .update(taskTable)
-    .set({ dueDate: dueDate || null })
+    // Operon fork (social agent S9): see ../../operon-social-revision.
+    .set({
+      dueDate: dueDate || null,
+      socialRevision: nextSocialRevision({ dueDate: dueDate || null }),
+    })
     .where(eq(taskTable.id, id))
     .returning();
 

@@ -26,6 +26,8 @@ export type TaskStatusChangedEvent = {
   oldStatus: string;
   newStatus: string;
   title: string;
+  // Operon fork addition (social agent S9): the revision the status write returned.
+  socialRevision?: number;
 };
 
 export type TaskPriorityChangedEvent = {
@@ -77,6 +79,8 @@ export type TaskMovedEvent = {
   toProjectName: string;
   oldStatus: string;
   newStatus: string;
+  // Operon fork addition (social agent S9): the revision the move returned.
+  socialRevision?: number;
 };
 
 export type TaskDueDateChangedEvent = {

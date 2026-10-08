@@ -811,13 +811,18 @@
                   "string",
                   "null"
                 ]
+              },
+              "socialRevision": {
+                "type": "integer",
+                "description": "Increases on every title, description, due date, status or project change."
               }
             },
             "required": [
               "assigneeName",
               "assigneeId",
               "updatedAt",
-              "operonIdempotencyKey"
+              "operonIdempotencyKey",
+              "socialRevision"
             ]
           }
         ]

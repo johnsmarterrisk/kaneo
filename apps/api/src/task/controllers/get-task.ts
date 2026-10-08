@@ -25,6 +25,8 @@ async function getTask(taskId: string) {
       projectId: taskTable.projectId,
       // Operon fork addition (Smart Desk F0b, D2) — see `taskWithAssigneeSchema`.
       operonIdempotencyKey: taskTable.operonIdempotencyKey,
+      // Operon fork addition (social agent S9) — see `taskWithAssigneeSchema`.
+      socialRevision: taskTable.socialRevision,
     })
     .from(taskTable)
     .leftJoin(userTable, eq(taskTable.userId, userTable.id))

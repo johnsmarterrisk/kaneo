@@ -8,6 +8,7 @@ import {
   expandGroupMentionIds,
   OPERON_GROUP_ID_PREFIX,
 } from "../../operon-groups";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
@@ -32,7 +33,8 @@ async function updateTaskDescription({
 
   const [updatedTask] = await db
     .update(taskTable)
-    .set({ description })
+    // Operon fork (social agent S9): see ../../operon-social-revision.
+    .set({ description, socialRevision: nextSocialRevision({ description }) })
     .where(eq(taskTable.id, id))
     .returning();
 

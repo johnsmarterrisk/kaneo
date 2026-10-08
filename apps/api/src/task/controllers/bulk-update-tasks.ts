@@ -10,6 +10,7 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { removeLabelFromGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 import { assertAssignableUser } from "../../utils/assert-assignable-user";
@@ -114,19 +115,30 @@ async function bulkUpdateTasks({
           .filter((t) => t.projectId === projectId)
           .map((t) => t.id);
 
-        const result = await db
+        // Operon fork (social agent S9): see ../../operon-social-revision. Each row's own
+        // returned revision goes on its own event, never one value for the batch.
+        const updatedRows = await db
           .update(taskTable)
-          .set({ status: value, columnId: column?.id ?? null })
-          .where(inArray(taskTable.id, projectTaskIds));
+          .set({
+            status: value,
+            columnId: column?.id ?? null,
+            socialRevision: nextSocialRevision({ status: value }),
+          })
+          .where(inArray(taskTable.id, projectTaskIds))
+          .returning({
+            id: taskTable.id,
+            socialRevision: taskTable.socialRevision,
+          });
 
-        updatedCount += result.rowCount ?? projectTaskIds.length;
+        updatedCount += updatedRows.length;
 
-        for (const taskId of projectTaskIds) {
+        for (const row of updatedRows) {
           await publishEvent("task.status_changed", {
-            taskId,
+            taskId: row.id,
             projectId,
             userId,
             newStatus: value,
+            socialRevision: row.socialRevision,
             type: "status_changed",
           });
         }
@@ -344,7 +356,11 @@ async function bulkUpdateTasks({
 
       const result = await db
         .update(taskTable)
-        .set({ dueDate: parsedDate })
+        // Operon fork (social agent S9): see ../../operon-social-revision.
+        .set({
+          dueDate: parsedDate,
+          socialRevision: nextSocialRevision({ dueDate: parsedDate }),
+        })
         .where(inArray(taskTable.id, foundIds));
 
       updatedCount = result.rowCount ?? foundIds.length;

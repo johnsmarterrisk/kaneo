@@ -1,0 +1,13 @@
+-- Operon fork addition (social agent S9).
+--
+-- WHAT THIS ADDS
+-- `task.social_revision`, a monotonically increasing revision of the fields an approval covers
+-- (title, description, due date, status, project). Every write to one of them adds 1 in the
+-- same UPDATE statement; the status-change and move webhooks carry the revision that write
+-- returned, and `GET /task/{id}` returns the current one. Operon posts an approved card only
+-- when the two agree, so an edit after approval is never posted as approved text.
+--
+-- IT CANNOT FAIL ON EXISTING DATA
+-- The column is NOT NULL DEFAULT 0, so every existing task starts at a valid revision 0 and
+-- the first covered edit makes it 1. It is additive; no upstream column or route changes.
+ALTER TABLE "task" ADD COLUMN "social_revision" bigint DEFAULT 0 NOT NULL;

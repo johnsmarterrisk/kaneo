@@ -68,6 +68,7 @@ export function initializeEventSubscriptions(): void {
     newStatus: string;
     title: string;
     projectId: string;
+    socialRevision?: number;
   }>("task.status_changed", async (data) => {
     await broadcastTaskStatusChanged({
       taskId: data.taskId,
@@ -76,6 +77,8 @@ export function initializeEventSubscriptions(): void {
       oldStatus: data.oldStatus,
       newStatus: data.newStatus,
       title: data.title,
+      // Operon fork addition (social agent S9).
+      socialRevision: data.socialRevision,
     });
   });
 
@@ -166,6 +169,7 @@ export function initializeEventSubscriptions(): void {
     toProjectName: string;
     oldStatus: string;
     newStatus: string;
+    socialRevision?: number;
   }>("task.moved", async (data) => {
     await broadcastTaskMoved({
       taskId: data.taskId,
@@ -177,6 +181,8 @@ export function initializeEventSubscriptions(): void {
       toProjectName: data.toProjectName,
       oldStatus: data.oldStatus,
       newStatus: data.newStatus,
+      // Operon fork addition (social agent S9).
+      socialRevision: data.socialRevision,
     });
   });
 
