@@ -61,6 +61,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
 import { useUpdateTaskDescription } from "@/hooks/mutations/task/use-update-task-description";
+import { useProjectFieldLabel } from "@/hooks/queries/operon-field-labels/use-project-field-label";
 import { useGetOperonGroups } from "@/hooks/queries/operon-groups/use-get-operon-groups";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
@@ -309,6 +310,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
 export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const { t } = useTranslation();
   const { data: task } = useGetTask(taskId);
+  // Operon fork (social agent S18): the empty editor shows the project's description
+  // label when set. Read through a ref, as the mention lists below are, so the editor is
+  // not rebuilt when the label loads; Placeholder evaluates the function on each render.
+  const descriptionLabel = useProjectFieldLabel(task?.projectId, "description");
+  const descriptionLabelRef = useRef<string | undefined>(undefined);
+  descriptionLabelRef.current = descriptionLabel;
   const { mutateAsync: updateTaskDescription } = useUpdateTaskDescription();
   const { canUpdateTasks } = useWorkspacePermission();
   const canEdit = canUpdateTasks();
@@ -700,7 +707,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
           nested: true,
         }),
         Placeholder.configure({
-          placeholder: t("tasks:detail.editor.placeholder"),
+          placeholder: () =>
+            descriptionLabelRef.current ?? t("tasks:detail.editor.placeholder"),
         }),
         Table.configure({
           resizable: true,

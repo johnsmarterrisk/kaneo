@@ -17,6 +17,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// Operon fork (social agent S18): no project field labels, so the upstream words render.
+vi.mock("@/hooks/queries/operon-field-labels/use-project-field-label", () => ({
+  useProjectFieldLabel: () => undefined,
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   useLocation: () => useLocation(),
 }));

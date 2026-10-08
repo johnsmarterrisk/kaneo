@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import PageTitle from "@/components/page-title";
+import { OperonFieldLabelsSettings } from "@/components/project/operon-field-labels-settings";
 import { TasksImportExport } from "@/components/project/tasks-import-export.tsx";
 import {
   AlertDialog,
@@ -644,6 +645,12 @@ function RouteComponent() {
               </div>
               {project && <TasksImportExport project={project} />}
             </div>
+            {/* Operon fork addition (social agent S18, fork-discipline row 17). */}
+            <Separator />
+            <OperonFieldLabelsSettings
+              projectId={projectId}
+              canEdit={canEditLoaded}
+            />
           </div>
         </div>
 

@@ -20,6 +20,7 @@ import { useUpdateTaskStatus } from "@/hooks/mutations/task/use-update-task-stat
 import { useUpdateTaskPriority } from "@/hooks/mutations/task/use-update-task-status-priority";
 import { useUpdateTaskTitle } from "@/hooks/mutations/task/use-update-task-title";
 import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
+import { useProjectFieldLabel } from "@/hooks/queries/operon-field-labels/use-project-field-label";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { getColumnIcon } from "@/lib/column";
@@ -49,6 +50,11 @@ export default function TaskCardContextMenuContent({
 }: TaskCardContextMenuContentProps) {
   const { t } = useTranslation();
   const { project } = useProjectStore();
+  // Operon fork (social agent S18): the project's due-date label, else the translation.
+  const dueDateLabel = useProjectFieldLabel(
+    taskCardContext.projectId,
+    "dueDate",
+  );
   const { data: columnsData = [] } = useGetColumns(taskCardContext.projectId);
   const columns =
     project?.columns && project.columns.length > 0
@@ -198,7 +204,7 @@ export default function TaskCardContextMenuContent({
       {canEdit && (
         <ContextMenuSub>
           <ContextMenuSubTrigger>
-            <span>{t("tasks:dueDate.label")}</span>
+            <span>{dueDateLabel ?? t("tasks:dueDate.label")}</span>
           </ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-fit min-w-0 p-0">
             <div className="p-2">

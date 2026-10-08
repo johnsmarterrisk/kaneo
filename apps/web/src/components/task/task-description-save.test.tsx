@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   dirtyCheck: null as (() => boolean) | null,
 }));
 
+// Operon fork (social agent S18): no project field labels, so the upstream words render.
+vi.mock("@/hooks/queries/operon-field-labels/use-project-field-label", () => ({
+  useProjectFieldLabel: () => undefined,
+}));
+
 vi.mock("@tiptap/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tiptap/react")>();
   return {
