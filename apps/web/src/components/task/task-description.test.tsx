@@ -37,6 +37,35 @@ vi.mock("./extensions/task-item-with-checkbox", () => ({
   TaskItemWithCheckbox: TaskItem,
 }));
 
+// Operon fork (open-items 388): the description editor reads the mention sources.
+vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
+  default: () => ({ data: { id: "workspace-1" } }),
+}));
+vi.mock(
+  "@/hooks/queries/workspace-users/use-get-active-workspace-users",
+  () => ({
+    useGetActiveWorkspaceUsers: () => ({
+      data: {
+        members: [
+          { userId: "user-ada", user: { name: "Ada Lovelace", image: null } },
+          { userId: "user-bob", user: { name: "Bob Byte", image: null } },
+        ],
+      },
+    }),
+  }),
+);
+vi.mock("@/hooks/queries/operon-groups/use-get-operon-groups", () => ({
+  useGetOperonGroups: () => ({
+    data: [
+      {
+        slug: "marketing",
+        name: "Marketing",
+        initiativeCount: 2,
+        memberCount: 2,
+      },
+    ],
+  }),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: mocks.t }),
   initReactI18next: { type: "3rdParty", init: () => {} },

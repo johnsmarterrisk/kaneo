@@ -1,4 +1,10 @@
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { Extension } from "@tiptap/core";
 import TaskItem from "@tiptap/extension-task-item";
 import type { Editor } from "@tiptap/react";
@@ -51,6 +57,35 @@ vi.mock("./extensions/task-item-with-checkbox", () => ({
   TaskItemWithCheckbox: TaskItem,
 }));
 
+// Operon fork (open-items 388): the description editor reads the mention sources.
+vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
+  default: () => ({ data: { id: "workspace-1" } }),
+}));
+vi.mock(
+  "@/hooks/queries/workspace-users/use-get-active-workspace-users",
+  () => ({
+    useGetActiveWorkspaceUsers: () => ({
+      data: {
+        members: [
+          { userId: "user-ada", user: { name: "Ada Lovelace", image: null } },
+          { userId: "user-bob", user: { name: "Bob Byte", image: null } },
+        ],
+      },
+    }),
+  }),
+);
+vi.mock("@/hooks/queries/operon-groups/use-get-operon-groups", () => ({
+  useGetOperonGroups: () => ({
+    data: [
+      {
+        slug: "marketing",
+        name: "Marketing",
+        initiativeCount: 2,
+        memberCount: 2,
+      },
+    ],
+  }),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: mocks.t }),
   initReactI18next: { type: "3rdParty", init: () => {} },
@@ -226,4 +261,39 @@ it("an older description save cannot clear a newer draft", async () => {
   expect(mocks.dirtyCheck?.()).toBe(true);
   await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledTimes(2));
   expect(mocks.dirtyCheck?.()).toBe(false);
+});
+
+// Operon fork (open-items 388): the task-detail description offers the same @ list as a
+// comment — people, then Operon's groups — and a pick is saved as a kaneo-mention, which
+// update-task-description.ts reads to notify the newly mentioned.
+it("offers the @ list in the description and saves the picked mention", async () => {
+  const { container } = render(<TaskDescription taskId="task-a" />);
+  await waitFor(() => expect(container.textContent).toContain("alpha"));
+  await settle();
+  act(() => {
+    latestEditor().chain().focus("end").insertContent(" @").run();
+  });
+  const rows = await waitFor(() => {
+    const items = document.querySelectorAll(
+      ".kaneo-mention-popup .kaneo-mention-item",
+    );
+    expect(items.length).toBe(3);
+    return Array.from(items);
+  });
+  // Each person row carries its avatar initials before the name.
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "ALAda Lovelace",
+    "BBBob Byte",
+    "marketinggroup · 2 people",
+  ]);
+  act(() => {
+    fireEvent.click(rows[0] as Element);
+  });
+  await vi.waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalled(), {
+    timeout: DEBOUNCE_MS * 4,
+  });
+  const saved = mocks.mutateAsync.mock.calls.at(-1)?.[0];
+  expect(saved.description).toContain(
+    '<kaneo-mention id="user-ada" label="Ada Lovelace">',
+  );
 });
