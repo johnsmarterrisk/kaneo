@@ -8,6 +8,7 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -152,6 +153,11 @@ async function moveTask({
         columnId: resolvedColumn.id,
         number: nextTaskNumber,
         position: nextPosition,
+        // Operon fork (social agent S9): see ../../operon-social-revision.
+        socialRevision: nextSocialRevision({
+          projectId: destinationProjectId,
+          status: resolvedColumn.slug,
+        }),
       })
       .where(eq(taskTable.id, taskId))
       .returning();
@@ -180,6 +186,7 @@ async function moveTask({
     toProjectName: destinationProject.name,
     oldStatus: existingTask.status,
     newStatus: resolvedColumn.slug,
+    socialRevision: movedTask.socialRevision,
   });
 
   return {

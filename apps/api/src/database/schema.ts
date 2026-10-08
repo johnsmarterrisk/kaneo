@@ -1,7 +1,9 @@
 import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
+  check,
   customType,
   foreignKey,
   index,
@@ -464,6 +466,14 @@ export const taskTable = pgTable(
     // collide, so human-created tasks are unaffected. The unique constraint below is
     // what makes a repeated or concurrent keyed create converge on one task.
     operonIdempotencyKey: text("operon_idempotency_key"),
+    // Operon fork addition (social agent S9): a monotonically increasing revision of the
+    // fields an approval covers (title, description, due date, status, project). Every write
+    // to one of those fields adds 1 in the SAME SQL UPDATE (`../operon-social-revision`), so
+    // concurrent edits never share a revision; Operon posts an approved card only when the
+    // revision it reads equals the one the status-change/move webhook carried.
+    socialRevision: bigint("social_revision", { mode: "number" })
+      .default(0)
+      .notNull(),
   },
   (table) => [
     index("task_projectId_idx").on(table.projectId),
@@ -472,6 +482,33 @@ export const taskTable = pgTable(
     index("task_columnId_idx").on(table.columnId),
     unique("task_project_number_unique").on(table.projectId, table.number),
     unique("task_operon_idempotency_key_unique").on(table.operonIdempotencyKey),
+  ],
+);
+
+// Operon fork addition (social agent S18, docs/fork-discipline.md row 17): optional
+// per-project words for the description and due-date fields. No row, or both NULL, means
+// the project renders exactly as upstream; nothing else reads these columns.
+export const operonProjectFieldLabelsTable = pgTable(
+  "operon_project_field_labels",
+  {
+    projectId: text("project_id")
+      .primaryKey()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    descriptionLabel: text("description_label"),
+    dueDateLabel: text("due_date_label"),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "operon_project_field_labels_length",
+      sql`char_length(${table.descriptionLabel}) <= 40 AND char_length(${table.dueDateLabel}) <= 40`,
+    ),
   ],
 );
 

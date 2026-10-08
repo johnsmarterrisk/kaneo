@@ -59,6 +59,12 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+// Operon fork (social agent S18): the field-labels card has its own test
+// (src/__tests__/operon-field-labels.test.tsx).
+vi.mock("@/components/project/operon-field-labels-settings", () => ({
+  OperonFieldLabelsSettings: () => null,
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({
     ...(options as Record<string, unknown>),

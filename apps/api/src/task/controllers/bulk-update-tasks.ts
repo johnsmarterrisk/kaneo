@@ -10,6 +10,7 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { removeLabelFromGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 import { assertAssignableUser } from "../../utils/assert-assignable-user";
@@ -45,6 +46,7 @@ async function bulkUpdateTasks({
       projectId: taskTable.projectId,
       userId: taskTable.userId,
       dueDate: taskTable.dueDate,
+      status: taskTable.status,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -114,19 +116,63 @@ async function bulkUpdateTasks({
           .filter((t) => t.projectId === projectId)
           .map((t) => t.id);
 
-        const result = await db
-          .update(taskTable)
-          .set({ status: value, columnId: column?.id ?? null })
-          .where(inArray(taskTable.id, projectTaskIds));
+        // Operon fork (social agent S9): see ../../operon-social-revision. Each row's own
+        // returned revision goes on its own event, never one value for the batch.
+        //
+        // Operon fork (social agent, codex round 2): the prior status is read under a row lock
+        // (SELECT ... FOR UPDATE) in the same transaction as the UPDATE. The unlocked read at the
+        // top of this function can be stale by the time the UPDATE runs: a concurrent move out of
+        // Approved landing in between would make this write look like "Approved -> Approved" and
+        // suppress a real transition into Approved, which is exactly the move Operon posts on.
+        const { updatedRows, priorStatus } = await db.transaction(
+          async (
+            tx,
+          ): Promise<{
+            updatedRows: { id: string; socialRevision: number }[];
+            priorStatus: Map<string, string>;
+          }> => {
+            const locked: { id: string; status: string }[] = await tx
+              .select({ id: taskTable.id, status: taskTable.status })
+              .from(taskTable)
+              .where(inArray(taskTable.id, projectTaskIds))
+              .for("update");
+            const rows: { id: string; socialRevision: number }[] = await tx
+              .update(taskTable)
+              .set({
+                status: value,
+                columnId: column?.id ?? null,
+                socialRevision: nextSocialRevision({ status: value }),
+              })
+              .where(inArray(taskTable.id, projectTaskIds))
+              .returning({
+                id: taskTable.id,
+                socialRevision: taskTable.socialRevision,
+              });
+            return {
+              updatedRows: rows,
+              priorStatus: new Map(locked.map((t) => [t.id, t.status])),
+            };
+          },
+        );
 
-        updatedCount += result.rowCount ?? projectTaskIds.length;
+        updatedCount += updatedRows.length;
 
-        for (const taskId of projectTaskIds) {
+        // Operon fork (social agent, codex round 1 item 2): a status_changed event only for a
+        // real transition, carrying its oldStatus like the single-task route. A bulk write to a
+        // card's existing status (already in Approved) is no move, and Operon must never read
+        // one as an approval. Events go out after the commit, from the locked read.
+        const titles = new Map(tasks.map((t) => [t.id, t.title]));
+        for (const row of updatedRows) {
+          const oldStatus = priorStatus.get(row.id);
+          if (oldStatus === undefined || oldStatus === value) continue;
           await publishEvent("task.status_changed", {
-            taskId,
+            taskId: row.id,
             projectId,
             userId,
+            oldStatus,
             newStatus: value,
+            title: titles.get(row.id),
+            socialRevision: row.socialRevision,
             type: "status_changed",
           });
         }
@@ -344,7 +390,11 @@ async function bulkUpdateTasks({
 
       const result = await db
         .update(taskTable)
-        .set({ dueDate: parsedDate })
+        // Operon fork (social agent S9): see ../../operon-social-revision.
+        .set({
+          dueDate: parsedDate,
+          socialRevision: nextSocialRevision({ dueDate: parsedDate }),
+        })
         .where(inArray(taskTable.id, foundIds));
 
       updatedCount = result.rowCount ?? foundIds.length;

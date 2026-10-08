@@ -22,6 +22,7 @@ import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import useGetGiteaIntegration from "@/hooks/queries/gitea-integration/use-get-gitea-integration";
 import useGetGithubIntegration from "@/hooks/queries/github-integration/use-get-github-integration";
 import useGetLabelsByTask from "@/hooks/queries/label/use-get-labels-by-task";
+import { useProjectFieldLabel } from "@/hooks/queries/operon-field-labels/use-project-field-label";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import useGetTask from "@/hooks/queries/task/use-get-task";
@@ -88,6 +89,8 @@ export default function TaskPropertiesSidebar({
   const { data: task } = useGetTask(taskId ?? "");
   const { data: project } = useGetProject({ id: projectId, workspaceId });
   const { data: columns = [] } = useGetColumns(projectId);
+  // Operon fork (social agent S18): an empty due date reads the project's label, if set.
+  const dueDateLabel = useProjectFieldLabel(projectId, "dueDate");
   const taskIsCompleted = isTaskCompleted(task?.status ?? "", columns);
   const { data: workspaceUsers } = useGetActiveWorkspaceUsers(workspaceId);
   const { data: taskLabels = [] } = useGetLabelsByTask(taskId ?? "");
@@ -317,7 +320,7 @@ export default function TaskPropertiesSidebar({
                       <>
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-xs font-semibold text-muted-foreground">
-                          {t("tasks:properties.noDate")}
+                          {dueDateLabel ?? t("tasks:properties.noDate")}
                         </span>
                       </>
                     )}
@@ -508,7 +511,7 @@ export default function TaskPropertiesSidebar({
                         <>
                           <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                           <span className="text-xs font-semibold text-muted-foreground">
-                            {t("tasks:properties.noDate")}
+                            {dueDateLabel ?? t("tasks:properties.noDate")}
                           </span>
                         </>
                       )}
@@ -701,7 +704,7 @@ export default function TaskPropertiesSidebar({
                         <>
                           <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                           <span className="text-xs font-semibold text-muted-foreground">
-                            {t("tasks:properties.noDate")}
+                            {dueDateLabel ?? t("tasks:properties.noDate")}
                           </span>
                         </>
                       )}

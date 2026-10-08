@@ -591,6 +591,8 @@ describe("API integration: the telegraph external-link write route", () => {
         "position",
         "priority",
         "projectId",
+        // Social agent S9 (task 5): the approved-card revision.
+        "socialRevision",
         "startDate",
         "status",
         "title",

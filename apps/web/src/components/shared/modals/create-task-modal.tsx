@@ -51,6 +51,7 @@ import useCreateTask from "@/hooks/mutations/task/use-create-task";
 import { useDeleteTask } from "@/hooks/mutations/task/use-delete-task";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
+import { useProjectFieldLabel } from "@/hooks/queries/operon-field-labels/use-project-field-label";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
@@ -215,6 +216,12 @@ function CreateTaskModal({
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const resolvedProjectId =
     explicitProjectId || selectedProjectId || project?.id || "";
+  // Operon fork (social agent S18): the project's field labels, else the translations.
+  const descriptionLabel = useProjectFieldLabel(
+    resolvedProjectId,
+    "description",
+  );
+  const dueDateLabel = useProjectFieldLabel(resolvedProjectId, "dueDate");
   const { data: workspaceProjects } = useGetProjects({
     workspaceId: workspace?.id || "",
   });
@@ -678,9 +685,10 @@ function CreateTaskModal({
               <TaskDescriptionEditor
                 value={description}
                 onChange={setDescription}
-                placeholder={t(
-                  "common:modals.createTask.descriptionPlaceholder",
-                )}
+                placeholder={
+                  descriptionLabel ??
+                  t("common:modals.createTask.descriptionPlaceholder")
+                }
                 taskId={draftTask?.id}
                 ensureTaskId={ensureDraftTask}
               />
@@ -932,7 +940,8 @@ function CreateTaskModal({
                     <span>
                       {dueDate
                         ? formatDateMedium(dueDate)
-                        : t("common:modals.createTask.dueDate")}
+                        : (dueDateLabel ??
+                          t("common:modals.createTask.dueDate"))}
                     </span>
                   </button>
                 </PopoverTrigger>

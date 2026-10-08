@@ -51,6 +51,7 @@ import {
   assertOperonAgentAlive,
   classifyOperonRequestKeys,
 } from "./operon-agent-liveness";
+import operonFieldLabels from "./operon-field-labels";
 import operonGroups from "./operon-groups";
 import operonMaintenanceState from "./operon-maintenance-state";
 import { initOperonProjectCreatedDelivery } from "./operon-project-created";
@@ -756,6 +757,8 @@ export function createApp() {
   // answers a browser session with a real Operon-workspace membership only. A bare
   // api.route, as /telegraph-integration, so it adds nothing to the RPC AppType union.
   api.route("/operon", operonGroups);
+  // Operon fork addition (social agent S18, fork-discipline row 17): per-project field labels.
+  api.route("/operon", operonFieldLabels);
   const userApi = api.route("/user", user);
 
   // Operon fork addition (Operon spec R33, decision 43): a server-to-server hook that

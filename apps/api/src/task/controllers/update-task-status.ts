@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTaskStatus({
@@ -35,7 +36,12 @@ async function updateTaskStatus({
 
   const [updatedTask] = await db
     .update(taskTable)
-    .set({ status, columnId: column?.id ?? null })
+    .set({
+      status,
+      columnId: column?.id ?? null,
+      // Operon fork (social agent S9): see ../../operon-social-revision.
+      socialRevision: nextSocialRevision({ status }),
+    })
     .where(eq(taskTable.id, id))
     .returning();
 
@@ -53,6 +59,7 @@ async function updateTaskStatus({
     newStatus: status,
     title: updatedTask.title,
     assigneeId: updatedTask.userId,
+    socialRevision: updatedTask.socialRevision,
     type: "status_changed",
   });
 

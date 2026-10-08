@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { nextSocialRevision } from "../../operon-social-revision";
 
 async function updateTaskTitle({
   id,
@@ -31,7 +32,8 @@ async function updateTaskTitle({
   const updatedTask = await db.transaction(async (tx) => {
     const [task] = await tx
       .update(taskTable)
-      .set({ title })
+      // Operon fork (social agent S9): see ../../operon-social-revision.
+      .set({ title, socialRevision: nextSocialRevision({ title }) })
       .where(eq(taskTable.id, id))
       .returning();
 

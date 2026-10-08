@@ -10,9 +10,9 @@ import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MentionList from "@/components/task/extensions/mention-list";
 import {
-  mentionPopupPosition,
   mentionSuggestionItems,
   operonGroupMentionItems,
+  placeMentionPopup,
 } from "@/components/task/extensions/mention-suggestion";
 import getOperonGroups from "@/fetchers/operon-groups/get-operon-groups";
 import { useGetOperonGroups } from "@/hooks/queries/operon-groups/use-get-operon-groups";
@@ -116,54 +116,110 @@ describe("group mention items", () => {
 
 // Open-items row 390: at 1280x720 the comment box sits near the bottom of the window, so a
 // list drawn below the caret ran off-screen and hid the group row (always last).
+// The placement is @floating-ui/dom's flip + size + shift (open-items 390, Codex round 1).
+// jsdom has no layout, so the window, the caret and the list's size are stubbed: the popup
+// reports the list's full height, or the inline max-height when that is smaller, as a browser
+// would. Page scroll is the library's (jsdom has no offsetParent to scroll), proven by the walk.
 describe("mention popup placement", () => {
-  const view = { width: 1280, height: 720, scrollX: 0, scrollY: 0 };
-  const list = { width: 240, height: 256 };
-
-  it("flips above the caret when the list does not fit below (the 1280x720 repro)", () => {
-    const caret = { top: 467, bottom: 487, left: 300 };
-    const { top, left } = mentionPopupPosition(caret, list, view);
-    expect(top + list.height).toBeLessThanOrEqual(caret.top);
-    expect(top).toBeGreaterThanOrEqual(0);
-    expect(left).toBe(300);
+  const html = document.documentElement;
+  const setWindow = (width: number, height: number) => {
+    Object.defineProperty(html, "clientWidth", {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(html, "clientHeight", {
+      configurable: true,
+      value: height,
+    });
+  };
+  afterEach(() => {
+    document.body.innerHTML = "";
+    setWindow(0, 0);
   });
 
-  it("stays below the caret when the list fits there", () => {
-    const caret = { top: 100, bottom: 120, left: 300 };
-    expect(mentionPopupPosition(caret, list, view).top).toBe(124);
+  const popupOf = (width: number, fullHeight: number) => {
+    const popup = document.createElement("div");
+    popup.className = "kaneo-mention-popup";
+    popup.style.position = "absolute";
+    const list = document.createElement("div");
+    list.className = "kaneo-mention-list";
+    list.style.maxHeight = "16rem"; // the stylesheet's fixed cap, cleared before measuring
+    popup.appendChild(list);
+    document.body.appendChild(popup);
+    Object.defineProperty(popup, "offsetWidth", {
+      configurable: true,
+      get: () => width,
+    });
+    Object.defineProperty(popup, "offsetHeight", {
+      configurable: true,
+      get: () => {
+        const cap = Number.parseFloat(list.style.maxHeight);
+        return Number.isNaN(cap) ? fullHeight : Math.min(fullHeight, cap);
+      },
+    });
+    return { popup, list };
+  };
+  const caretAt = (top: number, bottom: number, left: number) => () =>
+    new DOMRect(left, top, 1, bottom - top);
+  const place = async (
+    view: [number, number],
+    caret: [number, number, number],
+    list: [number, number],
+  ) => {
+    setWindow(...view);
+    const el = popupOf(...list);
+    await placeMentionPopup(caretAt(...caret), el.popup);
+    return {
+      top: Number.parseFloat(el.popup.style.top),
+      left: Number.parseFloat(el.popup.style.left),
+      maxHeight: Number.parseFloat(el.list.style.maxHeight),
+    };
+  };
+
+  it("flips above the caret when the list does not fit below (the 1280x720 repro)", async () => {
+    const r = await place([1280, 720], [467, 487, 300], [240, 256]);
+    expect(r.top + 256).toBeLessThanOrEqual(467);
+    expect(r.top).toBeGreaterThanOrEqual(0);
+    expect(r.left).toBe(300);
   });
 
-  it("stays below when there is even less room above", () => {
-    const caret = { top: 60, bottom: 80, left: 0 };
-    const short = { ...view, height: 300 };
-    expect(mentionPopupPosition(caret, list, short).top).toBe(84);
-  });
-
-  it("keeps the list inside the window's right and left edges", () => {
-    const right = mentionPopupPosition(
-      { top: 100, bottom: 120, left: 1200 },
-      list,
-      view,
+  it("stays below the caret when the list fits there", async () => {
+    expect((await place([1280, 720], [100, 120, 300], [240, 256])).top).toBe(
+      124,
     );
-    expect(right.left + list.width).toBeLessThanOrEqual(view.width);
-    const narrow = mentionPopupPosition(
-      { top: 100, bottom: 120, left: -20 },
-      list,
-      view,
-    );
+  });
+
+  it("stays below when there is even less room above", async () => {
+    expect((await place([1280, 300], [60, 80, 0], [240, 256])).top).toBe(84);
+  });
+
+  it("keeps the list inside the window's right and left edges", async () => {
+    const right = await place([1280, 720], [100, 120, 1200], [240, 256]);
+    expect(right.left + 240).toBeLessThanOrEqual(1280);
+    const narrow = await place([1280, 720], [100, 120, -20], [240, 256]);
     expect(narrow.left).toBeGreaterThanOrEqual(0);
   });
 
-  it("returns page coordinates when the page is scrolled", () => {
-    const caret = { top: 467, bottom: 487, left: 300 };
-    const still = mentionPopupPosition(caret, list, view);
-    const scrolled = mentionPopupPosition(caret, list, {
-      ...view,
-      scrollX: 10,
-      scrollY: 500,
-    });
-    expect(scrolled.top).toBe(still.top + 500);
-    expect(scrolled.left).toBe(still.left + 10);
+  // 2026-10-08: after the flip, the stylesheet's fixed 16rem cap still hid rows 6-9 (the group
+  // row last) inside the list. The cap is now the room on the chosen side (`size`).
+  it("caps the list at the room on the side it opens, not at a fixed height", async () => {
+    const nine: [number, number] = [240, 425]; // 8 people + 1 group, about 46 px a row
+    const above = await place([1280, 720], [467, 487, 300], nine);
+    expect(above.maxHeight).toBe(455); // 467 - 4 gap - 8 margin
+    expect(above.maxHeight).toBeGreaterThanOrEqual(425); // every row drawn
+    expect(above.top + 425).toBeLessThanOrEqual(467);
+    const low = await place([375, 812], [512, 535, 30], nine);
+    expect(low.maxHeight).toBeGreaterThanOrEqual(425); // flipped above: 500 px of room
+    expect(low.top + 425).toBeLessThanOrEqual(512);
+    const below = await place([375, 812], [100, 120, 30], nine);
+    expect(below.top).toBe(124);
+    expect(below.maxHeight).toBe(812 - 120 - 4 - 8);
+  });
+
+  it("when neither side holds the whole list, opens on the roomier side and caps it there", async () => {
+    const r = await place([1280, 720], [300, 320, 30], [240, 600]);
+    expect(r.maxHeight).toBe(720 - 320 - 4 - 8); // below has 388, above 288
+    expect(r.top).toBe(324);
   });
 });
 

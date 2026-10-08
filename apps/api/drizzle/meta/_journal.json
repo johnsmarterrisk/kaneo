@@ -344,6 +344,20 @@
 			"when": 1790514281381,
 			"tag": "0048_task_operon_idempotency_key",
 			"breakpoints": true
+		},
+		{
+			"idx": 49,
+			"version": "7",
+			"when": 1791428139965,
+			"tag": "0049_task_social_revision",
+			"breakpoints": true
+		},
+		{
+			"idx": 50,
+			"version": "7",
+			"when": 1791458214964,
+			"tag": "0050_operon_project_field_labels",
+			"breakpoints": true
 		}
 	]
 }

@@ -61,7 +61,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
 import { useUpdateTaskDescription } from "@/hooks/mutations/task/use-update-task-description";
+import { useProjectFieldLabel } from "@/hooks/queries/operon-field-labels/use-project-field-label";
+import { useGetOperonGroups } from "@/hooks/queries/operon-groups/use-get-operon-groups";
 import useGetTask from "@/hooks/queries/task/use-get-task";
+import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
+import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { parseTaskListMarkdownToNodes } from "@/lib/editor-task-list-paste";
@@ -79,6 +83,13 @@ import { registerDirtyEditor } from "@/lib/version-check";
 import { AttachmentCard } from "./extensions/attachment-card";
 import { EmbedBlock } from "./extensions/embed-block";
 import { KaneoIssueLink } from "./extensions/kaneo-issue-link";
+import { KaneoMention } from "./extensions/kaneo-mention";
+import type { MentionMember } from "./extensions/mention-list";
+import {
+  type MentionGroup,
+  MentionSuggestion,
+  operonGroupMentionItems,
+} from "./extensions/mention-suggestion";
 import { MermaidBlock } from "./extensions/mermaid-block";
 import {
   SHIKI_CODEBLOCK_REFRESH_META,
@@ -299,11 +310,40 @@ const SLASH_COMMANDS: SlashCommand[] = [
 export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const { t } = useTranslation();
   const { data: task } = useGetTask(taskId);
+  // Operon fork (social agent S18): the empty editor shows the project's description
+  // label when set. Read through a ref, as the mention lists below are, so the editor is
+  // not rebuilt when the label loads; Placeholder evaluates the function on each render.
+  const descriptionLabel = useProjectFieldLabel(task?.projectId, "description");
+  const descriptionLabelRef = useRef<string | undefined>(undefined);
+  descriptionLabelRef.current = descriptionLabel;
   const { mutateAsync: updateTaskDescription } = useUpdateTaskDescription();
   const { canUpdateTasks } = useWorkspacePermission();
   const canEdit = canUpdateTasks();
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
+  // Operon fork (open-items 388): the same @ list as the comment editor, people then
+  // Operon's groups, read through refs so the editor is not rebuilt when the lists load.
+  // The save path (update-task-description.ts) already notifies newly mentioned ids.
+  const { data: activeWorkspace } = useActiveWorkspace();
+  const { data: workspaceUsers } = useGetActiveWorkspaceUsers(
+    activeWorkspace?.id ?? "",
+  );
+  const mentionMembersRef = useRef<MentionMember[]>([]);
+  mentionMembersRef.current = useMemo(
+    () =>
+      (workspaceUsers?.members ?? []).map((member) => ({
+        id: member.userId,
+        label: member.user?.name ?? member.user?.email ?? "",
+        image: member.user?.image ?? null,
+      })),
+    [workspaceUsers],
+  );
+  const { data: operonGroups } = useGetOperonGroups(!!activeWorkspace?.id);
+  const mentionGroupsRef = useRef<MentionGroup[]>([]);
+  mentionGroupsRef.current = useMemo(
+    () => operonGroupMentionItems(operonGroups ?? []),
+    [operonGroups],
+  );
 
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -651,6 +691,11 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
         EmbedBlock,
         AttachmentCard,
         KaneoIssueLink,
+        KaneoMention,
+        MentionSuggestion.configure({
+          getMembers: () => mentionMembersRef.current,
+          getGroups: () => mentionGroupsRef.current,
+        }),
         TaskList,
         Image.configure({
           HTMLAttributes: {
@@ -662,7 +707,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
           nested: true,
         }),
         Placeholder.configure({
-          placeholder: t("tasks:detail.editor.placeholder"),
+          placeholder: () =>
+            descriptionLabelRef.current ?? t("tasks:detail.editor.placeholder"),
         }),
         Table.configure({
           resizable: true,
