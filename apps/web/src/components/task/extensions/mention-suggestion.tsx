@@ -1,3 +1,4 @@
+import { computePosition, flip, offset, shift, size } from "@floating-ui/dom";
 import { Extension } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import { ReactRenderer } from "@tiptap/react";
@@ -67,34 +68,43 @@ export function operonGroupMentionItems(
 }
 
 /**
- * Where the popup goes (Operon fork, open-items row 390): below the caret when it fits,
- * otherwise above it when there is more room there, and never past the window's left or
- * right edge. Viewport coordinates in, page coordinates out (the popup is body-absolute).
- * `popup.height` is the list's full (uncapped) height; `maxHeight` is the room on the chosen
- * side, which the caller sets as the list's cap in place of the stylesheet's fixed 16rem —
- * that fixed cap hid the last rows (the group row) inside the list even after the flip
- * (2026-10-08). The list holds at most 8 people and 3 groups, so the room is the only cap.
+ * Places the popup at the caret (Operon fork, open-items row 390): below it when the list
+ * fits, otherwise above it when there is more room there, and never past the window's edges;
+ * the list's height is capped at the room on the side it opens, in place of the stylesheet's
+ * fixed 16rem, which hid the last rows (the group row) inside the list even after the flip.
+ * Placement and sizing are `@floating-ui/dom`'s `flip`, `size` and `shift` middleware (a
+ * direct dependency for this, MIT; Codex round 1, 2026-10-08) — not hand-written geometry.
+ * The cap is cleared before measuring so `flip` sees the list's full height: the list holds
+ * at most 8 people and 3 groups, so the room is the only cap.
  */
-export function mentionPopupPosition(
-  caret: { top: number; bottom: number; left: number },
-  popup: { width: number; height: number },
-  view: { width: number; height: number; scrollX: number; scrollY: number },
-): { top: number; left: number; maxHeight: number } {
-  const gap = 4;
-  const margin = 8;
-  const spaceBelow = view.height - caret.bottom - gap - margin;
-  const spaceAbove = caret.top - gap - margin;
-  const flip = popup.height > spaceBelow && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(0, flip ? spaceAbove : spaceBelow);
-  const height = Math.min(popup.height, maxHeight);
-  const top = flip
-    ? Math.max(margin, caret.top - gap - height)
-    : caret.bottom + gap;
-  const left = Math.max(
-    margin,
-    Math.min(caret.left, view.width - popup.width - margin),
+export async function placeMentionPopup(
+  caretRect: () => DOMRect,
+  popup: HTMLElement,
+): Promise<void> {
+  const list = popup.querySelector<HTMLElement>(".kaneo-mention-list");
+  if (list) list.style.maxHeight = "none";
+  const { x, y } = await computePosition(
+    { getBoundingClientRect: caretRect },
+    popup,
+    {
+      placement: "bottom-start",
+      strategy: "absolute",
+      middleware: [
+        offset(4),
+        flip({ padding: 8 }),
+        size({
+          padding: 8,
+          apply({ availableHeight }) {
+            if (list)
+              list.style.maxHeight = `${Math.max(0, availableHeight)}px`;
+          },
+        }),
+        shift({ padding: 8 }),
+      ],
+    },
   );
-  return { top: top + view.scrollY, left: left + view.scrollX, maxHeight };
+  popup.style.top = `${y}px`;
+  popup.style.left = `${x}px`;
 }
 
 // Adds an @-triggered autocomplete of workspace members to an editor. On select
@@ -137,27 +147,15 @@ export const MentionSuggestion = Extension.create<MentionSuggestionOptions>({
         let popup: HTMLDivElement | null = null;
 
         const place = (clientRect?: (() => DOMRect | null) | null) => {
-          if (!popup || !clientRect) return;
+          const target = popup;
+          if (!target || !clientRect) return;
           const rect = clientRect();
           if (!rect) return;
-          // Measure the list's full height (scrollHeight plus its border), not the capped box.
-          const list = popup.querySelector<HTMLElement>(".kaneo-mention-list");
-          const height = list
-            ? list.scrollHeight + (list.offsetHeight - list.clientHeight)
-            : popup.offsetHeight;
-          const { top, left, maxHeight } = mentionPopupPosition(
-            rect,
-            { width: popup.offsetWidth, height },
-            {
-              width: document.documentElement.clientWidth,
-              height: window.innerHeight,
-              scrollX: window.scrollX,
-              scrollY: window.scrollY,
+          placeMentionPopup(() => clientRect() ?? rect, target).catch(
+            (error: unknown) => {
+              console.error("mention popup placement failed", error);
             },
           );
-          if (list) list.style.maxHeight = `${maxHeight}px`;
-          popup.style.top = `${top}px`;
-          popup.style.left = `${left}px`;
         };
 
         return {
