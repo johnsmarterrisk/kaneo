@@ -254,6 +254,37 @@ describe("API integration: Operon social revision (social agent S9)", () => {
     expect(await revisionOf(second.id)).toBe(2);
   });
 
+  it("sends no status_changed for a bulk write to a card's existing status, and oldStatus for a real move", async () => {
+    const { insertTask, send } = await seed();
+    const already = await insertTask("Already there", 1);
+    const moving = await insertTask("Moving", 2);
+    expect(
+      (await send("PUT", `/status/${already.id}`, { status: "in-review" }))
+        .status,
+    ).toBe(200);
+    await waitForDeliveries(
+      (d) => d.filter((x) => x.event === "task.status_changed").length === 1,
+    );
+    deliveries = [];
+
+    const bulk = await send("PATCH", "/bulk", {
+      taskIds: [already.id, moving.id],
+      operation: "updateStatus",
+      value: "in-review",
+    });
+    expect(bulk.status).toBe(200);
+
+    await waitForDeliveries(
+      (d) => d.filter((x) => x.event === "task.status_changed").length >= 1,
+    );
+    // Give a wrongly emitted second delivery time to arrive before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const changed = deliveries.filter((d) => d.event === "task.status_changed");
+    expect(changed.map((d) => d.task.id)).toEqual([moving.id]);
+    expect(changed[0]?.data.oldStatus).toBe("to-do");
+    expect(changed[0]?.data.newStatus).toBe("in-review");
+  });
+
   it("advances on a cross-project move and the move webhook carries the returned revision", async () => {
     const { other, insertTask, send, revisionOf } = await seed();
     const task = await insertTask("Moving post", 1);

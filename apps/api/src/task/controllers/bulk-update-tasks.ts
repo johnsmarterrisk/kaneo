@@ -46,6 +46,7 @@ async function bulkUpdateTasks({
       projectId: taskTable.projectId,
       userId: taskTable.userId,
       dueDate: taskTable.dueDate,
+      status: taskTable.status,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -132,12 +133,21 @@ async function bulkUpdateTasks({
 
         updatedCount += updatedRows.length;
 
+        // Operon fork (social agent, codex round 1 item 2): a status_changed event only for a
+        // real transition, carrying its oldStatus like the single-task route. A bulk write to a
+        // card's existing status (already in Approved) is no move, and Operon must never read
+        // one as an approval.
+        const before = new Map(tasks.map((t) => [t.id, t]));
         for (const row of updatedRows) {
+          const prior = before.get(row.id);
+          if (!prior || prior.status === value) continue;
           await publishEvent("task.status_changed", {
             taskId: row.id,
             projectId,
             userId,
+            oldStatus: prior.status,
             newStatus: value,
+            title: prior.title,
             socialRevision: row.socialRevision,
             type: "status_changed",
           });
