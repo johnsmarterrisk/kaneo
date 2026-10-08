@@ -165,6 +165,43 @@ describe("mention popup placement", () => {
     expect(scrolled.top).toBe(still.top + 500);
     expect(scrolled.left).toBe(still.left + 10);
   });
+
+  // 2026-10-08: after the flip, the stylesheet's fixed 16rem cap still hid rows 6-9 (the group
+  // row last) inside the list. The cap is now the room on the chosen side.
+  it("caps the list at the room on the side it opens, not at a fixed height", () => {
+    const nine = { width: 240, height: 425 }; // 8 people + 1 group, about 46 px a row
+    const caret = { top: 467, bottom: 487, left: 300 };
+    const above = mentionPopupPosition(caret, nine, view);
+    expect(above.maxHeight).toBe(455); // 467 - 4 gap - 8 margin
+    expect(above.maxHeight).toBeGreaterThanOrEqual(nine.height); // every row drawn
+    expect(above.top + nine.height).toBeLessThanOrEqual(caret.top);
+    const phone = { width: 375, height: 812, scrollX: 0, scrollY: 0 };
+    const low = mentionPopupPosition(
+      { top: 512, bottom: 535, left: 30 },
+      nine,
+      phone,
+    );
+    expect(low.maxHeight).toBeGreaterThanOrEqual(nine.height); // flipped above: 500 px of room
+    expect(low.top + nine.height).toBeLessThanOrEqual(512);
+    const below = mentionPopupPosition(
+      { top: 100, bottom: 120, left: 30 },
+      nine,
+      phone,
+    );
+    expect(below.top).toBe(124);
+    expect(below.maxHeight).toBe(812 - 120 - 4 - 8);
+  });
+
+  it("when neither side holds the whole list, opens on the roomier side and caps it there", () => {
+    const tall = { width: 240, height: 600 };
+    const r = mentionPopupPosition(
+      { top: 300, bottom: 320, left: 30 },
+      tall,
+      view,
+    );
+    expect(r.maxHeight).toBe(720 - 320 - 4 - 8); // below has 388, above 288
+    expect(r.top).toBe(324);
+  });
 });
 
 describe("getOperonGroups", () => {

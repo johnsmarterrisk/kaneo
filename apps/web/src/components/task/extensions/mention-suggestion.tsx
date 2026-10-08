@@ -70,25 +70,31 @@ export function operonGroupMentionItems(
  * Where the popup goes (Operon fork, open-items row 390): below the caret when it fits,
  * otherwise above it when there is more room there, and never past the window's left or
  * right edge. Viewport coordinates in, page coordinates out (the popup is body-absolute).
+ * `popup.height` is the list's full (uncapped) height; `maxHeight` is the room on the chosen
+ * side, which the caller sets as the list's cap in place of the stylesheet's fixed 16rem —
+ * that fixed cap hid the last rows (the group row) inside the list even after the flip
+ * (2026-10-08). The list holds at most 8 people and 3 groups, so the room is the only cap.
  */
 export function mentionPopupPosition(
   caret: { top: number; bottom: number; left: number },
   popup: { width: number; height: number },
   view: { width: number; height: number; scrollX: number; scrollY: number },
-): { top: number; left: number } {
+): { top: number; left: number; maxHeight: number } {
   const gap = 4;
   const margin = 8;
   const spaceBelow = view.height - caret.bottom - gap - margin;
   const spaceAbove = caret.top - gap - margin;
   const flip = popup.height > spaceBelow && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(0, flip ? spaceAbove : spaceBelow);
+  const height = Math.min(popup.height, maxHeight);
   const top = flip
-    ? Math.max(margin, caret.top - gap - popup.height)
+    ? Math.max(margin, caret.top - gap - height)
     : caret.bottom + gap;
   const left = Math.max(
     margin,
     Math.min(caret.left, view.width - popup.width - margin),
   );
-  return { top: top + view.scrollY, left: left + view.scrollX };
+  return { top: top + view.scrollY, left: left + view.scrollX, maxHeight };
 }
 
 // Adds an @-triggered autocomplete of workspace members to an editor. On select
@@ -134,9 +140,14 @@ export const MentionSuggestion = Extension.create<MentionSuggestionOptions>({
           if (!popup || !clientRect) return;
           const rect = clientRect();
           if (!rect) return;
-          const { top, left } = mentionPopupPosition(
+          // Measure the list's full height (scrollHeight plus its border), not the capped box.
+          const list = popup.querySelector<HTMLElement>(".kaneo-mention-list");
+          const height = list
+            ? list.scrollHeight + (list.offsetHeight - list.clientHeight)
+            : popup.offsetHeight;
+          const { top, left, maxHeight } = mentionPopupPosition(
             rect,
-            { width: popup.offsetWidth, height: popup.offsetHeight },
+            { width: popup.offsetWidth, height },
             {
               width: document.documentElement.clientWidth,
               height: window.innerHeight,
@@ -144,6 +155,7 @@ export const MentionSuggestion = Extension.create<MentionSuggestionOptions>({
               scrollY: window.scrollY,
             },
           );
+          if (list) list.style.maxHeight = `${maxHeight}px`;
           popup.style.top = `${top}px`;
           popup.style.left = `${left}px`;
         };
