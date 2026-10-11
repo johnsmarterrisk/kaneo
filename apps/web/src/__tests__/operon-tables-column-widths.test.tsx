@@ -215,6 +215,33 @@ describe("Table view column resize", () => {
     );
   });
 
+  it("draws a thin line, not a touch-sized button, and runs it down the rows while dragging", async () => {
+    renderView();
+    await ready();
+    const handle = screen.getByRole("button", { name: "Resize Title" });
+    // Opts out of index.css's 44px touch-target minimum (the grey bubble John saw).
+    expect(handle.hasAttribute("data-touch-compact")).toBe(true);
+    const line = handle.querySelector<HTMLElement>(
+      "[data-testid='column-resize-line']",
+    );
+    expect(line?.className).toContain("opacity-0");
+    expect(line?.className).toContain("w-0.5");
+    const list = screen.getByTestId("table-list");
+    vi.spyOn(list, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+    } as DOMRect);
+    vi.spyOn(handle, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+    } as DOMRect);
+    fireEvent.pointerDown(handle, { button: 0, clientX: 0 });
+    expect(handle.hasAttribute("data-dragging")).toBe(true);
+    expect(line?.style.height).toBe("500px");
+    expect(line?.className).not.toContain("opacity-0");
+    fireEvent.pointerUp(window, { clientX: 0 });
+    expect(handle.hasAttribute("data-dragging")).toBe(false);
+    expect(line?.className).toContain("opacity-0");
+  });
+
   it("shows no resize handles on a phone (375px)", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,

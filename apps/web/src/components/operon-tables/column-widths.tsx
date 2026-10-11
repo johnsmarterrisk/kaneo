@@ -124,6 +124,11 @@ function contentWidth(from: HTMLElement, key: string): number | null {
  * The drag handle on the border right of a column header: drag resizes the column to its
  * left, double-click fits it to its content, Left/Right arrows step it by KEY_STEP. A
  * button so it is focusable and named ("Resize <column>") without extra ARIA wiring.
+ *
+ * Spreadsheet look (John, 2026-10-11): invisible at rest; an 8px hit strip centred on the
+ * boundary shows a 2px line on hover, focus and drag, and while dragging the line runs down
+ * the visible rows. `data-touch-compact` opts out of index.css's 44px touch-target minimum,
+ * which otherwise turned the strip into a 44px grey bubble below the header baseline.
  */
 export function ResizeHandle({
   columnKey,
@@ -133,16 +138,24 @@ export function ResizeHandle({
   label: string;
 }) {
   const { width, setWidth } = useColumnWidthsContext();
+  // While dragging: how far the line reaches below the header (to the list's visible bottom).
+  const [dragLine, setDragLine] = useState<number | null>(null);
 
   // Same window-listener drag as the fork's gantt bar resize (gantt-task-bar.tsx).
-  const onPointerDown = (event: React.PointerEvent) => {
+  const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = width(columnKey);
+    const handle = event.currentTarget.getBoundingClientRect();
+    const list = event.currentTarget
+      .closest('[data-testid="table-list"]')
+      ?.getBoundingClientRect();
+    setDragLine(list ? Math.max(0, list.bottom - handle.top) : null);
     const onMove = (ev: PointerEvent) =>
       setWidth(columnKey, startWidth + ev.clientX - startX);
     const onUp = () => {
+      setDragLine(null);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
@@ -157,6 +170,8 @@ export function ResizeHandle({
       type="button"
       aria-label={`Resize ${label}`}
       data-testid="column-resize-handle"
+      data-touch-compact=""
+      data-dragging={dragLine !== null ? "" : undefined}
       onPointerDown={onPointerDown}
       onDoubleClick={(event) => {
         const fit = contentWidth(event.currentTarget, columnKey);
@@ -169,7 +184,20 @@ export function ResizeHandle({
           setWidth(columnKey, width(columnKey) + step);
         }
       }}
-      className="absolute top-0 -right-[9px] z-10 h-full w-[6px] cursor-col-resize rounded-sm bg-border/0 hover:bg-border focus-visible:bg-primary focus-visible:outline-none"
-    />
+      // The header's gap-3 is 12px, so the boundary sits 6px right of the cell; the 8px
+      // strip starts 4px before it. -top/-bottom-1.5 cover the header's py-1.5.
+      className="group absolute -top-1.5 -bottom-1.5 -right-[10px] z-10 m-0 w-2 cursor-col-resize appearance-none border-0 bg-transparent p-0 outline-none"
+    >
+      <span
+        aria-hidden="true"
+        data-testid="column-resize-line"
+        style={dragLine !== null ? { height: dragLine } : undefined}
+        className={
+          dragLine !== null
+            ? "pointer-events-none absolute top-0 left-[3px] w-0.5 bg-primary"
+            : "pointer-events-none absolute top-0 bottom-0 left-[3px] w-0.5 bg-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+        }
+      />
+    </button>
   );
 }
