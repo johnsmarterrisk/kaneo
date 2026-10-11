@@ -25,6 +25,7 @@ import billing from "./billing";
 import column from "./column";
 import comment from "./comment";
 import config from "./config";
+import customField from "./custom-field";
 import db, { getDatabase, schema } from "./database";
 import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
@@ -55,6 +56,8 @@ import operonFieldLabels from "./operon-field-labels";
 import operonGroups from "./operon-groups";
 import operonMaintenanceState from "./operon-maintenance-state";
 import { initOperonProjectCreatedDelivery } from "./operon-project-created";
+import operonTables from "./operon-tables";
+import { tableRowWriteGuard } from "./operon-tables/guard";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -703,6 +706,11 @@ export function createApp() {
     });
   });
 
+  // Operon fork addition (Tables, docs/fork-discipline.md row 18, spec 7.5): refuses every
+  // upstream task, comment, relation, import and project-delete route that would change a
+  // table row outside the Tables row writer. After authentication, before those routers.
+  api.use("*", tableRowWriteGuard);
+
   const oauthApi = api.route("/oauth", oauth);
 
   const billingApi = api.route("/billing", billing);
@@ -759,6 +767,10 @@ export function createApp() {
   api.route("/operon", operonGroups);
   // Operon fork addition (social agent S18, fork-discipline row 17): per-project field labels.
   api.route("/operon", operonFieldLabels);
+  // Operon fork addition (Tables, fork-discipline row 18): the Tables routes.
+  api.route("/operon", operonTables);
+  // Upstream Kaneo PR #1542 (fork-discipline row 18): custom fields.
+  const customFieldApi = api.route("/custom-field", customField);
   const userApi = api.route("/user", user);
 
   // Operon fork addition (Operon spec R33, decision 43): a server-to-server hook that
@@ -941,6 +953,7 @@ export function createApp() {
     userApi,
     workflowRuleApi,
     workspaceApi,
+    customFieldApi,
     oauthApi,
   };
 }
@@ -1068,6 +1081,7 @@ const {
   userApi,
   workflowRuleApi,
   workspaceApi,
+  customFieldApi,
   oauthApi,
 } = createdApp;
 
@@ -1106,6 +1120,7 @@ export type AppType =
   | typeof workflowRuleApi
   | typeof invitationApi
   | typeof workspaceApi
+  | typeof customFieldApi
   | typeof userApi
   | typeof publicProjectApi
   | typeof invitationPublicApi

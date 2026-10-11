@@ -160,6 +160,12 @@
 					"crimson": "Koyu Kırmızı"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -720,7 +726,9 @@
 			"columnsTitle": "Sütunlar",
 			"columnsDescription": "Panonuzda görünecek sütunları yönetin. Yeniden sıralamak için sürükleyin. Tamamlanmış işleri temsil eden aşamalar için \"Tamamlandı sütunu\"nu açın.",
 			"automationTitle": "Otomasyon Kuralları",
-			"automationDescription": "Entegrasyon olaylarını sütunlarla eşleştirin. Bir olay gerçekleştiğinde, bağlı talep belirtilen sütuna taşınır."
+			"automationDescription": "Entegrasyon olaylarını sütunlarla eşleştirin. Bir olay gerçekleştiğinde, bağlı talep belirtilen sütuna taşınır.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "Proje seç",
@@ -999,7 +1007,8 @@
 				"taskDueDateChanged": "Bitiş tarihi değişti",
 				"taskAssigneeChanged": "Atanan kişi değişti",
 				"taskUnassigned": "Atama kaldırıldı",
-				"dueDateReminder": "Bitiş tarihi hatırlatmaları"
+				"dueDateReminder": "Bitiş tarihi hatırlatmaları",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Webhook bağla",
 			"saveChanges": "Değişiklikleri kaydet",
@@ -1277,6 +1286,41 @@
 			"updateError": "Etiket güncellenemedi",
 			"deleteError": "Etiket silinemedi",
 			"nameRequired": "Etiket adı gereklidir"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text",
+				"multiselect": "Multi-Select"
+			},
+			"availableOptions": "Available options",
+			"clearDefault": "Clear",
+			"defaultValues": "{{count}} default(s)",
+			"moreOptions": "+{{hiddenCount}} more",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Failed to reorder fields",
+			"selectPlaceholder": "Select option(s)"
 		}
 	},
 	"navigation": {
@@ -1593,7 +1637,8 @@
 			"selectTask": "Talep seç",
 			"loadingTask": "Talep yükleniyor...",
 			"taskNotFound": "Talep bulunamadı",
-			"taskNotFoundDescription": "Aradığınız talep mevcut değil veya silinmiş."
+			"taskNotFoundDescription": "Aradığınız talep mevcut değil veya silinmiş.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "Şunun alt talebi:",
@@ -1699,7 +1744,9 @@
 				"mermaid": {
 					"renderFailed": "Mermaid diyagramı oluşturulamadı"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "Talep"
@@ -1858,7 +1905,11 @@
 			"operators": {
 				"isAnyOf": "herhangi biri",
 				"includeAnyOf": "herhangi birini içer"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",
@@ -1987,6 +2038,9 @@
 			"title": "Calendar",
 			"today": "Today",
 			"loadError": "Failed to load tasks."
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	},
 	"invitations": {

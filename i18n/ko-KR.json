@@ -160,6 +160,12 @@
 					"crimson": "크림슨"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -720,7 +726,9 @@
 			"columnsTitle": "컬럼",
 			"columnsDescription": "보드에 표시되는 컬럼을 관리합니다. 드래그하여 순서를 바꿉니다. 완료된 작업을 나타내는 단계의 경우 \"완료 컬럼\"을 켜세요.",
 			"automationTitle": "자동화 규칙",
-			"automationDescription": "연동 이벤트를 컬럼에 매핑합니다. 이벤트가 발생하면 연결된 작업이 지정된 컬럼으로 이동합니다."
+			"automationDescription": "연동 이벤트를 컬럼에 매핑합니다. 이벤트가 발생하면 연결된 작업이 지정된 컬럼으로 이동합니다.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "프로젝트 선택",
@@ -999,7 +1007,8 @@
 				"taskDueDateChanged": "마감일 변경",
 				"taskAssigneeChanged": "담당자 변경",
 				"taskUnassigned": "할당 해제",
-				"dueDateReminder": "마감일 미리 알림"
+				"dueDateReminder": "마감일 미리 알림",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "웹훅 연결",
 			"saveChanges": "변경사항 저장",
@@ -1276,6 +1285,41 @@
 			"updateError": "라벨 업데이트에 실패했습니다",
 			"deleteError": "라벨 삭제에 실패했습니다",
 			"nameRequired": "라벨 이름은 필수입니다"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text",
+				"multiselect": "Multi-Select"
+			},
+			"availableOptions": "Available options",
+			"clearDefault": "Clear",
+			"defaultValues": "{{count}} default(s)",
+			"moreOptions": "+{{hiddenCount}} more",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Failed to reorder fields",
+			"selectPlaceholder": "Select option(s)"
 		}
 	},
 	"navigation": {
@@ -1588,7 +1632,8 @@
 			"selectTask": "작업 선택",
 			"loadingTask": "작업 로딩 중...",
 			"taskNotFound": "작업을 찾을 수 없음",
-			"taskNotFoundDescription": "찾는 작업이 존재하지 않거나 삭제되었습니다."
+			"taskNotFoundDescription": "찾는 작업이 존재하지 않거나 삭제되었습니다.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "상위 작업",
@@ -1694,7 +1739,9 @@
 				"mermaid": {
 					"renderFailed": "Mermaid 다이어그램을 렌더링할 수 없습니다"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "작업"
@@ -1853,7 +1900,11 @@
 			"operators": {
 				"isAnyOf": "다음 중 하나",
 				"includeAnyOf": "다음 중 하나 포함"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"calendar": {
 			"pageTitle": "{{name}} – 캘린더",
@@ -1981,6 +2032,9 @@
 				"deleteRow": "행 삭제",
 				"deleteTable": "표 삭제"
 			}
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	},
 	"invitations": {

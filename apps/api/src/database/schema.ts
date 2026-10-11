@@ -2,6 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   customType,
@@ -14,6 +15,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -1278,3 +1280,205 @@ export const organizationRoleRelations = relations(
     }),
   }),
 );
+
+export const customFieldDefinitionTable = pgTable(
+  "custom_field_definition",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    name: text("name").notNull(),
+    type: text("type").notNull(), // 'text' | 'number' | 'date' | 'dropdown' | 'boolean'
+    required: boolean("required").default(false).notNull(),
+    defaultValue: text("default_value"),
+    options: jsonb("options"),
+    position: integer("position").default(0).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    // Operon fork addition (Tables task 6, docs/fork-discipline.md row 18, spec 7.1): on a
+    // table project a removed column is HIDDEN, never deleted, so its values and history
+    // stay recoverable to an admin; every active read filters `hidden_at IS NULL`.
+    hiddenAt: timestamp("hidden_at", { mode: "date" }),
+  },
+  (table) => [index("custom_field_def_projectId_idx").on(table.projectId)],
+);
+
+export const customFieldValueTable = pgTable(
+  "custom_field_value",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    fieldId: text("field_id")
+      .notNull()
+      .references(() => customFieldDefinitionTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    value: text("value"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("custom_field_value_taskId_idx").on(table.taskId),
+    index("custom_field_value_fieldId_idx").on(table.fieldId),
+    unique("custom_field_value_task_field_unique").on(
+      table.taskId,
+      table.fieldId,
+    ),
+  ],
+);
+
+// Operon fork addition (Tables, docs/fork-discipline.md row 18): the table flag. A project
+// is a table exactly when this row exists. The ordinary project routes never read or write
+// it, so no project update can set or flip it (R-D by construction). `announced_at` is set
+// once Operon has acknowledged the table's `project.created` (and so written its disclosure
+// default); the outbox drain delivers no row record before it (RF-7).
+export const operonTableProjectTable = pgTable("operon_table_project", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projectTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  groupFieldId: text("group_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  dateFieldId: text("date_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  statusFieldId: text("status_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  announcedAt: timestamp("announced_at", { mode: "date" }),
+});
+
+// Operon fork addition (Tables task 5, docs/fork-discipline.md row 18, spec 7.1 / R-B2):
+// who made a table row and who changed it last. Written only by operon-tables/write-row.ts,
+// in the same transaction as the row; `last_change` is `{fieldIds, core}`.
+export const operonTableRowMetaTable = pgTable("operon_table_row_meta", {
+  taskId: text("task_id")
+    .primaryKey()
+    .references(() => taskTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  projectId: text("project_id").notNull(),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  lastWriterUserId: text("last_writer_user_id").notNull(),
+  lastWriteId: uuid("last_write_id").notNull(),
+  lastChangedAt: timestamp("last_changed_at", { mode: "date" })
+    .defaultNow()
+    .notNull(),
+  lastChange: jsonb("last_change").notNull(),
+});
+
+// Operon fork addition (Tables task 5, R-B3): every changed custom value of a table row,
+// old and new. `task_id` deliberately has NO foreign key, so a deleted row's values stay
+// recoverable to an admin; the project FK cascades only when an empty table is deleted.
+export const operonTableValueHistoryTable = pgTable(
+  "operon_table_value_history",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    taskId: text("task_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    writeId: uuid("write_id").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("operon_table_value_history_project_field_idx").on(
+      table.projectId,
+      table.fieldId,
+      table.createdAt,
+    ),
+  ],
+);
+
+// Operon fork addition (Tables task 5, R-B / RF-3): the durable delivery of every table row
+// write, committed with the row. A record is DELETED on Operon's 2xx (raw values are kept
+// only as long as delivery needs them, R-A). `project_id` has no FK: a table project with
+// pending records cannot be deleted (spec 7.5), and a record must never vanish by cascade.
+export const operonTableRowOutboxTable = pgTable(
+  "operon_table_row_outbox",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    event: text("event").notNull(),
+    writeId: uuid("write_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+    lastStatus: integer("last_status"),
+    lastErrorClass: text("last_error_class"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("operon_table_row_outbox_event_write_task_unique").on(
+      table.event,
+      table.writeId,
+      table.taskId,
+    ),
+    index("operon_table_row_outbox_project_idx").on(table.projectId),
+    index("operon_table_row_outbox_task_idx").on(table.taskId, table.id),
+  ],
+);
+
+// Operon fork addition (Tables task 12, docs/fork-discipline.md row 18, spec 7.3 step 2 /
+// RF-6): the request tombstone of every keyed table-row add. `key` is
+// `tables:<projectId>:<sha256(actor + "\n" + requestId), first 40 hex>`; the fingerprint is
+// a keyed HMAC of the submitted payload. `task_id` deliberately has NO foreign key: a
+// retried add after the row's delete must find the tombstone and answer the original row
+// id with `deleted: true`, never create a second row. The project FK cascades only when an
+// empty table is deleted (spec 7.5).
+export const operonTableRequestTable = pgTable("operon_table_request", {
+  key: text("key").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projectTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  actorUserId: text("actor_user_id").notNull(),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  taskId: text("task_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});

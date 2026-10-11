@@ -3,6 +3,7 @@ import type React from "react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
+import OperonBottomTabs from "@/components/common/operon-bottom-tabs";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -42,12 +43,19 @@ type ContentProps = {
  * own `SidebarProvider`) keeps its existing behaviour, and this is scoped to the one call
  * site that renders two visually unrelated trees off the same flag.
  */
-function useSyncedIsMobile(): boolean {
+export function useSyncedIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 768,
   );
 
   useEffect(() => {
+    // Task 15: the table view and record panel read this hook too, and a test DOM (jsdom)
+    // has no `matchMedia`; `resize` is the same signal for a live crossing there.
+    if (typeof window.matchMedia !== "function") {
+      const onResize = () => setIsMobile(window.innerWidth < 768);
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }
     const mql = window.matchMedia("(max-width: 767px)");
     const onChange = () => setIsMobile(window.innerWidth < 768);
     mql.addEventListener("change", onChange);
@@ -182,18 +190,24 @@ function Layout({ children, className }: LayoutProps) {
           // suppresses it; `ui/sidebar.tsx` itself is untouched (fork-discipline.md's
           // own note on why explains the `cn()`/`twMerge` reasoning that makes this
           // possible without editing the shared primitive).
+          // Tables task 15 (R-I): a column — the screen above, the bottom tab bar below
+          // both screens (the same bar Operon's shell draws), so it never remounts with
+          // either and always takes the home-indicator inset.
           <div
             data-testid="phone-shell"
-            className="flex h-[100dvh] w-full overflow-hidden"
+            className="flex h-[100dvh] w-full flex-col overflow-hidden"
           >
-            {isPhoneNavOpen ? (
-              <OperonPhoneNavigate />
-            ) : (
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                {isDemoMode && <DemoAlert />}
-                {children}
-              </div>
-            )}
+            <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+              {isPhoneNavOpen ? (
+                <OperonPhoneNavigate />
+              ) : (
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                  {isDemoMode && <DemoAlert />}
+                  {children}
+                </div>
+              )}
+            </div>
+            <OperonBottomTabs />
           </div>
         ) : (
           <>

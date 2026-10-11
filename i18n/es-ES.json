@@ -160,6 +160,12 @@
 					"crimson": "Carmesí"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -617,7 +623,9 @@
 			"columnsTitle": "Columnas",
 			"columnsDescription": "Gestiona las columnas de tu tablero. Arrastra para reordenar. Activa la columna  \"Hecho\" para representar el trabajo completado.",
 			"automationTitle": "Reglas de automatización",
-			"automationDescription": "Mapea eventos de integración y columnas integration. Cuando un evento ocurre, la tarea vinculada se moverá a la columna especificada."
+			"automationDescription": "Mapea eventos de integración y columnas integration. Cuando un evento ocurre, la tarea vinculada se moverá a la columna especificada.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "Selecciona proyecto",
@@ -820,7 +828,8 @@
 				"taskDueDateChanged": "Cambio de fecha de vencimiento",
 				"taskAssigneeChanged": "Cambio de asignado",
 				"taskUnassigned": "Tarea desasignada",
-				"dueDateReminder": "Recordatorios de fecha de vencimiento"
+				"dueDateReminder": "Recordatorios de fecha de vencimiento",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Conectar al webhook",
 			"saveChanges": "Guardar cambios",
@@ -1278,6 +1287,41 @@
 			"connect": "Conectar Telegram",
 			"saveChanges": "Guardar cambios",
 			"disconnect": "Desconectar"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text",
+				"multiselect": "Multi-Select"
+			},
+			"availableOptions": "Available options",
+			"clearDefault": "Clear",
+			"defaultValues": "{{count}} default(s)",
+			"moreOptions": "+{{hiddenCount}} more",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Failed to reorder fields",
+			"selectPlaceholder": "Select option(s)"
 		}
 	},
 	"navigation": {
@@ -1598,7 +1642,8 @@
 			"selectTask": "Seleccionar tarea",
 			"loadingTask": "Cargando tarea...",
 			"taskNotFound": "Tarea no encontrada",
-			"taskNotFoundDescription": "La tarea que buscas no existe o ha sido eliminada."
+			"taskNotFoundDescription": "La tarea que buscas no existe o ha sido eliminada.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "Subtarea de",
@@ -1704,7 +1749,9 @@
 				"mermaid": {
 					"renderFailed": "No se pudo renderizar el diagrama de Mermaid"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "Tarea"
@@ -1852,7 +1899,11 @@
 			"operators": {
 				"isAnyOf": "es alguno de",
 				"includeAnyOf": "incluye alguno de"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",
@@ -1993,6 +2044,9 @@
 			"title": "Calendar",
 			"today": "Today",
 			"loadError": "Failed to load tasks."
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	},
 	"invitations": {

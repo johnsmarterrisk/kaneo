@@ -160,6 +160,12 @@
 					"crimson": "クリムゾン"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -881,7 +887,9 @@
 			"columnsTitle": "カラム",
 			"columnsDescription": "ボードに表示されるカラムを管理します。ドラッグして並べ替えます。完了した作業を表すステージには「完了カラム」をオンにしてください。",
 			"automationTitle": "自動化ルール",
-			"automationDescription": "連携イベントをカラムにマッピングします。イベントが発生すると、リンクされたタスクが指定されたカラムに移動します。"
+			"automationDescription": "連携イベントをカラムにマッピングします。イベントが発生すると、リンクされたタスクが指定されたカラムに移動します。",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "プロジェクトを選択",
@@ -1160,7 +1168,8 @@
 				"taskDueDateChanged": "期限の変更",
 				"taskAssigneeChanged": "担当者の変更",
 				"taskUnassigned": "担当者の解除",
-				"dueDateReminder": "期限リマインダー"
+				"dueDateReminder": "期限リマインダー",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "期限の何時間前に Webhook を送信するか（時間）",
 			"connect": "Webhook を接続",
@@ -1276,6 +1285,41 @@
 			"merged": "マージ済み",
 			"draft": "下書き",
 			"open": "オープン"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text",
+				"multiselect": "Multi-Select"
+			},
+			"availableOptions": "Available options",
+			"clearDefault": "Clear",
+			"defaultValues": "{{count}} default(s)",
+			"moreOptions": "+{{hiddenCount}} more",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Failed to reorder fields",
+			"selectPlaceholder": "Select option(s)"
 		}
 	},
 	"navigation": {
@@ -1588,7 +1632,8 @@
 			"selectTask": "タスクを選択",
 			"loadingTask": "タスクを読み込み中...",
 			"taskNotFound": "タスクが見つかりません",
-			"taskNotFoundDescription": "お探しのタスクは存在しないか、削除されました。"
+			"taskNotFoundDescription": "お探しのタスクは存在しないか、削除されました。",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "親タスク:",
@@ -1694,7 +1739,9 @@
 				"mermaid": {
 					"renderFailed": "Mermaid ダイアグラムを描画できませんでした"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "タスク"
@@ -1853,7 +1900,11 @@
 			"operators": {
 				"isAnyOf": "次のいずれか",
 				"includeAnyOf": "次のいずれかを含む"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"calendar": {
 			"pageTitle": "{{name}} – カレンダー",
@@ -1981,6 +2032,9 @@
 				"deleteRow": "行を削除",
 				"deleteTable": "表を削除"
 			}
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	},
 	"invitations": {

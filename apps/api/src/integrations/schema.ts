@@ -18,6 +18,8 @@ export const genericWebhookEventToggles = integrationEventToggles.extend({
   taskAssigneeChanged: z.boolean().optional(),
   taskUnassigned: z.boolean().optional(),
   dueDateReminder: z.boolean().optional(),
+  // Operon fork addition (Tables, docs/fork-discipline.md row 18): table row changes.
+  taskFieldsChanged: z.boolean().optional(),
 });
 
 export const deletedSchema = z.object({ success: z.boolean() });

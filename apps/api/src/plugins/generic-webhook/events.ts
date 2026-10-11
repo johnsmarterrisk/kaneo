@@ -9,6 +9,7 @@ import {
   workspaceTable,
 } from "../../database/schema";
 import { resolveColumnFinality } from "../../operon-column-finality";
+import { skipForTableProject } from "../../operon-tables/flag";
 import type {
   PluginContext,
   TaskAssigneeChangedEvent,
@@ -209,6 +210,9 @@ async function sendEvent(
   userId: string | null,
   data: Record<string, unknown>,
 ): Promise<boolean> {
+  // Operon fork addition (Tables, row 18, spec 7.4): a table row is delivered only by the
+  // durable Tables outbox; a best-effort delivery here as well would double its signal.
+  if (await skipForTableProject(projectId)) return false;
   const task = await getTaskData(taskId, projectId);
   if (!task) return false;
 
@@ -426,6 +430,8 @@ async function sendTaskDeletedEvent(
   config: GenericWebhookConfig,
   event: TaskDeletedEvent,
 ): Promise<boolean> {
+  // Operon fork addition (Tables, row 18, spec 7.4): see `sendEvent`.
+  if (await skipForTableProject(event.projectId)) return false;
   const [project] = await db
     .select({
       id: projectTable.id,

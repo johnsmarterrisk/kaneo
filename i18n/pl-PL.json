@@ -160,6 +160,12 @@
 					"crimson": "Karmazyn"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -963,6 +969,7 @@
 			"disconnect": "Rozłącz",
 			"events": {
 				"dueDateReminder": "Przypomnienia o terminach",
+				"taskFieldsChanged": "Table entry changes",
 				"taskAssigneeChanged": "Zmieniono osobę przypisaną",
 				"taskCommentCreated": "Nowe komentarze",
 				"taskCreated": "Nowe zadania",
@@ -1407,7 +1414,9 @@
 			"columnsTitle": "Kolumny",
 			"pageTitle": "Ustawienia obiegu pracy",
 			"subtitle": "Skonfiguruj kolumny tablicy i reguły automatyzacji dla tego projektu.",
-			"title": "Obieg pracy"
+			"title": "Obieg pracy",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"repositoryBrowser": {
 			"description": "Wybierz repozytorium, w którym zainstalowano aplikację GitHub, aby włączyć synchronizację zgłoszeń.",
@@ -1755,6 +1764,41 @@
 				"nameRequired": "Nazwa roli jest wymagana",
 				"permissionRequired": "Należy wybrać co najmniej jedno uprawnienie"
 			}
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text",
+				"multiselect": "Multi-Select"
+			},
+			"availableOptions": "Available options",
+			"clearDefault": "Clear",
+			"defaultValues": "{{count}} default(s)",
+			"moreOptions": "+{{hiddenCount}} more",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Failed to reorder fields",
+			"selectPlaceholder": "Select option(s)"
 		}
 	},
 	"tasks": {
@@ -1815,7 +1859,11 @@
 				"labels": "Etykiety",
 				"priority": "Priorytet",
 				"status": "Status"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"boardSearchPlaceholder": "Szukaj zadań...",
 		"bulk": {
@@ -1854,7 +1902,8 @@
 			"loadingTask": "Ładowanie zadania...",
 			"selectTask": "Wybierz zadanie",
 			"taskNotFound": "Nie znaleziono zadania",
-			"taskNotFoundDescription": "Zadanie, którego szukasz, nie istnieje lub zostało usunięte."
+			"taskNotFoundDescription": "Zadanie, którego szukasz, nie istnieje lub zostało usunięte.",
+			"customFields": "Custom Fields"
 		},
 		"contextMenu": {
 			"copyLink": "Kopiuj link",
@@ -1971,7 +2020,9 @@
 			"noActivity": "Nie znaleziono aktywności",
 			"openInFullPage": "Otwórz na pełnej stronie",
 			"subtaskOf": "Podzadanie zadania",
-			"titlePlaceholder": "Kliknij, aby dodać tytuł"
+			"titlePlaceholder": "Kliknij, aby dodać tytuł",
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"dueDate": {
 			"clear": "Wyczyść datę",
@@ -2181,6 +2232,9 @@
 		"view": {
 			"board": "Tablica",
 			"list": "Lista"
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	}
 }

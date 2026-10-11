@@ -68,6 +68,23 @@ export function useProjectWebSocket(projectId: string) {
             queryClient.invalidateQueries({
               queryKey: ["tasks", message.projectId],
             });
+            // Operon fork addition (Tables, docs/fork-discipline.md row 18; codex round 1,
+            // finding 4): a table row's change reaches other open clients here. Harmless for
+            // an ordinary project, which has no `operon-table-*` queries to match.
+            queryClient.invalidateQueries({
+              queryKey: ["operon-table-rows", message.projectId],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["operon-table-search"],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["operon-tables-summary"],
+            });
+            if (message.taskId) {
+              queryClient.invalidateQueries({
+                queryKey: ["operon-table-row", message.taskId],
+              });
+            }
 
             if (message.type === "TASK_RELATION_UPDATED") {
               if (message.sourceTaskId) {

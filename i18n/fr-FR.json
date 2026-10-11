@@ -160,6 +160,12 @@
 					"crimson": "Cramoisi"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -720,7 +726,9 @@
 			"columnsTitle": "Colonnes",
 			"columnsDescription": "Gérez les colonnes qui apparaissent sur votre tableau. Faites glisser pour réorganiser. Activez \"Colonne terminée\" pour les étapes qui représentent le travail terminé.",
 			"automationTitle": "Règles d'automatisation",
-			"automationDescription": "Mappez les événements d'intégration aux colonnes. Lorsqu'un événement se produit, la tâche liée se déplace vers la colonne spécifiée."
+			"automationDescription": "Mappez les événements d'intégration aux colonnes. Lorsqu'un événement se produit, la tâche liée se déplace vers la colonne spécifiée.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "Sélectionner un projet",
@@ -999,7 +1007,8 @@
 				"taskDueDateChanged": "Date d'échéance modifiée",
 				"taskAssigneeChanged": "Assigné modifié",
 				"taskUnassigned": "Tâche désassignée",
-				"dueDateReminder": "Rappels d'échéance"
+				"dueDateReminder": "Rappels d'échéance",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Connecter le webhook",
 			"saveChanges": "Enregistrer les modifications",
@@ -1278,6 +1287,41 @@
 			"updateError": "Échec de la mise à jour du label",
 			"deleteError": "Échec de la suppression du label",
 			"nameRequired": "Le nom du label est requis"
+		},
+		"customFields": {
+			"addButton": "Ajouter",
+			"createError": "Échec de la création du champ personnalisé.",
+			"createSuccess": "Champ personnalisé créé.",
+			"creating": "Création...",
+			"defaultLabel": "Par défaut",
+			"defaultValuePlaceholder": "Valeur par défaut",
+			"deleteButton": "Supprimer",
+			"deleteError": "Échec de la suppression du champ personnalisé.",
+			"deleteSuccess": "Champ personnalisé supprimé.",
+			"deleting": "Suppression...",
+			"empty": "Aucun champ personnalisé configuré pour le moment.",
+			"loading": "Chargement...",
+			"namePlaceholder": "Nom du champ",
+			"noOptionsPlaceholder": "Aucune option",
+			"optionsPlaceholder": "Options séparées par des virgules",
+			"required": "Requis",
+			"typePlaceholder": "Sélectionner un type de champ",
+			"types": {
+				"boolean": "Booléen",
+				"date": "Date",
+				"dropdown": "Sélecteur",
+				"number": "Nombre",
+				"text": "Texte",
+				"multiselect": "Sélection multiple"
+			},
+			"availableOptions": "Options disponibles",
+			"clearDefault": "Effacer",
+			"defaultValues": "{{count}} par défaut",
+			"moreOptions": "+{{hiddenCount}} de plus",
+			"multiple": "Multiple",
+			"options": "{{count}} option(s)",
+			"reorderError": "Échec du réagencement des champs",
+			"selectPlaceholder": "Sélectionner une option"
 		}
 	},
 	"navigation": {
@@ -1598,7 +1642,8 @@
 			"selectTask": "Sélectionner une tâche",
 			"loadingTask": "Chargement de la tâche...",
 			"taskNotFound": "Tâche non trouvée",
-			"taskNotFoundDescription": "La tâche que vous recherchez n'existe pas ou a été supprimée."
+			"taskNotFoundDescription": "La tâche que vous recherchez n'existe pas ou a été supprimée.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "Sous-tâche de",
@@ -1704,7 +1749,9 @@
 				"mermaid": {
 					"renderFailed": "Impossible d'afficher le diagramme Mermaid"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "Tâche"
@@ -1863,7 +1910,11 @@
 			"operators": {
 				"isAnyOf": "est l'un des",
 				"includeAnyOf": "inclut l'un des"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",
@@ -1993,6 +2044,9 @@
 			"title": "Calendar",
 			"today": "Today",
 			"loadError": "Failed to load tasks."
+		},
+		"customFields": {
+			"ariaLabel": "Custom fields"
 		}
 	},
 	"invitations": {

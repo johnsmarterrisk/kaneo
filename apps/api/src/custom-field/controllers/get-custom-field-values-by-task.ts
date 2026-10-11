@@ -1,0 +1,36 @@
+import { and, eq, isNull } from "drizzle-orm";
+import db from "../../database";
+import {
+  customFieldDefinitionTable,
+  customFieldValueTable,
+} from "../../database/schema";
+
+async function getCustomFieldValuesByTask(taskId: string) {
+  return (
+    db
+      .select({
+        id: customFieldValueTable.id,
+        taskId: customFieldValueTable.taskId,
+        fieldId: customFieldValueTable.fieldId,
+        value: customFieldValueTable.value,
+        fieldName: customFieldDefinitionTable.name,
+        fieldPosition: customFieldDefinitionTable.position,
+        fieldType: customFieldDefinitionTable.type,
+        fieldOptions: customFieldDefinitionTable.options,
+      })
+      .from(customFieldValueTable)
+      .innerJoin(
+        customFieldDefinitionTable,
+        eq(customFieldValueTable.fieldId, customFieldDefinitionTable.id),
+      )
+      // Operon fork addition (Tables, row 18): a hidden column's values are not listed.
+      .where(
+        and(
+          eq(customFieldValueTable.taskId, taskId),
+          isNull(customFieldDefinitionTable.hiddenAt),
+        ),
+      )
+  );
+}
+
+export default getCustomFieldValuesByTask;

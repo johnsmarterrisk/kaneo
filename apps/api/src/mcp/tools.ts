@@ -954,4 +954,247 @@ export function registerMcpTools(
     },
     async () => run(() => client.json("/api/notification")),
   );
+
+  registerTableTools(registerTool, baseUrl, token);
+}
+
+/**
+ * Operon fork addition (Tables task 12, docs/fork-discipline.md row 18, spec 7.8; upstream
+ * issue #1986): the five table tools. Each is a thin wrapper over a Tables REST route with
+ * the caller's own token (F12), so every refusal is the route's — and the route's
+ * structured body (`unknown_column` with `columns`, `unknown_option` with `options`,
+ * `request_conflict`, …) reaches the agent whole, with its HTTP status, rather than as the
+ * one-line message `ApiClient` keeps. An agent needs the current column or option list to
+ * correct itself.
+ */
+type TableToolRegistrar = <InputSchema extends z.ZodObject>(
+  name: string,
+  config: { description: string; inputSchema: InputSchema },
+  callback: (args: z.output<InputSchema>) => Promise<McpToolResult>,
+) => unknown;
+
+class TableApiError extends Error {
+  constructor(readonly body: Record<string, unknown>) {
+    super(typeof body.message === "string" ? body.message : "request failed");
+  }
+}
+
+async function tableCall<T = unknown>(
+  baseUrl: string,
+  token: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (init?.body != null) headers.set("Content-Type", "application/json");
+  const res = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers,
+    signal: AbortSignal.timeout(10_000),
+  });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = null;
+  }
+  if (!res.ok) {
+    const structured =
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : { error: `http_${res.status}` };
+    throw new TableApiError({ status: res.status, ...structured });
+  }
+  return body as T;
+}
+
+function runTable(fn: () => Promise<unknown>): Promise<McpToolResult> {
+  return fn()
+    .then((data) => textResult(data))
+    .catch((e: unknown) =>
+      e instanceof TableApiError
+        ? textResult(e.body, true)
+        : errorResult(e instanceof Error ? e.message : String(e)),
+    );
+}
+
+const tableValuesSchema = z
+  .record(z.string(), z.unknown())
+  .describe(
+    "Column values keyed by column name (case-insensitive) or column id; null clears one. Read get_table_columns first.",
+  );
+
+function registerTableTools(
+  registerTool: TableToolRegistrar,
+  baseUrl: string,
+  token: string,
+) {
+  const call = <T = unknown>(path: string, init?: RequestInit) =>
+    tableCall<T>(baseUrl, token, path, init);
+
+  registerTool(
+    "list_tables",
+    {
+      description:
+        "List the tables in a workspace: each table's id, name, entry count and active column names.",
+      inputSchema: z.object({ workspaceId: nonEmptyString }),
+    },
+    async (args) =>
+      runTable(async () => {
+        const tables: Array<{
+          tableId: string;
+          name: string;
+          entryCount: number;
+          columns: string[];
+        }> = [];
+        let cursor: string | null = null;
+        do {
+          const qs: string = cursor
+            ? `?cursor=${encodeURIComponent(cursor)}`
+            : "";
+          const page: {
+            tables: Array<{ tableId: string; name: string; entries: number }>;
+            nextCursor: string | null;
+          } = await call(
+            `/api/operon/tables/workspace/${encodeURIComponent(args.workspaceId)}/summary${qs}`,
+          );
+          for (const table of page.tables) {
+            const detail = await call<{ columns: Array<{ name: string }> }>(
+              `/api/operon/tables/${encodeURIComponent(table.tableId)}`,
+            );
+            tables.push({
+              tableId: table.tableId,
+              name: table.name,
+              entryCount: table.entries,
+              columns: detail.columns.map((column) => column.name),
+            });
+          }
+          cursor = page.nextCursor;
+        } while (cursor);
+        return { tables };
+      }),
+  );
+
+  registerTool(
+    "get_table_columns",
+    {
+      description:
+        "Read a table's active columns (id, name, kind, required, options) and the JSON Schema of an entry. Call it before add_table_row: options change.",
+      inputSchema: z.object({ tableId: nonEmptyString }),
+    },
+    async (args) =>
+      runTable(() =>
+        call(`/api/operon/tables/${encodeURIComponent(args.tableId)}/schema`),
+      ),
+  );
+
+  registerTool(
+    "search_table_rows",
+    {
+      description:
+        "Search table entries in a workspace (title, notes, text and link values; a literal, case-insensitive match). Paged: pass nextCursor back as cursor.",
+      inputSchema: z.object({
+        workspaceId: nonEmptyString,
+        query: z.string().trim().min(1).max(200),
+        tableId: optionalNonEmptyString,
+        cursor: optionalNonEmptyString,
+        limit: z.number().int().min(1).max(50).optional(),
+      }),
+    },
+    async (args) =>
+      runTable(async () => {
+        const qs = new URLSearchParams({
+          workspaceId: args.workspaceId,
+          q: args.query,
+        });
+        if (args.tableId) qs.set("tableId", args.tableId);
+        if (args.cursor) qs.set("cursor", args.cursor);
+        if (args.limit) qs.set("limit", String(args.limit));
+        const page = await call<{
+          rows: Array<Record<string, unknown>>;
+          nextCursor: string | null;
+        }>(`/api/operon/tables/search?${qs.toString()}`);
+        return {
+          rows: page.rows.map((row) => ({
+            rowId: row.rowId,
+            tableId: row.tableId,
+            tableName: row.tableName,
+            title: row.title,
+            values: row.values,
+            madeBy: row.madeBy,
+            createdAt: row.createdAt,
+            url: row.url,
+          })),
+          nextCursor: page.nextCursor,
+        };
+      }),
+  );
+
+  registerTool(
+    "add_table_row",
+    {
+      description:
+        "Add an entry to a table. requestId makes the add safe to retry: the same requestId with the same payload returns the first entry (replayed: true), never a second one; a changed payload is refused.",
+      inputSchema: z.object({
+        tableId: nonEmptyString,
+        requestId: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,64}$/)
+          .describe("1-64 of A-Z a-z 0-9 _ -, unique per intended entry"),
+        title: nonEmptyString,
+        notes: z.string().optional(),
+        assigneeId: optionalNonEmptyString,
+        values: tableValuesSchema,
+      }),
+    },
+    async (args) =>
+      runTable(() =>
+        call(`/api/operon/tables/${encodeURIComponent(args.tableId)}/rows`, {
+          method: "POST",
+          body: JSON.stringify({
+            requestId: args.requestId,
+            title: args.title,
+            ...(args.notes !== undefined ? { notes: args.notes } : {}),
+            ...(args.assigneeId ? { assigneeId: args.assigneeId } : {}),
+            values: args.values,
+          }),
+        }),
+      ),
+  );
+
+  registerTool(
+    "update_table_row",
+    {
+      description:
+        "Change an entry of a table: only the members given change; a value of null clears that column.",
+      inputSchema: z.object({
+        tableId: nonEmptyString,
+        rowId: nonEmptyString,
+        title: optionalNonEmptyString,
+        notes: z.string().nullable().optional(),
+        assigneeId: z.string().nullable().optional(),
+        values: tableValuesSchema.optional(),
+      }),
+    },
+    async (args) =>
+      runTable(async () => {
+        const answer = await call<{ row: unknown }>(
+          `/api/operon/tables/${encodeURIComponent(args.tableId)}/rows/${encodeURIComponent(args.rowId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              ...(args.title !== undefined ? { title: args.title } : {}),
+              ...(args.notes !== undefined ? { notes: args.notes } : {}),
+              ...(args.assigneeId !== undefined
+                ? { assigneeId: args.assigneeId }
+                : {}),
+              ...(args.values !== undefined ? { values: args.values } : {}),
+            }),
+          },
+        );
+        return { row: answer.row };
+      }),
+  );
 }

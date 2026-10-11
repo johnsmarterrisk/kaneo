@@ -5,8 +5,9 @@ import {
   CalendarRange,
   SquareKanban,
   SquircleDashed,
+  Table2,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ProjectCrumbSelect from "@/components/common/header/project-crumb-select";
 import WorkspaceCrumbSelect from "@/components/common/header/workspace-crumb-select";
@@ -22,9 +23,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { shortcuts } from "@/constants/shortcuts";
+import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import { useProjectWebSocket } from "@/hooks/use-project-websocket";
 import { cn } from "@/lib/cn";
+import { requestTablesAnchor, TABLES_ANCHOR_ID } from "@/store/phone-nav";
 
 type ProjectLayoutProps = {
   projectId: string;
@@ -32,7 +35,7 @@ type ProjectLayoutProps = {
   headerActions?: ReactNode;
   children: ReactNode;
   showViewSwitcher?: boolean;
-  activeView?: "backlog" | "board" | "calendar" | "gantt";
+  activeView?: "backlog" | "board" | "calendar" | "gantt" | "table";
 };
 
 export default function ProjectLayout({
@@ -52,6 +55,21 @@ export default function ProjectLayout({
     useState(false);
 
   useProjectWebSocket(projectId);
+
+  // Operon fork addition (Tables task 8, docs/fork-discipline.md row 18): a table project
+  // has one view, the table. Its tabs show only that view, and a link that lands a table
+  // on board/backlog/calendar/gantt (the sidebar and search link to /board) moves it there.
+  const { data: operonTable } = useGetTable(projectId);
+  const isTableProject = Boolean(operonTable);
+  useEffect(() => {
+    if (isTableProject && activeView !== "table") {
+      navigate({
+        to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
+        params: { workspaceId, projectId },
+        replace: true,
+      });
+    }
+  }, [isTableProject, activeView, navigate, workspaceId, projectId]);
 
   const resolvedView =
     activeView ??
@@ -94,13 +112,15 @@ export default function ProjectLayout({
   const handleProjectSwitch = (nextProjectId: string) => {
     navigate({
       to:
-        resolvedView === "backlog"
-          ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
-          : resolvedView === "calendar"
-            ? "/dashboard/workspace/$workspaceId/project/$projectId/calendar"
-            : resolvedView === "gantt"
-              ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
-              : "/dashboard/workspace/$workspaceId/project/$projectId/board",
+        resolvedView === "table"
+          ? "/dashboard/workspace/$workspaceId/project/$projectId"
+          : resolvedView === "backlog"
+            ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
+            : resolvedView === "calendar"
+              ? "/dashboard/workspace/$workspaceId/project/$projectId/calendar"
+              : resolvedView === "gantt"
+                ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
+                : "/dashboard/workspace/$workspaceId/project/$projectId/board",
       params: {
         workspaceId,
         projectId: nextProjectId,
@@ -121,20 +141,67 @@ export default function ProjectLayout({
               width any more. Backlog/Calendar/Gantt on phones is unreached by this brief
               (Piece B names project list, board/list view and task detail only) — filed as
               an open item, not silently dropped. */}
-          <div className="flex md:hidden min-w-0 items-center gap-2">
-            <button
-              type="button"
-              data-testid="phone-back-to-navigate"
-              aria-label="Back to Navigate"
-              onClick={() => phoneNav?.goBack()}
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
-            >
-              <ArrowLeft className="size-5" aria-hidden="true" />
-            </button>
-            <span className="truncate text-base font-bold">
-              {project?.name ?? t("navigation:sidebar.projects")}
-            </span>
-          </div>
+          {/* Tables task 15 (spec 7.11, US8): a table's phone bar reads "‹ Tables", the
+              table's name and "+" — back goes to the workspace list's Tables section (not
+              the project list top), and "+" opens an empty entry, as "Add entry" does on
+              desktop. Every other project keeps the Piece B bar unchanged. */}
+          {isTableProject ? (
+            <div className="flex md:hidden min-w-0 flex-1 items-center gap-2">
+              <button
+                type="button"
+                data-testid="phone-back-to-tables"
+                onClick={() => {
+                  requestTablesAnchor();
+                  navigate({
+                    to: "/dashboard/workspace/$workspaceId",
+                    params: { workspaceId },
+                    hash: TABLES_ANCHOR_ID,
+                  });
+                }}
+                className="min-w-[44px] min-h-[44px] flex items-center gap-1 -ml-2 text-sm font-medium"
+              >
+                <span aria-hidden="true">‹</span>
+                Tables
+              </button>
+              <span
+                data-testid="phone-table-name"
+                className="min-w-0 flex-1 truncate text-base font-bold"
+              >
+                {operonTable?.name ?? project?.name}
+              </span>
+              <button
+                type="button"
+                data-testid="phone-add-entry"
+                aria-label="Add entry"
+                onClick={() =>
+                  navigate({
+                    to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
+                    params: { workspaceId, projectId },
+                    search: { taskId: "new" },
+                    replace: true,
+                  })
+                }
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-2xl leading-none"
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <div className="flex md:hidden min-w-0 items-center gap-2">
+              <button
+                type="button"
+                data-testid="phone-back-to-navigate"
+                aria-label="Back to Navigate"
+                onClick={() => phoneNav?.goBack()}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+              >
+                <ArrowLeft className="size-5" aria-hidden="true" />
+              </button>
+              <span className="truncate text-base font-bold">
+                {project?.name ?? t("navigation:sidebar.projects")}
+              </span>
+            </div>
+          )}
 
           <div className="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
             <TooltipProvider>
@@ -170,7 +237,20 @@ export default function ProjectLayout({
               />
             </div>
 
-            {showViewSwitcher && (
+            {showViewSwitcher && isTableProject && (
+              <div className="hidden flex-wrap items-center gap-1 sm:inline-flex">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className="h-6 gap-1.5 rounded-md px-2 text-xs"
+                >
+                  <Table2 className="size-3.5" />
+                  Table
+                </Button>
+              </div>
+            )}
+
+            {showViewSwitcher && !isTableProject && (
               <div className="hidden flex-wrap items-center gap-1 sm:inline-flex">
                 <Button
                   variant={resolvedView === "backlog" ? "secondary" : "ghost"}

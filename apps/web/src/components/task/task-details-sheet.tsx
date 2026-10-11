@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import RecordPanel from "@/components/operon-tables/record-panel";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
@@ -10,8 +11,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import TaskDeleteButton from "./task-delete-button";
 import TaskDetailsContent from "./task-details-content";
 import TaskPropertiesSidebar from "./task-properties-sidebar";
@@ -23,7 +26,43 @@ type TaskDetailsSheetProps = {
   onClose: () => void;
 };
 
-export default function TaskDetailsSheet({
+/**
+ * Operon fork addition (Tables task 9, docs/fork-discipline.md row 18): a table project's
+ * entries open the record panel (columns, Made by, Last change; no comments, relations or
+ * subtasks) instead of the board fields. `taskId="new"` is an empty entry ("Add entry").
+ * The board sheet renders only once the table flag is known to be absent, so a table
+ * entry never flashes the task fields (or reads the task routes) first.
+ */
+export default function TaskDetailsSheet(props: TaskDetailsSheetProps) {
+  const { data: table, isLoading } = useGetTable(props.projectId);
+  const { isAdmin } = useWorkspacePermission();
+  if (table) {
+    return (
+      <Sheet
+        open={!!props.taskId}
+        onOpenChange={(open) => !open && props.onClose()}
+      >
+        <SheetContent
+          side="right"
+          className="w-full max-w-full sm:max-w-lg md:max-w-xl p-0 gap-0 [&>button]:hidden"
+        >
+          {props.taskId && (
+            <RecordPanel
+              table={table}
+              rowId={props.taskId}
+              canAddTopic={isAdmin}
+              onClose={props.onClose}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+  if (isLoading) return null;
+  return <BoardTaskDetailsSheet {...props} />;
+}
+
+function BoardTaskDetailsSheet({
   taskId,
   projectId,
   workspaceId,

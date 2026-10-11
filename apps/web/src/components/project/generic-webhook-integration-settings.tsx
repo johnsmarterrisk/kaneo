@@ -38,6 +38,8 @@ type GenericWebhookIntegrationFormValues = {
   taskAssigneeChanged: boolean;
   taskUnassigned: boolean;
   dueDateReminder: boolean;
+  // Operon fork addition (Tables, docs/fork-discipline.md row 18): table row changes.
+  taskFieldsChanged: boolean;
   dueDateReminderLeadTimeHours: number;
 };
 
@@ -63,6 +65,7 @@ function EventToggle({
     | "taskAssigneeChanged"
     | "taskUnassigned"
     | "dueDateReminder"
+    | "taskFieldsChanged"
   >;
   label: string;
 }) {
@@ -109,6 +112,7 @@ export function GenericWebhookIntegrationSettings({
           taskAssigneeChanged: z.boolean(),
           taskUnassigned: z.boolean(),
           dueDateReminder: z.boolean(),
+          taskFieldsChanged: z.boolean(),
           dueDateReminderLeadTimeHours: z.number(),
         })
         .refine(
@@ -147,6 +151,7 @@ export function GenericWebhookIntegrationSettings({
       taskAssigneeChanged: integration?.events?.taskAssigneeChanged ?? false,
       taskUnassigned: integration?.events?.taskUnassigned ?? false,
       dueDateReminder: integration?.events?.dueDateReminder ?? false,
+      taskFieldsChanged: integration?.events?.taskFieldsChanged ?? false,
       dueDateReminderLeadTimeHours:
         (integration?.dueDateReminderLeadTimeMinutes ?? 1440) / 60,
     }),
@@ -183,6 +188,7 @@ export function GenericWebhookIntegrationSettings({
         taskAssigneeChanged: values.taskAssigneeChanged,
         taskUnassigned: values.taskUnassigned,
         dueDateReminder: values.dueDateReminder,
+        taskFieldsChanged: values.taskFieldsChanged,
       };
 
       if (!trimmedWebhookUrl || !z.url().safeParse(trimmedWebhookUrl).success) {
@@ -281,6 +287,7 @@ export function GenericWebhookIntegrationSettings({
         taskAssigneeChanged: false,
         taskUnassigned: false,
         dueDateReminder: false,
+        taskFieldsChanged: false,
         dueDateReminderLeadTimeHours: 24,
       });
       toast.success(t("settings:genericWebhookIntegration.toast.removed"));
@@ -477,6 +484,13 @@ export function GenericWebhookIntegrationSettings({
                 "settings:genericWebhookIntegration.events.taskUnassigned",
               )}
               name="taskUnassigned"
+            />
+            <EventToggle
+              control={form.control}
+              label={t(
+                "settings:genericWebhookIntegration.events.taskFieldsChanged",
+              )}
+              name="taskFieldsChanged"
             />
             <EventToggle
               control={form.control}

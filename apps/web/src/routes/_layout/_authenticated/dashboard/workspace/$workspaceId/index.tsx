@@ -29,6 +29,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import WorkspaceLayout from "@/components/common/workspace-layout";
+import NewTableAction from "@/components/operon-tables/new-table-action";
+import TablesSection from "@/components/operon-tables/tables-section";
 import PageTitle from "@/components/page-title";
 import CreateProjectModal from "@/components/shared/modals/create-project-modal";
 import { Badge } from "@/components/ui/badge";
@@ -162,7 +164,11 @@ function RouteComponent() {
     }
   }, [projects, droppedOrder]);
 
-  const { canCreateProjects, canUpdateProjects } = useWorkspacePermission();
+  const { canCreateProjects, canUpdateProjects, isAdmin } =
+    useWorkspacePermission();
+  // Operon fork addition (Tables task 8, docs/fork-discipline.md row 18): tables are listed
+  // in their own "Tables" section below, not among the ordinary projects.
+  const listedProjects = orderedProjects?.filter((project) => !project.isTable);
   const canCreate = canCreateProjects();
   // Matches the API, which gates /project/reorder on `project: ["update"]`
   // alone — not the create+update+delete bundle.
@@ -305,17 +311,20 @@ function RouteComponent() {
         <WorkspaceLayout
           title={t("workspace:projects.pageTitle")}
           headerActions={
-            canCreate ? (
-              <Button
-                variant="default"
-                size="xs"
-                onClick={handleCreateProject}
-                className="gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                {t("workspace:projects.createProject")}
-              </Button>
-            ) : null
+            <>
+              {canCreate ? (
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={handleCreateProject}
+                  className="gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  {t("workspace:projects.createProject")}
+                </Button>
+              ) : null}
+              <NewTableAction />
+            </>
           }
         >
           <Empty className="min-h-[60vh]">
@@ -355,17 +364,20 @@ function RouteComponent() {
       <WorkspaceLayout
         title={t("workspace:projects.pageTitle")}
         headerActions={
-          canCreate ? (
-            <Button
-              variant="default"
-              size="xs"
-              onClick={handleCreateProject}
-              className="gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              {t("workspace:projects.createProject")}
-            </Button>
-          ) : null
+          <>
+            {canCreate ? (
+              <Button
+                variant="default"
+                size="xs"
+                onClick={handleCreateProject}
+                className="gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                {t("workspace:projects.createProject")}
+              </Button>
+            ) : null}
+            <NewTableAction />
+          </>
         }
       >
         <DndContext
@@ -397,7 +409,7 @@ function RouteComponent() {
             </TableHeader>
             <TableBody>
               <SortableContext
-                items={orderedProjects?.map((project) => project.id) ?? []}
+                items={listedProjects?.map((project) => project.id) ?? []}
                 strategy={verticalListSortingStrategy}
               >
                 {/* Row striping (John): `renderedRowIndex` counts only rows that actually
@@ -405,7 +417,7 @@ function RouteComponent() {
                     alternation's parity for everything after it. */}
                 {(() => {
                   let renderedRowIndex = -1;
-                  return orderedProjects?.map((project) => {
+                  return listedProjects?.map((project) => {
                     if (!project?.id || !project.statistics) return null;
                     renderedRowIndex += 1;
                     const rowIndex = renderedRowIndex;
@@ -474,6 +486,7 @@ function RouteComponent() {
             </TableBody>
           </Table>
         </DndContext>
+        <TablesSection workspaceId={workspaceId} isAdmin={isAdmin} />
       </WorkspaceLayout>
 
       <CreateProjectModal

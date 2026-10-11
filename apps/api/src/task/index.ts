@@ -634,8 +634,16 @@ const task = apiRouter<
   })
   .openapi(createTaskRoute, async (c) => {
     const { projectId } = c.req.param();
-    const { title, description, startDate, dueDate, priority, status, userId } =
-      c.req.valid("json");
+    const {
+      title,
+      description,
+      startDate,
+      dueDate,
+      priority,
+      status,
+      userId,
+      customFields,
+    } = c.req.valid("json");
 
     // Smart Desk F0b (D2): a keyed create from Operon's marked service key. The
     // replay is decided after the body schema check and BEFORE the date, status and
@@ -680,6 +688,7 @@ const task = apiRouter<
         priority,
         status,
         operonIdempotencyKey,
+        customFields,
       });
     } catch (error) {
       // A concurrent create with the same key committed first (F6): this insert's

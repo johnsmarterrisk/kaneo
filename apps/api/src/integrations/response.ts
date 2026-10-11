@@ -19,5 +19,7 @@ export const genericWebhookEventsSchema = integrationEventsSchema
     taskAssigneeChanged: z.boolean(),
     taskUnassigned: z.boolean(),
     dueDateReminder: z.boolean(),
+    // Operon fork addition (Tables, docs/fork-discipline.md row 18): table row changes.
+    taskFieldsChanged: z.boolean(),
   })
   .openapi("GenericWebhookEvents");
