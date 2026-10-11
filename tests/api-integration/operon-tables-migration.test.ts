@@ -111,7 +111,6 @@ describe("Tables migration 0051 (upstream #1542, renumbered)", () => {
   it("is journal entry 51, tagged 0051, and no other entry shares its number", () => {
     const entry = journal.entries.find((e) => e.tag === CUSTOM_FIELD_TAG);
     expect(entry?.idx).toBe(51);
-    expect(journal.entries.at(-1)?.tag).toBe(CUSTOM_FIELD_TAG);
     // The fork's own 0045 holds that slot; upstream's number must not come back.
     expect(
       journal.entries
@@ -126,9 +125,14 @@ describe("Tables migration 0051 (upstream #1542, renumbered)", () => {
     });
     // Upstream's own history is not monotonic in `when`, but drizzle's migrator applies
     // only entries newer than the last applied one, so 0051 must postdate every entry
-    // before it or an existing installation would silently skip it.
-    const earlier = journal.entries.slice(0, -1).map((e) => e.when);
-    expect(entry?.when).toBeGreaterThan(Math.max(...earlier));
+    // before it or an existing installation would silently skip it. The same holds for
+    // every Tables migration after it (0052 onward).
+    for (const later of journal.entries.filter((e) => e.idx >= 51)) {
+      const earlier = journal.entries
+        .filter((e) => e.idx < later.idx)
+        .map((e) => e.when);
+      expect(later.when).toBeGreaterThan(Math.max(...earlier));
+    }
   });
 
   it("migrates an empty database to 0051 with every journal entry applied in order", async () => {
@@ -141,7 +145,7 @@ describe("Tables migration 0051 (upstream #1542, renumbered)", () => {
     await client.connect();
     try {
       const applied = await appliedMigrations(client);
-      expect(applied).toHaveLength(52);
+      expect(applied).toHaveLength(journal.entries.length);
       expect(applied).toEqual(journal.entries.map((e) => e.when));
 
       const tables = await client.query<{ table_name: string }>(

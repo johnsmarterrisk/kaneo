@@ -29,6 +29,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import WorkspaceLayout from "@/components/common/workspace-layout";
+import NewTableAction from "@/components/operon-tables/new-table-action";
 import PageTitle from "@/components/page-title";
 import CreateProjectModal from "@/components/shared/modals/create-project-modal";
 import { Badge } from "@/components/ui/badge";
@@ -305,17 +306,20 @@ function RouteComponent() {
         <WorkspaceLayout
           title={t("workspace:projects.pageTitle")}
           headerActions={
-            canCreate ? (
-              <Button
-                variant="default"
-                size="xs"
-                onClick={handleCreateProject}
-                className="gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                {t("workspace:projects.createProject")}
-              </Button>
-            ) : null
+            <>
+              {canCreate ? (
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={handleCreateProject}
+                  className="gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  {t("workspace:projects.createProject")}
+                </Button>
+              ) : null}
+              <NewTableAction />
+            </>
           }
         >
           <Empty className="min-h-[60vh]">
@@ -355,17 +359,20 @@ function RouteComponent() {
       <WorkspaceLayout
         title={t("workspace:projects.pageTitle")}
         headerActions={
-          canCreate ? (
-            <Button
-              variant="default"
-              size="xs"
-              onClick={handleCreateProject}
-              className="gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              {t("workspace:projects.createProject")}
-            </Button>
-          ) : null
+          <>
+            {canCreate ? (
+              <Button
+                variant="default"
+                size="xs"
+                onClick={handleCreateProject}
+                className="gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                {t("workspace:projects.createProject")}
+              </Button>
+            ) : null}
+            <NewTableAction />
+          </>
         }
       >
         <DndContext

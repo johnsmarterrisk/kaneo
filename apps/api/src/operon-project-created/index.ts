@@ -52,6 +52,12 @@ export type OperonProjectCreatedEvent = {
    * guessed one would be a lie in a permanent ledger.
    */
   currentUserId?: string | null;
+  // Tables (docs/fork-discipline.md row 18, spec 7.2): a table's announcement carries
+  // `data.operonTable: true` and a STABLE timestamp (the committed project's `created_at`),
+  // so every retry — this ladder's, or the outbox drain's after a restart — sends the same
+  // bytes and Operon's dedupe sees one event. Absent for an ordinary project.
+  operonTable?: boolean;
+  timestamp?: string;
 };
 
 /**
@@ -123,7 +129,11 @@ export function buildOperonProjectCreatedPayload(
       url: `${clientUrl}/dashboard/workspace/${event.workspaceId}/project/${event.projectId}`,
     },
     actor,
-    data: { slug: event.slug, icon: event.icon ?? null },
+    data: {
+      slug: event.slug,
+      icon: event.icon ?? null,
+      ...(event.operonTable === true ? { operonTable: true } : {}),
+    },
   };
 }
 
@@ -164,7 +174,11 @@ export async function deliverOperonProjectCreated(
     const actor = await resolveActor(event.currentUserId);
     await postToGenericWebhook(
       destination,
-      buildOperonProjectCreatedPayload(event, actor, now.toISOString()),
+      buildOperonProjectCreatedPayload(
+        event,
+        actor,
+        event.timestamp ?? now.toISOString(),
+      ),
       secret,
     );
     return { delivered: true, skipped: null };

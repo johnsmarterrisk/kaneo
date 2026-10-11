@@ -56,6 +56,7 @@ import operonFieldLabels from "./operon-field-labels";
 import operonGroups from "./operon-groups";
 import operonMaintenanceState from "./operon-maintenance-state";
 import { initOperonProjectCreatedDelivery } from "./operon-project-created";
+import operonTables from "./operon-tables";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -760,6 +761,8 @@ export function createApp() {
   api.route("/operon", operonGroups);
   // Operon fork addition (social agent S18, fork-discipline row 17): per-project field labels.
   api.route("/operon", operonFieldLabels);
+  // Operon fork addition (Tables, fork-discipline row 18): the Tables routes.
+  api.route("/operon", operonTables);
   // Upstream Kaneo PR #1542 (fork-discipline row 18): custom fields.
   const customFieldApi = api.route("/custom-field", customField);
   const userApi = api.route("/user", user);

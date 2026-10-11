@@ -1340,3 +1340,32 @@ export const customFieldValueTable = pgTable(
     ),
   ],
 );
+
+// Operon fork addition (Tables, docs/fork-discipline.md row 18): the table flag. A project
+// is a table exactly when this row exists. The ordinary project routes never read or write
+// it, so no project update can set or flip it (R-D by construction). `announced_at` is set
+// once Operon has acknowledged the table's `project.created` (and so written its disclosure
+// default); the outbox drain delivers no row record before it (RF-7).
+export const operonTableProjectTable = pgTable("operon_table_project", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projectTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  groupFieldId: text("group_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  dateFieldId: text("date_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  statusFieldId: text("status_field_id").references(
+    () => customFieldDefinitionTable.id,
+    { onDelete: "set null", onUpdate: "cascade" },
+  ),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  announcedAt: timestamp("announced_at", { mode: "date" }),
+});
