@@ -284,40 +284,65 @@ function moduleHref(apex: string, module: OperonModule): string {
 
 /**
  * Reads from the Operon apex with the shared session cookie — the same call `stash-picker.tsx`
- * makes to `/api/files/list`; Operon's CORS allowlist admits this origin. One request per path
- * per page load, shared by every component that asks. Plain `fetch` + state rather than a
- * TanStack query because the rail renders above (and in tests without) a QueryClientProvider.
- * A failure is logged by status only (the Talk body is a join credential, Talk spec R4) and
- * forgotten, so the next mount asks again.
+ * makes to `/api/files/list`; Operon's CORS allowlist admits this origin. Plain `fetch` + state
+ * rather than a TanStack query because the rail renders above (and in tests without) a
+ * QueryClientProvider.
+ *
+ * FRESHNESS (Codex round 1, finding 1). A read is shared for `APEX_STALE_MS` only, keyed by
+ * path AND the Kaneo user, and every reader asks again when the window regains focus or the
+ * tab becomes visible, and when the signed-in user changes. So an admin clearing the Talk room
+ * removes the row the next time this tab is looked at, and another person signing in sees
+ * their own name, never the last one's — Operon's own `useTalkLink` refresh rule.
+ *
+ * LOGGING (finding 2). A failure logs the path and a bounded class — the HTTP status, or
+ * `malformed` / `network` — never an error message: the Talk body is a join credential (Talk
+ * spec R4) and a parse error's message can quote the response.
  */
-const apexReads = new Map<string, Promise<unknown>>();
+const APEX_STALE_MS = 30_000;
+/** On focus or visibility every reader asks again; this only folds the rail's two or three
+    readers of one path, all woken by the same event, into one request. */
+const APEX_REFRESH_DEDUPE_MS = 2_000;
 
-function readApex(path: string): Promise<unknown> {
-  let read = apexReads.get(path);
-  if (!read) {
-    read = fetch(`${apexUrl()}${path}`, {
-      credentials: "include",
-      cache: "no-store",
-    }).then((res) => {
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      return res.json();
-    });
-    read.catch((err: unknown) => {
-      apexReads.delete(path);
-      console.error(
-        JSON.stringify({
-          evt: "operon.apex_read_failed",
-          path,
-          reason: err instanceof Error ? err.message : "unknown",
-        }),
-      );
-    });
-    apexReads.set(path, read);
+class ApexHttpError extends Error {
+  constructor(readonly status: number) {
+    super("apex read failed");
   }
+}
+
+const apexReads = new Map<string, { at: number; read: Promise<unknown> }>();
+
+function readApex(
+  path: string,
+  userKey: string,
+  maxAgeMs: number,
+): Promise<unknown> {
+  const key = `${path}|${userKey}`;
+  const cached = apexReads.get(key);
+  if (cached && Date.now() - cached.at < maxAgeMs) return cached.read;
+  const read = fetch(`${apexUrl()}${path}`, {
+    credentials: "include",
+    cache: "no-store",
+  }).then(async (res) => {
+    if (!res.ok) throw new ApexHttpError(res.status);
+    return res.json();
+  });
+  read.catch((err: unknown) => {
+    apexReads.delete(key);
+    console.error(
+      JSON.stringify({
+        evt: "operon.apex_read_failed",
+        path,
+        ...(err instanceof ApexHttpError
+          ? { status: err.status }
+          : { reason: err instanceof SyntaxError ? "malformed" : "network" }),
+      }),
+    );
+  });
+  apexReads.set(key, { at: Date.now(), read });
   return read;
 }
 
-/** Test seam: the reads are cached per module instance, and suites need that reset. */
+/** Test seam: the reads are shared per module instance, and suites need that reset. */
 export function __resetApexReadsForTests() {
   apexReads.clear();
 }
@@ -326,19 +351,44 @@ function useApexValue(
   path: string,
   pick: (body: unknown) => string | null,
 ): string | null {
+  const { user } = useAuth();
+  const userKey = user?.id ?? user?.email ?? "";
   const [value, setValue] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    readApex(path).then(
-      (body) => {
-        if (live) setValue(pick(body));
-      },
-      () => {},
-    );
+    // A different user must never see the previous one's answer while theirs loads.
+    setValue(null);
+    const load = (maxAgeMs: number) => {
+      readApex(path, userKey, maxAgeMs).then(
+        (body) => {
+          if (live) setValue(pick(body));
+        },
+        (err: unknown) => {
+          // Signed out or no longer entitled: drop what was shown (Operon's useTalkLink rule).
+          // Any other failure keeps the last good value until a read lands.
+          if (
+            live &&
+            err instanceof ApexHttpError &&
+            (err.status === 401 || err.status === 403)
+          ) {
+            setValue(null);
+          }
+        },
+      );
+    };
+    const refresh = () => load(APEX_REFRESH_DEDUPE_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    load(APEX_STALE_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       live = false;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [path, pick]);
+  }, [path, pick, userKey]);
   return value;
 }
 

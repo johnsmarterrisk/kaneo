@@ -68,8 +68,12 @@ vi.mock("@/hooks/use-user-websocket", () => ({
   useUserWebSocket: vi.fn(),
 }));
 
+// Mutable so a test can sign a different person in without a reload (Codex r1 finding 1).
+const auth = vi.hoisted(() => ({
+  user: { id: "u-jane", name: "Jane Rivera", email: "jane@example.com" },
+}));
 vi.mock("@/components/providers/auth-provider/hooks/use-auth", () => ({
-  useAuth: () => ({ user: { name: "Jane Rivera", email: "jane@example.com" } }),
+  useAuth: () => ({ user: auth.user }),
 }));
 
 vi.mock("@/hooks/mutations/use-sign-out", () => ({
@@ -98,17 +102,21 @@ const {
  * `GET /api/auth/session`. Default: no team link and no session (401), so the Talk item is
  * absent and the footer keeps Kaneo's name, which every older test here expects.
  */
-let apexAnswers: Record<string, { status: number; body?: unknown }> = {};
+let apexAnswers: Record<
+  string,
+  { status: number; body?: unknown; raw?: string }
+> = {};
 const fetchMock = vi.fn(async (url: string) => {
   const path = new URL(url).pathname;
   const answer = apexAnswers[path] ?? { status: 401 };
-  return new Response(JSON.stringify(answer.body ?? {}), {
+  return new Response(answer.raw ?? JSON.stringify(answer.body ?? {}), {
     status: answer.status,
   });
 });
 
 beforeEach(() => {
   apexAnswers = {};
+  auth.user = { id: "u-jane", name: "Jane Rivera", email: "jane@example.com" };
   fetchMock.mockClear();
   __resetApexReadsForTests();
   vi.stubGlobal("fetch", fetchMock);
@@ -410,6 +418,97 @@ describe("OperonModuleNav — rail groups (John, 2026-10-11)", () => {
     apexAnswers["/api/talk"] = { status: 200, body: { rooms: [] } };
     render(<OperonModuleNav variant="top" />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.queryByTestId("module-talk")).toBeNull();
+  });
+});
+
+describe("apex reads stay fresh and log no body (Codex round 1)", () => {
+  it("drops the Talk row when the room is cleared and the window regains focus", async () => {
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      body: {
+        rooms: [{ scope: "team", url: "https://mega.nz/chat/AbCdEfGh#k" }],
+      },
+    };
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    render(<OperonModuleNav variant="top" />);
+    await screen.findByTestId("module-talk");
+
+    apexAnswers["/api/talk"] = { status: 200, body: { rooms: [] } };
+    now += 5_000; // past the refresh dedupe, well inside the 30 s mount stale time
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.queryByTestId("module-talk")).toBeNull());
+  });
+
+  it("asks again when the tab becomes visible", async () => {
+    apexAnswers["/api/talk"] = { status: 200, body: { rooms: [] } };
+    let now = 2_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    render(<OperonModuleNav variant="top" />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      body: {
+        rooms: [{ scope: "team", url: "https://mega.nz/chat/AbCdEfGh#k" }],
+      },
+    };
+    now += 5_000;
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    fireEvent(document, new Event("visibilitychange"));
+    await screen.findByTestId("module-talk");
+  });
+
+  it("shows the new person's Operon name when a different user signs in", async () => {
+    apexAnswers["/api/auth/session"] = {
+      status: 200,
+      body: { displayName: "Jane (Operon)" },
+    };
+    const { rerender } = render(<OperonRailFooter />);
+    await waitFor(() =>
+      expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+        "Jane (Operon)",
+      ),
+    );
+
+    apexAnswers["/api/auth/session"] = {
+      status: 200,
+      body: { displayName: "Omar (Operon)" },
+    };
+    auth.user = {
+      id: "u-omar",
+      name: "Omar Haddad",
+      email: "omar@example.com",
+    };
+    rerender(<OperonRailFooter />);
+    await waitFor(() =>
+      expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+        "Omar (Operon)",
+      ),
+    );
+    expect(screen.getByTestId("operon-rail-footer").textContent).not.toContain(
+      "Jane",
+    );
+  });
+
+  it("logs a malformed Talk answer by class only, never its text", async () => {
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      raw: "<html>https://mega.nz/chat/AbCdEfGh#secret</html>",
+    };
+    const errors = vi.mocked(console.error);
+    render(<OperonModuleNav variant="top" />);
+    await waitFor(() => expect(errors).toHaveBeenCalled());
+
+    const logged = errors.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(logged).toContain('"reason":"malformed"');
+    expect(logged).not.toContain("mega.nz");
+    expect(logged).not.toContain("secret");
+    expect(logged).not.toContain("html");
     expect(screen.queryByTestId("module-talk")).toBeNull();
   });
 });
