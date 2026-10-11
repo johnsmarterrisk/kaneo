@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only seventeen kinds of change are permitted, and every file this
+upstream built it. Only eighteen kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -117,10 +117,15 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
  17. Per-project field labels — an optional table of a project's own words for the description
      and due-date fields, a read and an admin-only write route, two settings fields and one lookup
      per label on the task screens; a project without labels renders exactly as upstream.
+ 18. Tables — upstream Kaneo's custom fields (PR #1542, and PR #1735's multiselect) backported
+     with their migration renumbered 0051, plus a table flag on a project, admin-defined columns
+     including image (from Operon's file store) and link kinds, a row-write path that records value
+     history and announces each change to Operon durably, list, card and gallery views, and the MCP
+     table tools; a project that is not a table behaves exactly as upstream.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the seventeen kinds map onto, path by path, and §7 records which task
+touch list the eighteen kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 
