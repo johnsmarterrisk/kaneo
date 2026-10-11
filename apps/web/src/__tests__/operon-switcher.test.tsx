@@ -511,6 +511,10 @@ describe("AppSidebar", () => {
     vi.doMock("@/components/nav-projects", () => ({
       NavProjects: () => <div data-testid="nav-projects" />,
     }));
+    // Tables follow-up (2026-10-11, row 18): the TABLES group under the boards.
+    vi.doMock("@/components/operon-tables/nav-tables", () => ({
+      NavTables: () => <div data-testid="nav-tables" />,
+    }));
     vi.doMock("@/components/search", () => ({
       default: () => <div data-testid="search" />,
     }));
@@ -603,6 +607,12 @@ describe("AppSidebar", () => {
     expect(content.querySelector('[data-testid="nav-main"]')).not.toBeNull();
     expect(
       content.querySelector('[data-testid="nav-projects"]'),
+    ).not.toBeNull();
+    // Tables follow-up (John's ruling 2026-10-11): TABLES sits under PROJECT BOARDS.
+    expect(
+      content.querySelector(
+        '[data-testid="nav-projects"] + [data-testid="nav-tables"]',
+      ),
     ).not.toBeNull();
   });
 });

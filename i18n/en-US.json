@@ -2115,8 +2115,8 @@
 	},
 	"workspace": {
 		"projects": {
-			"pageTitle": "Projects",
-			"createProject": "Create project",
+			"pageTitle": "Project Boards",
+			"createProject": "New board",
 			"title": "Title",
 			"progress": "Progress",
 			"targetDate": "Target date",

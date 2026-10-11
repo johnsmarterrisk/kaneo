@@ -28,7 +28,10 @@ export default function ProjectCrumbSelect({
   onAddProject,
 }: ProjectCrumbSelectProps) {
   const { t } = useTranslation();
-  const { data: projects = [] } = useGetProjects({ workspaceId });
+  const { data: allProjects = [] } = useGetProjects({ workspaceId });
+  // Operon (Tables follow-up 2026-10-11, row 18): the switcher lists boards only; tables
+  // have their own sidebar group and page.
+  const projects = allProjects?.filter((project) => !project.isTable);
 
   return (
     <DropdownMenu>

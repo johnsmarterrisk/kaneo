@@ -7,10 +7,8 @@ import {
   OperonRailFooter,
   OperonVersionStamp,
 } from "@/components/operon-switcher";
-import TablesSection from "@/components/operon-tables/tables-section";
+import { NavTables } from "@/components/operon-tables/nav-tables";
 import Search from "@/components/search";
-import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
-import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 
 /**
  * The fork's phone Navigate screen (Piece B, Round 2 mobile-nav brief) — mounted by
@@ -32,8 +30,6 @@ import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
  * so a future rename only ever happens in one place.
  */
 function OperonPhoneNavigate() {
-  const { data: workspace } = useActiveWorkspace();
-  const { isAdmin } = useWorkspacePermission();
   const currentModuleLabel =
     OPERON_MODULES.find((module) => module.key === "initiative")?.label ??
     "Initiative";
@@ -85,14 +81,10 @@ function OperonPhoneNavigate() {
           <Search />
           <NavMain />
           <NavProjects />
-          {/* Tables task 15 (spec 7.11): the phone's workspace list carries the same Tables
-              section the desktop list does — the "Tables" tab's target (`#tables`). Its
-              headings take the navy ground's ink here; the cards keep their own. */}
-          {workspace?.id && (
-            <div className="[&_h2]:text-sidebar-foreground [&_h3]:text-sidebar-foreground">
-              <TablesSection workspaceId={workspace.id} isAdmin={isAdmin} />
-            </div>
-          )}
+          {/* Tables follow-up (John's ruling 2026-10-11): the Tables page is reached from
+              NavMain's "Tables" entry above, as on the desktop rail; the TABLES group lists
+              each table. The section is no longer embedded here. */}
+          <NavTables />
         </div>
 
         <OperonRailFooter phone />

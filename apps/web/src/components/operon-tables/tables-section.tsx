@@ -1,21 +1,28 @@
+import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { formatDistanceToNow, isValid, parseISO } from "date-fns";
-import { Plus, Table2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Plus, Search, Table2 } from "lucide-react";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { getTable, type OperonTable } from "@/fetchers/operon-tables/get-table";
 import type {
   RecentRow,
   TableSummary,
 } from "@/fetchers/operon-tables/get-tables-summary";
+import type { SearchRow } from "@/fetchers/operon-tables/search-table-rows";
+import useSearchTableRows from "@/hooks/queries/operon-tables/use-search-table-rows";
 import useTablesSummary from "@/hooks/queries/operon-tables/use-tables-summary";
 import { formatDateMedium } from "@/lib/format";
-import { TABLES_ANCHOR_ID, takeTablesAnchor } from "@/store/phone-nav";
 import CreateTableModal from "./create-table-modal";
+import { formatDay } from "./group-section";
+import { useDebounced } from "./table-view";
 
 /**
- * Operon fork addition (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US1): the
- * "Tables" section of the workspace project list — one card per table, a "New table" card
- * for admins, and the "Recently added" footer. Data: the summary route, which already
- * omits hidden columns and other workspaces. `id="tables"` is the phone tab bar's anchor.
+ * Operon fork addition (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US1; moved
+ * to its own page by John's ruling 2026-10-11, spec section 15): the body of the Tables page
+ * (`$workspaceId/tables.tsx`) — a search box across every table, one card per table, a "New
+ * table" card for admins, and the "Recently added" footer. Data: the summary route, which
+ * already omits hidden columns and other workspaces, and the search route.
  */
 function relative(at: string) {
   const date = parseISO(at);
@@ -122,6 +129,118 @@ function RecentlyAdded({
   );
 }
 
+/**
+ * One search result: table name, title, status, date. Status and date are the row's values
+ * in that table's own status and date columns (each table names its own), read from the
+ * table's columns query; a table without a date column shows the row's creation date.
+ */
+function SearchResultLine({
+  row,
+  table,
+  onOpen,
+}: {
+  row: SearchRow;
+  table: OperonTable | null | undefined;
+  onOpen: () => void;
+}) {
+  const columnName = (fieldId: string | null | undefined) =>
+    table?.columns.find((column) => column.id === fieldId)?.name;
+  const statusName = columnName(table?.statusFieldId);
+  const dateName = columnName(table?.dateFieldId);
+  const status = statusName ? row.values[statusName] : undefined;
+  const dated = dateName ? formatDay(row.values[dateName]) : "";
+  const date = dated || (row.createdAt ? formatDateMedium(row.createdAt) : "");
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid="tables-search-row"
+        className="flex w-full items-center gap-3 px-4 py-1.5 text-left text-sm hover:bg-accent/60"
+      >
+        <span className="w-32 shrink-0 truncate text-xs text-muted-foreground">
+          {row.tableName}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-card-foreground">
+          {row.title}
+        </span>
+        <span className="w-24 shrink-0 truncate text-xs text-muted-foreground">
+          {typeof status === "string" ? status : ""}
+        </span>
+        <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+          {date}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function SearchResults({
+  workspaceId,
+  query,
+  onOpen,
+}: {
+  workspaceId: string;
+  query: string;
+  onOpen: (row: SearchRow) => void;
+}) {
+  const search = useSearchTableRows({ workspaceId, q: query });
+  const rows = search.data?.pages.flatMap((page) => page.rows) ?? [];
+  const tableIds = [...new Set(rows.map((row) => row.tableId))];
+  // Same query key as `useGetTable`, so a table already opened is not fetched again.
+  const tables = useQueries({
+    queries: tableIds.map((tableId) => ({
+      queryKey: ["operon-table", tableId],
+      queryFn: () => getTable(tableId),
+    })),
+  });
+  const tableById = new Map(
+    tableIds.map((tableId, index) => [tableId, tables[index]?.data]),
+  );
+  if (search.isError) {
+    return (
+      <p className="px-4 py-6 text-sm text-destructive">
+        The search did not run. Try again.
+      </p>
+    );
+  }
+  if (search.isLoading) {
+    return (
+      <p className="px-4 py-6 text-sm text-muted-foreground">Searching…</p>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="px-4 py-6 text-sm text-muted-foreground">
+        No entries match “{query.trim()}”.
+      </p>
+    );
+  }
+  return (
+    <div data-testid="tables-search-results">
+      <ul className="divide-y divide-border/50 rounded-lg border border-border bg-card">
+        {rows.map((row) => (
+          <SearchResultLine
+            key={row.rowId}
+            row={row}
+            table={tableById.get(row.tableId)}
+            onOpen={() => onOpen(row)}
+          />
+        ))}
+      </ul>
+      {search.hasNextPage && (
+        <button
+          type="button"
+          onClick={() => void search.fetchNextPage()}
+          className="w-full px-4 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60"
+        >
+          More results
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TablesSection({
   workspaceId,
   isAdmin,
@@ -130,19 +249,12 @@ export default function TablesSection({
   isAdmin: boolean;
 }) {
   const navigate = useNavigate();
-  const { data } = useTablesSummary(workspaceId);
+  const { data, isLoading } = useTablesSummary(workspaceId);
   const [creating, setCreating] = useState(false);
+  const [input, setInput] = useState("");
+  // Debounced as the table view's own search box is; clearing restores the cards at once.
+  const query = useDebounced(input, 300);
   const tables = data?.tables ?? [];
-  const hidden = tables.length === 0 && !isAdmin;
-  // Task 15: the "Tables" tab's anchor (`store/phone-nav.ts`), consumed once the summary has
-  // answered — before that the section has no height to scroll to.
-  useEffect(() => {
-    if (!data || !takeTablesAnchor() || hidden) return;
-    document
-      .getElementById(TABLES_ANCHOR_ID)
-      ?.scrollIntoView({ block: "start" });
-  }, [data, hidden]);
-  if (hidden) return null;
 
   const openTable = (tableId: string, taskId?: string) =>
     navigate({
@@ -152,37 +264,60 @@ export default function TablesSection({
     });
 
   return (
-    <section id={TABLES_ANCHOR_ID} className="flex flex-col gap-3 px-4 py-4">
-      <h2 className="text-md font-medium text-card-foreground">Tables</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tables.map((table) => (
-          <TableCard
-            key={table.tableId}
-            table={table}
-            onOpen={() => openTable(table.tableId)}
-          />
-        ))}
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex flex-col gap-1 rounded-lg border border-dashed border-border bg-card p-4 text-left text-card-foreground transition-colors hover:bg-accent/60"
-          >
-            <span className="flex items-center gap-2 font-medium">
-              <Plus className="h-4 w-4 text-muted-foreground" />
-              New table
-            </span>
-            <span className="text-sm text-muted-foreground">
-              Starts from the Marketing asset columns
-            </span>
-          </button>
-        )}
+    <section className="flex flex-col gap-3 px-4 py-4">
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          aria-label="Search all tables"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Search all tables"
+          className="h-8 pl-8 text-sm"
+        />
       </div>
-      {data?.recent && data.recent.length > 0 && (
-        <RecentlyAdded
-          rows={data.recent}
+      {query.trim() ? (
+        <SearchResults
+          workspaceId={workspaceId}
+          query={query}
           onOpen={(row) => openTable(row.tableId, row.rowId)}
         />
+      ) : (
+        <>
+          {!isLoading && tables.length === 0 && !isAdmin && (
+            <p className="py-6 text-sm text-muted-foreground">No tables yet</p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {tables.map((table) => (
+              <TableCard
+                key={table.tableId}
+                table={table}
+                onOpen={() => openTable(table.tableId)}
+              />
+            ))}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="flex flex-col gap-1 rounded-lg border border-dashed border-border bg-card p-4 text-left text-card-foreground transition-colors hover:bg-accent/60"
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                  New table
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  Starts from the Marketing asset columns
+                </span>
+              </button>
+            )}
+          </div>
+          {data?.recent && data.recent.length > 0 && (
+            <RecentlyAdded
+              rows={data.recent}
+              onOpen={(row) => openTable(row.tableId, row.rowId)}
+            />
+          )}
+        </>
       )}
       <CreateTableModal open={creating} onClose={() => setCreating(false)} />
     </section>

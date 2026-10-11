@@ -8,6 +8,7 @@ import {
   OperonRailHeader,
   OperonVersionStamp,
 } from "@/components/operon-switcher";
+import { NavTables } from "@/components/operon-tables/nav-tables";
 import {
   Sidebar,
   SidebarContent,
@@ -56,6 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <Search />
         <NavMain />
         <NavProjects />
+        <NavTables />
       </SidebarContent>
       <SidebarFooter className="gap-0 p-0">
         {/* iPhone pass 1, defect 4: the version stamp, directly above Settings — see

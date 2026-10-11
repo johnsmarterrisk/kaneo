@@ -33,7 +33,7 @@ function plural(n: number, word: string, many = `${word}s`) {
   return `${n} ${n === 1 ? word : many}`;
 }
 
-function useDebounced(value: string, ms: number) {
+export function useDebounced(value: string, ms: number) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(value), ms);

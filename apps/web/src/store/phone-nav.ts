@@ -25,6 +25,9 @@ const TASK_ROUTE =
   /^\/dashboard\/workspace\/([^/]+)\/project\/([^/]+)\/task\/[^/]+\/?$/;
 const PROJECT_ROUTE =
   /^\/dashboard\/workspace\/([^/]+)\/project\/([^/]+)(?:\/.*)?$/;
+const TABLE_ROUTE =
+  /^\/dashboard\/workspace\/([^/]+)\/project\/[^/]+\/table\/?$/;
+const TABLES_PAGE = /^\/dashboard\/workspace\/[^/]+\/tables\/?$/;
 
 /**
  * The workspace ROOT is the list — Navigate. Anything deeper (a project, a board, a task)
@@ -57,6 +60,10 @@ export function phoneBackTarget(
   if (task) {
     return { to: `/dashboard/workspace/${task[1]}/project/${task[2]}/board` };
   }
+  // Operon (Tables follow-up 2026-10-11, row 18): a table's phone header reads
+  // "‹ Tables", so its back arrow returns to the Tables page, not the boards list.
+  const table = TABLE_ROUTE.exec(pathname);
+  if (table) return { to: `/dashboard/workspace/${table[1]}/tables` };
   const project = PROJECT_ROUTE.exec(pathname);
   if (project) return { to: `/dashboard/workspace/${project[1]}` };
   const workspace = WORKSPACE_ANY.exec(pathname);
@@ -78,42 +85,18 @@ export function phoneBackTarget(
  */
 export type BottomTab = "telegraph" | "initiative" | "tables" | "more";
 
-const TABLE_ROUTE = /^\/dashboard\/workspace\/[^/]+\/project\/[^/]+\/table\/?$/;
-
-/** A table's own screen marks "Tables"; every other Initiative screen marks "Initiative". */
+/**
+ * The Tables page and a table's own screen mark "Tables"; every other Initiative screen
+ * marks "Initiative" (Tables follow-up 2026-10-11: the page replaced the `#tables` anchor).
+ */
 export function bottomTabForPath(pathname: string): BottomTab {
-  return TABLE_ROUTE.test(pathname) ? "tables" : "initiative";
+  return TABLE_ROUTE.test(pathname) || TABLES_PAGE.test(pathname)
+    ? "tables"
+    : "initiative";
 }
 
 /** The workspace the current address is inside, or null outside the workspace tree. */
 export function workspaceIdForPath(pathname: string): string | null {
   const match = WORKSPACE_ANY.exec(pathname);
   return match && match[1] !== "create" ? match[1] : null;
-}
-
-/** The Tables section's anchor on the workspace list (`tables-section.tsx`'s `id`). */
-export const TABLES_ANCHOR_ID = "tables";
-
-/**
- * "Scroll to the Tables section once it has rendered", as a one-shot flag rather than the
- * URL's hash alone. Operon's Tables tab arrives at `/#tables`, and the router's redirects
- * (`/` → `/dashboard` → the workspace list) drop the hash before any screen renders — so
- * `main.tsx` captures it before the router runs (as it already does for the checkout
- * intent), and the section consumes it when its tables have loaded.
- */
-let tablesAnchorPending = false;
-
-export function captureTablesAnchor(hash: string = window.location.hash): void {
-  if (hash === `#${TABLES_ANCHOR_ID}`) tablesAnchorPending = true;
-}
-
-export function requestTablesAnchor(): void {
-  tablesAnchorPending = true;
-}
-
-/** True once per request; the caller scrolls. */
-export function takeTablesAnchor(): boolean {
-  const pending = tablesAnchorPending;
-  tablesAnchorPending = false;
-  return pending;
 }

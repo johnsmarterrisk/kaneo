@@ -18,7 +18,6 @@ import type {
   TableRowsQuery,
 } from "@/fetchers/operon-tables/get-table-rows";
 import type { TableSummary } from "@/fetchers/operon-tables/get-tables-summary";
-import { requestTablesAnchor } from "@/store/phone-nav";
 
 /**
  * Operon fork check (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US2/US4,
@@ -416,23 +415,6 @@ describe("Tables section", () => {
   it("offers no New table card to a member", () => {
     render(<TablesSection workspaceId="w1" isAdmin={false} />);
     expect(screen.queryByText("New table")).toBeNull();
-  });
-
-  // Task 15: the "Tables" tab's anchor scrolls to this section once, when it has data.
-  it("scrolls to itself once when the Tables tab asked for it", () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    requestTablesAnchor();
-    const { unmount } = render(
-      <TablesSection workspaceId="w1" isAdmin={false} />,
-    );
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView.mock.contexts[0]).toBe(
-      document.getElementById("tables"),
-    );
-    unmount();
-    render(<TablesSection workspaceId="w1" isAdmin={false} />);
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 });
 

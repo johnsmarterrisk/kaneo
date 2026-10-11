@@ -45,29 +45,11 @@ vi.mock("@/hooks/queries/config/use-get-config", () => ({
   default: () => ({ data: undefined }),
 }));
 
-// Tables task 15: the phone list carries the workspace's Tables section (the "Tables" tab's
-// `#tables` target). Its data hooks are mocked; the section itself is a marker that echoes
-// the props it was given.
-vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
-  default: () => ({ data: { id: "w1" } }),
-}));
-vi.mock("@/hooks/use-workspace-permission", () => ({
-  useWorkspacePermission: () => ({ isAdmin: true }),
-}));
-vi.mock("@/components/operon-tables/tables-section", () => ({
-  default: ({
-    workspaceId,
-    isAdmin,
-  }: {
-    workspaceId: string;
-    isAdmin: boolean;
-  }) => (
-    <section
-      data-testid="tables-section"
-      data-workspace={workspaceId}
-      data-admin={String(isAdmin)}
-    />
-  ),
+// Tables follow-up (John's ruling 2026-10-11): the phone list no longer embeds the Tables
+// section; NavMain's "Tables" entry opens the Tables page, and the TABLES group (a marker
+// here) lists each table under the boards.
+vi.mock("@/components/operon-tables/nav-tables", () => ({
+  NavTables: () => <div data-testid="nav-tables" />,
 }));
 
 const { default: OperonPhoneNavigate } = await import(
@@ -118,15 +100,20 @@ describe("OperonPhoneNavigate — iPhone pass 1, defect 3 (top inset)", () => {
   });
 });
 
-describe("OperonPhoneNavigate — Tables task 15", () => {
-  it("lists the workspace's Tables section after the projects, for the active workspace", () => {
+describe("OperonPhoneNavigate — Tables page (John's ruling 2026-10-11)", () => {
+  it("lists the TABLES group after the boards and embeds no Tables section", () => {
     render(<OperonPhoneNavigate />);
-    const section = screen.getByTestId("tables-section");
-    expect(section.getAttribute("data-workspace")).toBe("w1");
-    expect(section.getAttribute("data-admin")).toBe("true");
+    expect(screen.queryByTestId("tables-section")).toBeNull();
+    expect(screen.queryByText("Recently added")).toBeNull();
+    const tables = screen.getByTestId("nav-tables");
     const projects = screen.getByTestId("nav-projects");
     expect(
-      projects.compareDocumentPosition(section) &
+      projects.compareDocumentPosition(tables) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The sub-rail (NavMain, which carries the "Tables" entry) comes first.
+    expect(
+      screen.getByTestId("nav-main").compareDocumentPosition(projects) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });

@@ -33,6 +33,7 @@ import {
 import { type CSSProperties, type ReactNode, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { englishOr } from "@/components/nav-main";
 import {
   Collapsible,
   CollapsiblePanel,
@@ -114,7 +115,7 @@ function SortableProjectItem({
 }
 
 export function NavProjects() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isMobile } = useSidebar();
   const { data: workspace } = useActiveWorkspace();
   const { data: projects } = useGetProjects({
@@ -211,6 +212,11 @@ export function NavProjects() {
 
   if (!workspace) return null;
 
+  // Operon (Tables follow-up, row 18): tables are listed in their own TABLES group
+  // (`operon-tables/nav-tables.tsx`), not among the boards. The reorder still moves the
+  // full list, so a table's place in the workspace order is kept.
+  const boards = projects?.filter((project) => !project.isTable) ?? [];
+
   return (
     <>
       <Collapsible defaultOpen className="group/collapsible">
@@ -223,7 +229,15 @@ export function NavProjects() {
               <SidebarGroupLabel className="h-7 cursor-pointer justify-between px-0 text-[12.5px] font-bold uppercase tracking-wide text-sidebar-accent-foreground" />
             }
           >
-            <span>{t("navigation:sidebar.projects")}</span>
+            {/* Operon (John's ruling 2026-10-11): "PROJECT BOARDS" in English; see
+                `englishOr` in `nav-main.tsx` for why this is not a bundle value. */}
+            <span>
+              {englishOr(
+                i18n?.language,
+                "Project Boards",
+                t("navigation:sidebar.projects"),
+              )}
+            </span>
             <ChevronRight className="h-3.5 w-3.5 text-sidebar-foreground/60 transition-transform duration-200" />
           </CollapsibleTrigger>
           <CollapsiblePanel>
@@ -241,10 +255,10 @@ export function NavProjects() {
               >
                 <SidebarMenu className="gap-0.5">
                   <SortableContext
-                    items={projects?.map((project) => project.id) ?? []}
+                    items={boards.map((project) => project.id)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {projects?.map((project) => {
+                    {boards.map((project) => {
                       return (
                         <SortableProjectItem
                           key={project.id}
