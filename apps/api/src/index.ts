@@ -25,6 +25,7 @@ import billing from "./billing";
 import column from "./column";
 import comment from "./comment";
 import config from "./config";
+import customField from "./custom-field";
 import db, { getDatabase, schema } from "./database";
 import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
@@ -759,6 +760,8 @@ export function createApp() {
   api.route("/operon", operonGroups);
   // Operon fork addition (social agent S18, fork-discipline row 17): per-project field labels.
   api.route("/operon", operonFieldLabels);
+  // Upstream Kaneo PR #1542 (fork-discipline row 18): custom fields.
+  const customFieldApi = api.route("/custom-field", customField);
   const userApi = api.route("/user", user);
 
   // Operon fork addition (Operon spec R33, decision 43): a server-to-server hook that
@@ -941,6 +944,7 @@ export function createApp() {
     userApi,
     workflowRuleApi,
     workspaceApi,
+    customFieldApi,
     oauthApi,
   };
 }
@@ -1068,6 +1072,7 @@ const {
   userApi,
   workflowRuleApi,
   workspaceApi,
+  customFieldApi,
   oauthApi,
 } = createdApp;
 
@@ -1106,6 +1111,7 @@ export type AppType =
   | typeof workflowRuleApi
   | typeof invitationApi
   | typeof workspaceApi
+  | typeof customFieldApi
   | typeof userApi
   | typeof publicProjectApi
   | typeof invitationPublicApi

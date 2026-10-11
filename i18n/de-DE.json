@@ -160,6 +160,12 @@
 					"crimson": "Karmesinrot"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -720,7 +726,9 @@
 			"columnsTitle": "Spalten",
 			"columnsDescription": "Verwalte die Spalten, die auf deinem Board erscheinen. Ziehe sie, um sie neu anzuordnen. Aktiviere „Fertige Spalte“ für Phasen, die abgeschlossene Arbeit darstellen.",
 			"automationTitle": "Automatisierungsregeln",
-			"automationDescription": "Ordne Integrationsereignisse Spalten zu. Wenn ein Ereignis eintritt, wird die verknüpfte Aufgabe in die angegebene Spalte verschoben."
+			"automationDescription": "Ordne Integrationsereignisse Spalten zu. Wenn ein Ereignis eintritt, wird die verknüpfte Aufgabe in die angegebene Spalte verschoben.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "Projekt auswählen",
@@ -1277,6 +1285,32 @@
 			"updateError": "Label konnte nicht aktualisiert werden",
 			"deleteError": "Label konnte nicht gelöscht werden",
 			"nameRequired": "Label-Name ist erforderlich"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text"
+			}
 		}
 	},
 	"navigation": {
@@ -1593,7 +1627,8 @@
 			"selectTask": "Aufgabe auswählen",
 			"loadingTask": "Aufgabe wird geladen...",
 			"taskNotFound": "Aufgabe nicht gefunden",
-			"taskNotFoundDescription": "Die gesuchte Aufgabe existiert nicht oder wurde gelöscht."
+			"taskNotFoundDescription": "Die gesuchte Aufgabe existiert nicht oder wurde gelöscht.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "Teilaufgabe von",
@@ -1699,7 +1734,9 @@
 				"mermaid": {
 					"renderFailed": "Mermaid-Diagramm konnte nicht gerendert werden"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "Aufgabe"
@@ -1858,7 +1895,11 @@
 			"operators": {
 				"isAnyOf": "ist einer von",
 				"includeAnyOf": "enthält einen von"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",

@@ -160,6 +160,12 @@
 					"crimson": "Cremisi"
 				}
 			}
+		},
+		"boolean": {
+			"false": "False",
+			"notSet": "Not Set",
+			"true": "True",
+			"undefined": "Undefined"
 		}
 	},
 	"auth": {
@@ -883,7 +889,9 @@
 			"columnsTitle": "Colonne",
 			"columnsDescription": "Gestisci le colonne che appaiono sulla tua board. Trascina per riordinare. Attiva \"Colonna completata\" per le fasi che rappresentano lavoro concluso.",
 			"automationTitle": "Regole di Automazione",
-			"automationDescription": "Mappa eventi di integrazione alle colonne. Quando si verifica un evento, l'attività collegata si sposta nella colonna specificata."
+			"automationDescription": "Mappa eventi di integrazione alle colonne. Quando si verifica un evento, l'attività collegata si sposta nella colonna specificata.",
+			"customFieldsDescription": "Manage the custom fields for this project. Drag  to reorder.",
+			"customFieldsTitle": "Custom Fields"
 		},
 		"projectSwitcher": {
 			"selectProject": "Seleziona progetto",
@@ -1278,6 +1286,32 @@
 			"merged": "Unito",
 			"draft": "Bozza",
 			"open": "Aperto"
+		},
+		"customFields": {
+			"addButton": "Add",
+			"createError": "Failed to create custom field.",
+			"createSuccess": "Custom field created.",
+			"creating": "Creating...",
+			"defaultLabel": "Default",
+			"defaultValuePlaceholder": "Default value",
+			"deleteButton": "Delete",
+			"deleteError": "Failed to delete custom field.",
+			"deleteSuccess": "Custom field deleted.",
+			"deleting": "Deleting...",
+			"empty": "No custom fields configured yet.",
+			"loading": "Loading custom fields...",
+			"namePlaceholder": "Field name",
+			"noOptionsPlaceholder": "No options",
+			"optionsPlaceholder": "Options separated by commas",
+			"required": "Required",
+			"typePlaceholder": "Select field type",
+			"types": {
+				"boolean": "Boolean",
+				"date": "Date",
+				"dropdown": "Dropdown",
+				"number": "Number",
+				"text": "Text"
+			}
 		}
 	},
 	"navigation": {
@@ -1598,7 +1632,8 @@
 			"selectTask": "Seleziona attività",
 			"loadingTask": "Caricamento attività...",
 			"taskNotFound": "Attività non trovata",
-			"taskNotFoundDescription": "L'attività che stai cercando non esiste o è stata eliminata."
+			"taskNotFoundDescription": "L'attività che stai cercando non esiste o è stata eliminata.",
+			"customFields": "Custom Fields"
 		},
 		"detail": {
 			"subtaskOf": "Sotto-attività di",
@@ -1704,7 +1739,9 @@
 				"mermaid": {
 					"renderFailed": "Impossibile eseguire il rendering del diagramma Mermaid"
 				}
-			}
+			},
+			"customFieldUpdated": "Field updated",
+			"selectOption": "Select option"
 		},
 		"entity": {
 			"task": "Attività"
@@ -1863,7 +1900,11 @@
 			"operators": {
 				"isAnyOf": "è uno di",
 				"includeAnyOf": "include uno di"
-			}
+			},
+			"all": "All",
+			"allCustomFieldValues": "All values",
+			"noCustomFieldValues": "No custom field values",
+			"noValuesUsedYet": "No values used yet"
 		},
 		"gantt": {
 			"pageTitle": "{{name}} – Gantt",
