@@ -90,6 +90,7 @@ const CORE_NAMES = { title: "Title", notes: "Notes", assignee: "Owner" };
 const ENVELOPE_TITLE_MAX = 80;
 
 const DEF_COLUMNS = {
+  hiddenAt: customFieldDefinitionTable.hiddenAt,
   id: customFieldDefinitionTable.id,
   name: customFieldDefinitionTable.name,
   type: customFieldDefinitionTable.type,
@@ -100,6 +101,13 @@ const DEF_COLUMNS = {
 
 function byPosition(a: ColumnDef, b: ColumnDef) {
   return a.position - b.position || a.id.localeCompare(b.id);
+}
+
+function active(defs: Array<ColumnDef & { hiddenAt: Date | null }>) {
+  return defs
+    .filter((d) => d.hiddenAt === null)
+    .map(({ hiddenAt: _hidden, ...def }) => def)
+    .sort(byPosition);
 }
 
 /** The table and its active definitions, unlocked (pre-check and reads). */
@@ -124,7 +132,7 @@ export async function loadTable(
     .select(DEF_COLUMNS)
     .from(customFieldDefinitionTable)
     .where(eq(customFieldDefinitionTable.projectId, projectId));
-  return { project, defs: defs.sort(byPosition) };
+  return { project, defs: active(defs) };
 }
 
 /**
@@ -158,7 +166,9 @@ export async function lockTable(
     .where(eq(customFieldDefinitionTable.projectId, projectId))
     .orderBy(asc(customFieldDefinitionTable.id))
     .for(mode);
-  return { project, defs: defs.sort(byPosition) };
+  // Hidden definitions are locked with the rest (a hide takes the same locks) but are not
+  // columns of the table: a key naming one is unknown_column (spec 7.1).
+  return { project, defs: active(defs) };
 }
 
 export async function resolveActor(userId: string) {

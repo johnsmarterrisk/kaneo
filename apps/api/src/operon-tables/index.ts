@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { requireEntitlement } from "../billing/require-entitlement-middleware";
@@ -11,6 +11,7 @@ import type { BaseVariables } from "../openapi";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { requireTableAdmin } from "./admin";
+import { readColumnHistory } from "./columns";
 import { createTable } from "./create-table";
 import { outboxHealth } from "./outbox";
 import { readTableRow } from "./read-row";
@@ -121,7 +122,12 @@ export async function readTable(projectId: string) {
       position: customFieldDefinitionTable.position,
     })
     .from(customFieldDefinitionTable)
-    .where(eq(customFieldDefinitionTable.projectId, projectId))
+    .where(
+      and(
+        eq(customFieldDefinitionTable.projectId, projectId),
+        isNull(customFieldDefinitionTable.hiddenAt),
+      ),
+    )
     .orderBy(
       asc(customFieldDefinitionTable.position),
       asc(customFieldDefinitionTable.id),
@@ -149,6 +155,45 @@ operonTables.get(
       );
     }
     return c.json(table, 200);
+  },
+);
+
+/**
+ * R-B3: the admin-only recovery read of one column, hidden or not — its current values and
+ * its value history. Every other surface omits a hidden column.
+ */
+operonTables.get(
+  "/tables/:projectId/fields/:fieldId/history",
+  workspaceAccess.fromProject("projectId"),
+  async (c, next) => {
+    try {
+      await requireTableAdmin(c, next);
+    } catch (error) {
+      console.warn("[operon] tables.history_read_refused", {
+        projectId: c.req.param("projectId") ?? null,
+        fieldId: c.req.param("fieldId") ?? null,
+        actorUserId: c.get("userId") ?? null,
+      });
+      throw error;
+    }
+  },
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const fieldId = c.req.param("fieldId") ?? "";
+    if (!(await loadTable(projectId))) {
+      tableError(404, "not_a_table", "This project is not a table");
+    }
+    const result = await readColumnHistory(
+      projectId,
+      fieldId,
+      c.req.query("cursor") || undefined,
+    );
+    console.log("[operon] tables.history_read", {
+      projectId,
+      fieldId,
+      actorUserId: c.get("userId"),
+    });
+    return c.json(result, 200);
   },
 );
 

@@ -4,6 +4,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { requireTableAdminOnTable } from "../operon-tables/columns";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createCustomField from "./controllers/create-custom-field";
@@ -126,6 +127,8 @@ const createCustomFieldRoute = createRoute({
   middleware: [
     workspaceAccess.fromProject("projectId"),
     requireWorkspacePermission({ project: ["update"] }),
+    // Operon fork addition (Tables, row 18, RF-9): a table admin on table projects.
+    requireTableAdminOnTable,
   ] as const,
   request: {
     body: {
@@ -152,6 +155,8 @@ const reorderCustomFieldsRoute = createRoute({
   middleware: [
     workspaceAccess.fromProject("projectId"),
     requireWorkspacePermission({ project: ["update"] }),
+    // Operon fork addition (Tables, row 18, RF-9): a table admin on table projects.
+    requireTableAdminOnTable,
   ] as const,
   request: {
     params: projectIdParam,
@@ -211,6 +216,8 @@ const deleteCustomFieldRoute = createRoute({
   middleware: [
     workspaceAccess.fromCustomField("id"),
     requireWorkspacePermission({ project: ["update"] }),
+    // Operon fork addition (Tables, row 18, RF-9): a table admin on table projects.
+    requireTableAdminOnTable,
   ] as const,
   request: { params: customFieldIdParam },
   responses: {
@@ -274,7 +281,10 @@ const customField = apiRouter()
     );
   })
   .openapi(deleteCustomFieldRoute, async (c) =>
-    c.json(await deleteCustomField(c.req.valid("param").id), 200),
+    c.json(
+      await deleteCustomField(c.req.valid("param").id, c.get("userId")),
+      200,
+    ),
   );
 
 export default customField;

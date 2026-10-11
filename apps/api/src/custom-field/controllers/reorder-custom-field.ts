@@ -2,12 +2,16 @@ import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { customFieldDefinitionTable } from "../../database/schema";
+import { lockProjectForDefinitions } from "../../operon-tables/columns";
 
 async function reorderCustomFields(
   projectId: string,
   customFields: Array<{ id: string; position: number }>,
 ) {
   await db.transaction(async (tx) => {
+    // Operon fork addition (Tables, row 18, RF-8): every definition writer locks the
+    // project first, the order the table row writer relies on. Harmless elsewhere.
+    await lockProjectForDefinitions(tx, projectId);
     for (const field of customFields) {
       const [updated] = await tx
         .update(customFieldDefinitionTable)

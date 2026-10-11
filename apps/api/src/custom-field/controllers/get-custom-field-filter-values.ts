@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import db from "../../database";
 import {
   customFieldDefinitionTable,
@@ -9,7 +9,13 @@ export default async function getCustomFieldFilterValues(projectId: string) {
   const fields = await db
     .select()
     .from(customFieldDefinitionTable)
-    .where(eq(customFieldDefinitionTable.projectId, projectId));
+    // Operon fork addition (Tables, row 18): hidden columns offer no filter values.
+    .where(
+      and(
+        eq(customFieldDefinitionTable.projectId, projectId),
+        isNull(customFieldDefinitionTable.hiddenAt),
+      ),
+    );
 
   if (fields.length === 0) {
     return [];

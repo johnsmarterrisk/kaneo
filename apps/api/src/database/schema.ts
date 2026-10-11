@@ -1304,6 +1304,10 @@ export const customFieldDefinitionTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    // Operon fork addition (Tables task 6, docs/fork-discipline.md row 18, spec 7.1): on a
+    // table project a removed column is HIDDEN, never deleted, so its values and history
+    // stay recoverable to an admin; every active read filters `hidden_at IS NULL`.
+    hiddenAt: timestamp("hidden_at", { mode: "date" }),
   },
   (table) => [index("custom_field_def_projectId_idx").on(table.projectId)],
 );

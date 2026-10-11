@@ -5,8 +5,14 @@ import {
   customFieldDefinitionTable,
   projectTable,
 } from "../../database/schema";
+import { hideTableColumn } from "../../operon-tables/columns";
+import { isTableProject } from "../../operon-tables/guard";
 
-async function deleteCustomField(id: string) {
+async function deleteCustomField(
+  id: string,
+  // Operon fork addition (Tables, row 18): the actor, for the hide log line.
+  actorUserId?: string,
+) {
   const [field] = await db
     .select({
       projectId: customFieldDefinitionTable.projectId,
@@ -30,6 +36,13 @@ async function deleteCustomField(id: string) {
     throw new HTTPException(400, {
       message: "The project is not associated with a workspace",
     });
+  }
+
+  // Operon fork addition (Tables task 6, row 18, spec 7.1): on a table project a column is
+  // HIDDEN, never deleted — the cascade would erase its values and history.
+  if (await isTableProject(field.projectId)) {
+    const hidden = await hideTableColumn(id, actorUserId);
+    return { ...hidden, workspaceId: field.workspaceId };
   }
 
   const [deleted] = await db

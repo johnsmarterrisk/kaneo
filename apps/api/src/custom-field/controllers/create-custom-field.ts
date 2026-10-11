@@ -7,7 +7,12 @@ import {
   projectTable,
   taskTable,
 } from "../../database/schema";
-
+import {
+  assertUniqueActiveName,
+  lockProjectForDefinitions,
+} from "../../operon-tables/columns";
+import { isTableProject } from "../../operon-tables/guard";
+import { tableError } from "../../operon-tables/values";
 import {
   isCustomFieldValueEmpty,
   validateCustomFieldValue,
@@ -34,7 +39,21 @@ async function createCustomField(
     throw new HTTPException(404, { message: "Project not found" });
   }
 
+  // Operon fork addition (Tables task 6, row 18, spec 7.1 / R-D, F26): on a table project a
+  // nonempty default is refused — the backfill below would write every existing row outside
+  // the row writer, with no history and no signal. A required table column therefore needs
+  // no default: the row writer requires its value on every add instead.
+  const table = await isTableProject(projectId);
+  if (table && defaultValue != null && defaultValue.trim() !== "") {
+    tableError(
+      422,
+      "default_not_allowed",
+      "Table columns have no default value",
+    );
+  }
+
   if (
+    !table &&
     required &&
     (defaultValue === undefined ||
       defaultValue === null ||
@@ -143,6 +162,12 @@ async function createCustomField(
     .where(eq(customFieldDefinitionTable.projectId, projectId));
 
   const field = await db.transaction(async (tx) => {
+    // Operon fork addition (Tables, row 18, R-D / RF-8): under the project lock every
+    // definition writer takes, an active name is unique after trimming and case folding.
+    if (table) {
+      await lockProjectForDefinitions(tx, projectId);
+      await assertUniqueActiveName(tx, projectId, name);
+    }
     const [created] = await tx
       .insert(customFieldDefinitionTable)
       .values({
