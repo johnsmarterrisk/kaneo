@@ -12,12 +12,16 @@ export default function TableSearchResults({
   query,
   columns,
   onOpen,
+  phone = false,
 }: {
   workspaceId: string;
   tableId: string;
   query: string;
   columns: ShownColumn[];
   onOpen: (rowId: string) => void;
+  /** Codex round 2, item 5: on a phone the results use the phone rows (two lines, no
+      header, so no resize handles), like the grouped and dated lists. */
+  phone?: boolean;
 }) {
   const search = useSearchTableRows({ workspaceId, tableId, q: query });
   const rows = search.data?.pages.flatMap((page) => page.rows) ?? [];
@@ -35,18 +39,20 @@ export default function TableSearchResults({
   }
   return (
     <div data-testid="table-search-results">
-      <ColumnHeader columns={columns} />
+      {!phone && <ColumnHeader columns={columns} />}
       {rows.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground">
           No entries match “{query.trim()}”.
         </p>
       ) : (
-        rows.map((row) => (
+        rows.map((row, index) => (
           <RowLine
             key={row.rowId}
             row={row}
             columns={columns}
             onOpen={onOpen}
+            phone={phone}
+            alt={index % 2 === 0}
           />
         ))
       )}

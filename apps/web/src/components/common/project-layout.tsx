@@ -27,7 +27,6 @@ import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import { useProjectWebSocket } from "@/hooks/use-project-websocket";
 import { cn } from "@/lib/cn";
-import { requestTablesAnchor, TABLES_ANCHOR_ID } from "@/store/phone-nav";
 
 type ProjectLayoutProps = {
   projectId: string;
@@ -150,14 +149,13 @@ export default function ProjectLayout({
               <button
                 type="button"
                 data-testid="phone-back-to-tables"
-                onClick={() => {
-                  requestTablesAnchor();
+                // Tables follow-up (John's ruling 2026-10-11): back to the Tables page.
+                onClick={() =>
                   navigate({
-                    to: "/dashboard/workspace/$workspaceId",
+                    to: "/dashboard/workspace/$workspaceId/tables",
                     params: { workspaceId },
-                    hash: TABLES_ANCHOR_ID,
-                  });
-                }}
+                  })
+                }
                 className="min-w-[44px] min-h-[44px] flex items-center gap-1 -ml-2 text-sm font-medium"
               >
                 <span aria-hidden="true">‹</span>

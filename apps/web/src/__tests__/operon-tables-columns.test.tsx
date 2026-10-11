@@ -247,6 +247,26 @@ describe("Columns page", () => {
     );
   });
 
+  it("resets the table's remembered column widths on this browser only", () => {
+    window.localStorage.setItem(
+      "operon:table-column-widths:p1",
+      JSON.stringify({ title: 400 }),
+    );
+    window.localStorage.setItem(
+      "operon:table-column-widths:p2",
+      JSON.stringify({ title: 300 }),
+    );
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Reset widths" }));
+    expect(
+      window.localStorage.getItem("operon:table-column-widths:p1"),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem("operon:table-column-widths:p2"),
+    ).not.toBeNull();
+    window.localStorage.clear();
+  });
+
   it("shows a member Admins only. and no controls", () => {
     permission.isAdmin = false;
     renderPage();

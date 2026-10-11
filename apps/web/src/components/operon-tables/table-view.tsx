@@ -14,6 +14,7 @@ import useTableRows, {
 } from "@/hooks/queries/operon-tables/use-table-rows";
 import { cn } from "@/lib/cn";
 import ChipRows, { type ChipRow } from "./chip-rows";
+import { ColumnWidthsContext, useColumnWidths } from "./column-widths";
 import Gallery from "./gallery";
 import GroupSection, { ColumnHeader, type ShownColumn } from "./group-section";
 import { monthBuckets, VISIBLE_MONTHS } from "./month-section";
@@ -33,7 +34,7 @@ function plural(n: number, word: string, many = `${word}s`) {
   return `${n} ${n === 1 ? word : many}`;
 }
 
-function useDebounced(value: string, ms: number) {
+export function useDebounced(value: string, ms: number) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(value), ms);
@@ -103,6 +104,8 @@ function TableViewBody({
   // carries the name and "+", the mode toggle reads "By topic | By date", one chip row,
   // two-line rows, no horizontal scroll.
   const phone = useSyncedIsMobile();
+  // Spec §16: per-table column widths, remembered in this browser only.
+  const columnWidths = useColumnWidths(table.projectId);
 
   const dropdowns = table.columns.filter((c) => c.kind === "dropdown");
   // Chip rows: Status first, then the other choice columns; the group column only when
@@ -205,6 +208,7 @@ function TableViewBody({
         query={query}
         columns={shown}
         onOpen={onOpenRow}
+        phone={phone}
       />
     );
   } else if (isError) {
@@ -331,7 +335,7 @@ function TableViewBody({
             onChange={(e) => setSearchText(e.target.value)}
             placeholder={`Search ${table.name.toLowerCase()}`}
             aria-label={`Search ${table.name.toLowerCase()}`}
-            className={cn("h-8 bg-card text-sm", phone ? "w-full" : "max-w-xs")}
+            className={cn("bg-card text-sm", phone ? "w-full" : "max-w-xs")}
           />
           <div className="inline-flex rounded-md border border-border p-0.5">
             <button
@@ -395,8 +399,14 @@ function TableViewBody({
           phone ? "overflow-y-auto overflow-x-hidden" : "overflow-auto",
         )}
       >
-        {!query && !gallery && !phone && <ColumnHeader columns={shown} />}
-        {body}
+        <ColumnWidthsContext.Provider value={columnWidths}>
+          {/* Desktop: as wide as the columns need (min the pane), so wide columns scroll
+              sideways together with their header instead of squeezing. */}
+          <div className={phone || gallery ? undefined : "w-max min-w-full"}>
+            {!query && !gallery && !phone && <ColumnHeader columns={shown} />}
+            {body}
+          </div>
+        </ColumnWidthsContext.Provider>
       </div>
     </div>
   );

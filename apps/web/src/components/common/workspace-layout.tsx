@@ -1,6 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import Layout, { usePhoneNav } from "@/components/common/layout";
+import { englishOr } from "@/components/nav-main";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,6 +38,7 @@ export default function WorkspaceLayout({
 }: WorkspaceLayoutProps) {
   const { data: workspace } = useActiveWorkspace();
   const phoneNav = usePhoneNav();
+  const { i18n } = useTranslation();
 
   return (
     <Layout>
@@ -79,9 +82,16 @@ export default function WorkspaceLayout({
             <Breadcrumb className="flex items-center gap-1 text-xs w-full">
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="/">
+                  {/* Operon (John's ruling 2026-10-11, row 18): the crumb reads "Initiative"
+                      in English, same link; `inline-flex items-center` sets it on the
+                      chevron's and the page name's line (a bare inline link sat higher). */}
+                  <BreadcrumbLink href="/" className="inline-flex items-center">
                     <span className="text-xs font-normal text-card-foreground">
-                      {workspace?.name}
+                      {englishOr(
+                        i18n?.language,
+                        "Initiative",
+                        workspace?.name ?? "",
+                      )}
                     </span>
                   </BreadcrumbLink>
                 </BreadcrumbItem>

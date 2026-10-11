@@ -30,7 +30,6 @@ import {
 import { useTranslation } from "react-i18next";
 import WorkspaceLayout from "@/components/common/workspace-layout";
 import NewTableAction from "@/components/operon-tables/new-table-action";
-import TablesSection from "@/components/operon-tables/tables-section";
 import PageTitle from "@/components/page-title";
 import CreateProjectModal from "@/components/shared/modals/create-project-modal";
 import { Badge } from "@/components/ui/badge";
@@ -164,10 +163,9 @@ function RouteComponent() {
     }
   }, [projects, droppedOrder]);
 
-  const { canCreateProjects, canUpdateProjects, isAdmin } =
-    useWorkspacePermission();
-  // Operon fork addition (Tables task 8, docs/fork-discipline.md row 18): tables are listed
-  // in their own "Tables" section below, not among the ordinary projects.
+  const { canCreateProjects, canUpdateProjects } = useWorkspacePermission();
+  // Operon fork addition (Tables task 8; own page by John's ruling 2026-10-11,
+  // docs/fork-discipline.md row 18): tables live on the Tables page, not in this list.
   const listedProjects = orderedProjects?.filter((project) => !project.isTable);
   const canCreate = canCreateProjects();
   // Matches the API, which gates /project/reorder on `project: ["update"]`
@@ -304,7 +302,8 @@ function RouteComponent() {
     );
   }
 
-  if (!projects || projects.length === 0) {
+  // Tables are not boards: a workspace holding only tables shows the boards' empty state.
+  if (!listedProjects || listedProjects.length === 0) {
     return (
       <>
         <PageTitle title={t("workspace:projects.pageTitle")} />
@@ -486,7 +485,6 @@ function RouteComponent() {
             </TableBody>
           </Table>
         </DndContext>
-        <TablesSection workspaceId={workspaceId} isAdmin={isAdmin} />
       </WorkspaceLayout>
 
       <CreateProjectModal

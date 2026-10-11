@@ -17,8 +17,23 @@ import {
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { authClient } from "@/lib/auth-client";
 
+/**
+ * Operon fork addition (John's ruling 2026-10-11, Tables follow-up; docs/fork-discipline.md
+ * rows 2 and 18): the English-only label. The sub-rail entry and the sidebar group both read
+ * `navigation:sidebar.projects`, a key the settings nav and the project switcher read too,
+ * and row 2 allows bundle values only, never new keys — so the two renamed places render
+ * the English wording here and every other locale keeps its own value of the shared key.
+ */
+export function englishOr(
+  language: string | undefined,
+  english: string,
+  otherwise: string,
+): string {
+  return language?.toLowerCase().startsWith("en") ? english : otherwise;
+}
+
 export function NavMain() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: activeWorkspace } = useActiveWorkspace();
   const { data: organizations } = authClient.useListOrganizations();
   const navigate = useNavigate();
@@ -50,12 +65,25 @@ export function NavMain() {
   // pending-count badge and the `usePendingInvitations` query it needed are all gone
   // rather than merely hidden, and the Members row below is the one place left that
   // still talks about who is on the workspace.
+  // Operon (John's ruling 2026-10-11): Boards, Tables, Members — Tables is its own page.
   const navItems = [
     {
-      title: t("navigation:sidebar.projects"),
+      title: englishOr(
+        i18n?.language,
+        "Boards",
+        t("navigation:sidebar.projects"),
+      ),
       url: `/dashboard/workspace/${workspace.id}`,
       isActive:
         window.location.pathname === `/dashboard/workspace/${workspace.id}`,
+      badge: null,
+    },
+    {
+      title: "Tables",
+      url: `/dashboard/workspace/${workspace.id}/tables`,
+      isActive:
+        window.location.pathname ===
+        `/dashboard/workspace/${workspace.id}/tables`,
       badge: null,
     },
     {

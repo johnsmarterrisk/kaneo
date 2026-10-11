@@ -47,6 +47,19 @@ describe("where back goes — one step up the route, never history.back()", () =
     ).toEqual({ to: "/dashboard/workspace/ws-1/project/p-1/board" });
   });
 
+  it("a table closes to the Tables page (its header reads ‹ Tables)", () => {
+    expect(
+      phoneBackTarget("/dashboard/workspace/ws-1/project/p-1/table"),
+    ).toEqual({ to: "/dashboard/workspace/ws-1/tables" });
+  });
+
+  it("the Tables page is a Work screen that closes to the workspace root", () => {
+    expect(phoneScreenForPath("/dashboard/workspace/ws-1/tables")).toBe("work");
+    expect(phoneBackTarget("/dashboard/workspace/ws-1/tables")).toEqual({
+      to: "/dashboard/workspace/ws-1",
+    });
+  });
+
   it("a project or board closes to the workspace root", () => {
     expect(
       phoneBackTarget("/dashboard/workspace/ws-1/project/p-1/board"),

@@ -5,9 +5,6 @@ import { cn } from "@/lib/cn";
 import {
   type BottomTab,
   bottomTabForPath,
-  requestTablesAnchor,
-  TABLES_ANCHOR_ID,
-  takeTablesAnchor,
   workspaceIdForPath,
 } from "@/store/phone-nav";
 
@@ -19,7 +16,8 @@ import {
  * and Initiative sees one bar.
  *
  * Targets: Telegraph → Operon's Telegraph Navigate list; Initiative → this workspace's
- * project list; Tables → that list at its Tables section; More → Operon's Navigate screen
+ * project list; Tables → its Tables page (`/tables`, John's ruling 2026-10-11 — it replaced the
+ * `#tables` anchor on the list); More → Operon's Navigate screen
  * (the module strip). More and Telegraph share an address on purpose: Operon's Navigate
  * screen seeds on Telegraph's list, and a bare apex lands on Stream's Work screen instead —
  * there is no other address for "Navigate" that a cold phone load honours.
@@ -38,13 +36,6 @@ export const OPERON_BOTTOM_TABS: ReadonlyArray<{
   { key: "more", label: "More", icon: "⋯" },
 ];
 
-function scrollToTables(): boolean {
-  const section = document.getElementById(TABLES_ANCHOR_ID);
-  if (!section) return false;
-  section.scrollIntoView({ block: "start" });
-  return true;
-}
-
 export default function OperonBottomTabs() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -54,6 +45,10 @@ export default function OperonBottomTabs() {
   const listPath = workspaceId
     ? `/dashboard/workspace/${workspaceId}`
     : "/dashboard";
+  // `/dashboard/tables` resolves the session's workspace to its Tables page.
+  const tablesPath = workspaceId
+    ? `/dashboard/workspace/${workspaceId}/tables`
+    : "/dashboard/tables";
 
   const hrefFor = (key: BottomTab) => {
     switch (key) {
@@ -63,30 +58,13 @@ export default function OperonBottomTabs() {
       case "initiative":
         return listPath;
       case "tables":
-        return `${listPath}#${TABLES_ANCHOR_ID}`;
+        return tablesPath;
     }
   };
 
   const onInternal = (key: BottomTab) => (event: React.MouseEvent) => {
     event.preventDefault();
-    if (key === "tables") {
-      requestTablesAnchor();
-      // Already on the list: the section is mounted, so scroll now rather than wait for a
-      // remount that a same-route navigation never causes.
-      if (pathname.replace(/\/$/, "") === listPath && scrollToTables()) {
-        takeTablesAnchor();
-      }
-    }
-    const hash = key === "tables" ? TABLES_ANCHOR_ID : undefined;
-    if (workspaceId) {
-      navigate({
-        to: "/dashboard/workspace/$workspaceId",
-        params: { workspaceId },
-        hash,
-      });
-    } else {
-      navigate({ to: "/dashboard", hash });
-    }
+    navigate({ to: key === "tables" ? tablesPath : listPath });
   };
 
   return (

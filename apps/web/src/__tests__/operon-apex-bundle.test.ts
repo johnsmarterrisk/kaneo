@@ -68,6 +68,9 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
             "export const useLoadedVersionInfo = () => null;",
             "export const formatStamp = () => '';",
             "export const formatTooltip = () => '';",
+            // Rail groups spec: the rail's apex reads (`useApexValue`) use React's hooks.
+            "export const useEffect = () => {};",
+            "export const useState = (v) => [v, () => {}];",
           ].join("\n"),
           loader: "js",
         }));

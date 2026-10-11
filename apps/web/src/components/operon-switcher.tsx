@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import NotificationDropdown from "@/components/notification/notification-dropdown";
 import { useAuth } from "@/components/providers/auth-provider/hooks/use-auth";
-import { UserAvatar } from "@/components/user-avatar";
 import useSignOut from "@/hooks/mutations/use-sign-out";
 import useGetConfig from "@/hooks/queries/config/use-get-config";
 import { useUserWebSocket } from "@/hooks/use-user-websocket";
@@ -27,14 +27,14 @@ import {
  * `p-3 border-t` footer) — and Settings has to land in the BOTTOM tier, not inside the top
  * module list, to match:
  *
- *  - `OperonRailHeader` — the mark + "Operon" + the notification bell/avatar (see the note
- *    on WHY THOSE TWO STILL LIVE HERE, below).
+ *  - `OperonRailHeader` — the mark + "Operon" + the notification bell (see the note on WHY
+ *    THE BELL STILL LIVES HERE, below).
  *  - `OperonModuleNav` — the vertical module list, filtered by `variant` so the same
  *    row-rendering code produces BOTH the top nav (every module except Settings) and the
  *    bottom Settings-only row, exactly as `Sidebar.tsx`'s own `renderModule` is reused for
  *    both of ITS `<nav>`s.
- *  - `OperonRailFooter` — user name + Sign out, matching `Sidebar.tsx`'s own footer
- *    markup (a plain name span and a button, not a menu).
+ *  - `OperonRailFooter` — the Operon display name + Sign out, matching `Sidebar.tsx`'s own
+ *    footer markup (a plain name span and a button, not a menu).
  *
  * ── WHY THE TOKENS AND THE MODULE LIST ARE COPIED, NOT IMPORTED ──────────────────────
  * The source of truth is Operon's `app/src/shell/branding.ts` — `BRANDING_COLORS` and
@@ -43,19 +43,18 @@ import {
  * would resolve to a different colour on each side, and an import would cross a repository
  * boundary that `docs/fork-discipline.md` exists to keep closed. The values below are
  * therefore REPLICATED, deliberately, as hex. **If a module or a colour changes there, it
- * changes here in the same commit.** Nothing enforces that but this comment.
+ * changes here in the same commit.** The module list is enforced: Operon's
+ * `scripts/__tests__/rail-drift.test.mjs` (in its push gate) compares `OPERON_MODULES` below
+ * with Operon's `RAIL_ITEMS` and fails on any difference. The colours are not.
  *
- * ── WHY THE HEADER STILL CARRIES NOTIFICATIONS AND THE USER AVATAR ───────────────────
- * `Sidebar.tsx`'s own header row is JUST the mark, the name and a relay-status dot — no
- * notification bell, no avatar — because Operon has no equivalent chrome anywhere else in
- * the shell for them either. But `useUserWebSocket()` (the user-scoped socket that
- * delivers NOTIFICATION_CREATED), `NotificationDropdown` and `UserAvatar` came from
- * `WorkspaceSwitcher`, the component this file originally replaced, and R35 says Kaneo's
- * feature set stays intact: hiding the workspace dropdown must not silently delete
- * notifications or the account menu with it. There is no slot in the new three-tier design
- * that is a closer match than the header row, so they stay here, compact, trailing the
- * wordmark — an intentional, minimal departure from `Sidebar.tsx`'s own header, not an
- * oversight.
+ * ── WHY THE HEADER STILL CARRIES THE NOTIFICATION BELL ───────────────────────────────
+ * `Sidebar.tsx`'s own header row is JUST the mark, the name and a relay-status dot. But
+ * `useUserWebSocket()` (the user-scoped socket that delivers NOTIFICATION_CREATED) and
+ * `NotificationDropdown` came from `WorkspaceSwitcher`, the component this file originally
+ * replaced, and R35 says Kaneo's feature set stays intact, so the bell stays here, trailing
+ * the wordmark. The avatar that used to sit beside it is GONE (John, 2026-10-11, rail groups
+ * spec): the two headers now read the same, logo + name, with the bell Initiative's only
+ * addition. Sign out stays in the footer; the account pages stay reachable from Settings.
  */
 
 /**
@@ -81,38 +80,98 @@ export const OPERON_COLORS = {
 } as const;
 
 export type OperonModuleKey =
+  | "signals"
   | "telegraph"
   | "initiative"
-  | "signals"
-  | "settings"
   | "files"
-  | "desk";
+  | "desk"
+  | "inbox"
+  | "agents"
+  | "talk"
+  | "settings";
+
+/** Rail groups spec (John, 2026-10-11): Products, a divider, Tools; Settings at the bottom. */
+export type OperonRailGroup = "products" | "tools" | "settings";
 
 export type OperonModule = {
   key: OperonModuleKey;
   label: string;
   icon: string;
+  group: OperonRailGroup;
+  /** The item's bare address on the apex, or null: Initiative is this app, Talk is a button. */
+  hash: string | null;
 };
 
 /**
- * The six modules, in order (Desk added by Smart Desk D25), replicated from `MODULES` in `app/src/shell/branding.ts`.
+ * Every rail item, in rail order, replicated from `RAIL_ITEMS` in Operon's
+ * `app/src/shell/branding.ts` (synced 2026-10-11 for the rail groups spec: Inbox, Agents and
+ * Talk added, Products before Tools). ORDER IS POSITION.
  *
- * Widened to FIVE (John, GUI-pass fix): this list had drifted to four, missing `files`
- * (Stash, `branding.ts` decision 0) entirely — a real staleness this rebuild surfaces and
- * fixes, not something the fix brief asked for by name, but the same "both switchers offer
- * the same modules in the same order" contract this file's own header comment already
- * states demands it. `OperonModuleNav`'s `variant` prop is what keeps Settings out of the
- * top list and in its own bottom row, matching `Sidebar.tsx`'s two separate `<nav>`s.
+ * Keep it a plain literal between the two `rail-items` markers — strings and null only:
+ * Operon's `scripts/__tests__/rail-drift.test.mjs` evaluates the array between them and fails
+ * when its keys, labels, icons, groups or hashes differ from Operon's list.
  */
+// rail-items:begin
 export const OPERON_MODULES: readonly OperonModule[] = [
-  { key: "signals", label: "Stream", icon: "⚡" },
-  { key: "telegraph", label: "Telegraph", icon: "💬" },
-  { key: "initiative", label: "Initiative", icon: "📋" },
-  { key: "files", label: "Stash", icon: "📁" },
-  // Smart Desk D25 (John, 2026-09-26): after Stash, before Settings — order is position.
-  { key: "desk", label: "SmartDesk", icon: "🎫" },
-  { key: "settings", label: "Settings", icon: "⚙️" },
-] as const;
+  {
+    key: "signals",
+    label: "Stream",
+    icon: "⚡",
+    group: "products",
+    hash: "#/activity",
+  },
+  {
+    key: "telegraph",
+    label: "Telegraph",
+    icon: "💬",
+    group: "products",
+    hash: "#/telegraph",
+  },
+  {
+    key: "initiative",
+    label: "Initiative",
+    icon: "📋",
+    group: "products",
+    hash: null,
+  },
+  {
+    key: "files",
+    label: "Stash",
+    icon: "📁",
+    group: "products",
+    hash: "#/files",
+  },
+  {
+    key: "desk",
+    label: "SmartDesk",
+    icon: "🎫",
+    group: "products",
+    hash: "#/desk",
+  },
+  { key: "inbox", label: "Inbox", icon: "📥", group: "tools", hash: "#/inbox" },
+  {
+    key: "agents",
+    label: "Agents",
+    icon: "🤖",
+    group: "tools",
+    hash: "#/agents",
+  },
+  { key: "talk", label: "Talk", icon: "📞", group: "tools", hash: null },
+  {
+    key: "settings",
+    label: "Settings",
+    icon: "⚙️",
+    group: "settings",
+    hash: "#/settings",
+  },
+];
+// rail-items:end
+
+/** The two labelled groups, in order — Operon's `RAIL_GROUPS`. */
+const RAIL_GROUPS: readonly { group: "products" | "tools"; label: string }[] = [
+  { group: "products", label: "Products" },
+  { group: "tools", label: "Tools" },
+];
 
 /** The module this bar is rendered inside. Everything else lives on the apex. */
 const CURRENT_MODULE: OperonModuleKey = "initiative";
@@ -160,7 +219,8 @@ let apexUrlFallbackWarned = false;
  * placeholder token — `env.sh`'s `sed` would rewrite that too, and a diagnostic that
  * rewrites itself is worse than none.
  */
-export function apexUrl(): string {
+/** The configured apex as an absolute http(s) URL without trailing slashes, or null. */
+function configuredApexUrl(): string | null {
   // Read through a widened type: `apps/web/src/vite-env.d.ts` is not on the fork's touch
   // list, so this variable is not declared on `ImportMetaEnv` and must not be added there.
   const configured = (import.meta.env as Record<string, string | undefined>)
@@ -177,6 +237,12 @@ export function apexUrl(): string {
       // Not an absolute URL — the unsubstituted placeholder is the ordinary case.
     }
   }
+  return null;
+}
+
+export function apexUrl(): string {
+  const configured = configuredApexUrl();
+  if (configured !== null) return configured;
 
   if (!apexUrlFallbackWarned) {
     apexUrlFallbackWarned = true;
@@ -216,25 +282,169 @@ export function __resetApexUrlWarning() {
  * `#/telegraph` and `#/files` for exactly this caller (see its own doc comment), so every
  * module this switcher can link to now has a real address to send it to.
  */
-function moduleHref(apex: string, key: OperonModuleKey): string {
-  switch (key) {
-    case "signals":
-      return `${apex}/#/activity`;
-    case "telegraph":
-      return `${apex}/#/telegraph`;
-    case "files":
-      return `${apex}/#/files`;
-    case "desk":
-      return `${apex}/#/desk`;
-    case "settings":
-      return `${apex}/#/settings`;
-    default:
-      // "initiative" never reaches here: `ModuleRow` renders the current module as a
-      // `<span>`, never an `<a>` (see `isCurrent` below), so `moduleHref` is only ever
-      // called for the OTHER five keys — this default exists so the switch stays
-      // exhaustive if a seventh, still-addressless module ever joins the list.
-      return `${apex}/`;
+function moduleHref(apex: string, module: OperonModule): string {
+  // Rail groups spec: each item carries its own `hash` (the drift test pins it to Operon's
+  // `MODULE_HASH`). Null only for Initiative (rendered as the current `<span>`) and Talk (a
+  // button), neither of which reaches here; the bare apex is the exhaustive fallback.
+  return module.hash ? `${apex}/${module.hash}` : `${apex}/`;
+}
+
+/**
+ * Reads from the Operon apex with the shared session cookie — the same call `stash-picker.tsx`
+ * makes to `/api/files/list`; Operon's CORS allowlist admits this origin. Plain `fetch` + state
+ * rather than a TanStack query because the rail renders above (and in tests without) a
+ * QueryClientProvider.
+ *
+ * FRESHNESS (Codex round 1, finding 1). A read is shared for `APEX_STALE_MS` only, keyed by
+ * path AND the Kaneo user, and every reader asks again when the window regains focus or the
+ * tab becomes visible, and when the signed-in user changes. So an admin clearing the Talk room
+ * removes the row the next time this tab is looked at, and another person signing in sees
+ * their own name, never the last one's — Operon's own `useTalkLink` refresh rule.
+ *
+ * LOGGING (finding 2). A failure logs the path and a bounded class — the HTTP status, or
+ * `malformed` / `network` — never an error message: the Talk body is a join credential (Talk
+ * spec R4) and a parse error's message can quote the response.
+ */
+const APEX_STALE_MS = 30_000;
+/** On focus or visibility every reader asks again; this only folds the rail's two or three
+    readers of one path, all woken by the same event, into one request. */
+const APEX_REFRESH_DEDUPE_MS = 2_000;
+
+class ApexHttpError extends Error {
+  constructor(readonly status: number) {
+    super("apex read failed");
   }
+}
+
+class ApexUnsetError extends Error {
+  constructor() {
+    super("apex url unset");
+  }
+}
+
+const apexReads = new Map<string, { at: number; read: Promise<unknown> }>();
+
+function readApex(
+  path: string,
+  userKey: string,
+  maxAgeMs: number,
+): Promise<unknown> {
+  // Codex round 2, item 3: a credentialed read never goes to the development origin outside
+  // dev mode. An unset apex in a built bundle fails soft — no request, Kaneo's own name, no
+  // Talk row (apexUrl() has already said once, on the console, that the value is unset).
+  if (configuredApexUrl() === null && !import.meta.env.DEV) {
+    return Promise.reject(new ApexUnsetError());
+  }
+  const key = `${path}|${userKey}`;
+  const cached = apexReads.get(key);
+  if (cached && Date.now() - cached.at < maxAgeMs) return cached.read;
+  const read = fetch(`${apexUrl()}${path}`, {
+    credentials: "include",
+    cache: "no-store",
+  }).then(async (res) => {
+    if (!res.ok) throw new ApexHttpError(res.status);
+    return res.json();
+  });
+  read.catch((err: unknown) => {
+    apexReads.delete(key);
+    console.error(
+      JSON.stringify({
+        evt: "operon.apex_read_failed",
+        path,
+        ...(err instanceof ApexHttpError
+          ? { status: err.status }
+          : { reason: err instanceof SyntaxError ? "malformed" : "network" }),
+      }),
+    );
+  });
+  apexReads.set(key, { at: Date.now(), read });
+  return read;
+}
+
+/** Test seam: the reads are shared per module instance, and suites need that reset. */
+export function __resetApexReadsForTests() {
+  apexReads.clear();
+}
+
+function useApexValue(
+  path: string,
+  pick: (body: unknown) => string | null,
+): string | null {
+  const { user } = useAuth();
+  const userKey = user?.id ?? user?.email ?? "";
+  // Codex round 2, item 2: the value is stored WITH the user it was read for and shown only
+  // to that user, so the render right after a user change shows nothing — never the last
+  // person's name — before the effect below even runs.
+  const [held, setHeld] = useState<{ userKey: string; value: string | null }>({
+    userKey,
+    value: null,
+  });
+  useEffect(() => {
+    let live = true;
+    // Codex round 2, item 1: reads overlap (mount, focus, visibility) and can settle out of
+    // order; only the latest one started may change what is shown, so an older join link
+    // never comes back after a newer 401/403 cleared it.
+    let latest = 0;
+    const setValue = (value: string | null) => setHeld({ userKey, value });
+    setValue(null);
+    const load = (maxAgeMs: number) => {
+      const mine = ++latest;
+      readApex(path, userKey, maxAgeMs).then(
+        (body) => {
+          if (live && mine === latest) setValue(pick(body));
+        },
+        (err: unknown) => {
+          // Signed out or no longer entitled: drop what was shown (Operon's useTalkLink rule).
+          // Any other failure keeps the last good value until a read lands.
+          if (
+            live &&
+            mine === latest &&
+            err instanceof ApexHttpError &&
+            (err.status === 401 || err.status === 403)
+          ) {
+            setValue(null);
+          }
+        },
+      );
+    };
+    const refresh = () => load(APEX_REFRESH_DEDUPE_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    load(APEX_STALE_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      live = false;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [path, pick, userKey]);
+  return held.userKey === userKey ? held.value : null;
+}
+
+/** The team room's MEGA link from Operon's `GET /api/talk`, or null (none set, or a guest). */
+function pickTeamTalkUrl(body: unknown): string | null {
+  const rooms = (body as { rooms?: { scope?: unknown; url?: unknown }[] })
+    ?.rooms;
+  const team = Array.isArray(rooms)
+    ? rooms.find((room) => room?.scope === "team")
+    : undefined;
+  return typeof team?.url === "string" && team.url !== "" ? team.url : null;
+}
+
+/** The Operon display name from `GET /api/auth/session`, or null. */
+function pickDisplayName(body: unknown): string | null {
+  const name = (body as { displayName?: unknown })?.displayName;
+  return typeof name === "string" && name !== "" ? name : null;
+}
+
+/**
+ * Opens the team call the way Kaneo's own comment editor opens a link (a new tab, opener cut).
+ * Operon's desktop side-popup placement (`app/src/talk/openTalk.ts`) stays Operon's.
+ */
+function openTalk(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 /**
@@ -292,7 +502,7 @@ function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
     <a
       key={module.key}
       {...shared}
-      href={moduleHref(apex, module.key)}
+      href={moduleHref(apex, module)}
       style={style}
     >
       {module.icon} {module.label}
@@ -301,7 +511,7 @@ function ModuleRow({ module, apex }: { module: OperonModule; apex: string }) {
 }
 
 /**
- * The rail's top: mark, "Operon", the notification bell and avatar — matching
+ * The rail's top: mark, "Operon", the notification bell — matching
  * `Sidebar.tsx`'s `h-12 px-4 flex items-center` header row's height and padding. The mark
  * is an inline SVG (navy rounded square, signal-yellow "O") rather than a reference to
  * `public/logo-dark.svg`/`favicon.svg`: those two assets are still the pre-Operon
@@ -356,38 +566,115 @@ export function OperonRailHeader() {
             Button variant's default `text-card-foreground` is navy ink, correct on a
             card, navy-on-navy here. See NotificationDropdownProps' doc comment. */}
         <NotificationDropdown groundContext />
-        <div className="h-8 w-8 shrink-0">
-          <UserAvatar />
-        </div>
       </div>
     </div>
   );
 }
 
 /**
- * The module nav — `variant="top"` renders every module except Settings (`Sidebar.tsx`'s
- * `MODULES.filter(m => m.key !== 'settings')`); `variant="settings"` renders only Settings
- * (`Sidebar.tsx`'s second `<nav aria-label="Settings">`, anchored just above the footer).
+ * The Tools label, drawn ON the Tools group's top border (Operon's `Sidebar.tsx` treatment,
+ * John's fit ruling 2026-10-11): the border is the divider, the label sits on it with the
+ * ground behind it like a fieldset legend, and Products carries no label — so the grouping
+ * costs a pixel of rail height, not a header row. aria-hidden: the group's aria-label names it.
+ */
+function RailGroupLabel({ label, phone }: { label: string; phone: boolean }) {
+  return (
+    <p
+      aria-hidden="true"
+      className={
+        phone
+          ? "pointer-events-none absolute -top-1.5 left-1/2 -translate-x-1/2 px-0.5 text-[9px] leading-3 font-medium uppercase"
+          : "pointer-events-none absolute -top-1.5 left-2 px-1 text-[10px] leading-3 font-medium uppercase tracking-wide"
+      }
+      style={{
+        color: OPERON_COLORS.textPrimary,
+        backgroundColor: OPERON_COLORS.ground,
+        opacity: 0.7,
+      }}
+    >
+      {label}
+    </p>
+  );
+}
+
+/** A group's fieldset reset; the Tools group (index > 0) gets the divider border. */
+function groupStyle(index: number) {
+  return index > 0
+    ? {
+        borderTop: `1px solid ${OPERON_COLORS.border}`,
+        position: "relative" as const,
+      }
+    : undefined;
+}
+
+/**
+ * The module nav — `variant="top"` renders the Products and Tools groups (rail groups spec,
+ * John 2026-10-11) exactly as Operon's `Sidebar.tsx` does; `variant="settings"` renders only
+ * Settings (`Sidebar.tsx`'s second `<nav aria-label="Settings">`, anchored above the footer).
+ * Talk is a button, shown only once Operon answers with a team link — Operon's own rule.
  */
 export function OperonModuleNav({ variant }: { variant: "top" | "settings" }) {
   const apex = apexUrl();
-  const modules = OPERON_MODULES.filter((module) =>
-    variant === "settings"
-      ? module.key === "settings"
-      : module.key !== "settings",
-  );
+  const talkUrl = useApexValue("/api/talk", pickTeamTalkUrl);
+
+  if (variant === "settings") {
+    return (
+      <nav
+        aria-label="Settings"
+        data-testid="operon-settings-nav"
+        className="flex w-full flex-col gap-1 px-2 py-3"
+        style={{ backgroundColor: OPERON_COLORS.ground }}
+      >
+        {OPERON_MODULES.filter((module) => module.group === "settings").map(
+          (module) => (
+            <ModuleRow key={module.key} module={module} apex={apex} />
+          ),
+        )}
+      </nav>
+    );
+  }
 
   return (
     <nav
-      aria-label={variant === "settings" ? "Settings" : "Modules"}
-      data-testid={
-        variant === "settings" ? "operon-settings-nav" : "operon-module-nav"
-      }
+      aria-label="Modules"
+      data-testid="operon-module-nav"
       className="flex w-full flex-col gap-1 px-2 py-3"
       style={{ backgroundColor: OPERON_COLORS.ground }}
     >
-      {modules.map((module) => (
-        <ModuleRow key={module.key} module={module} apex={apex} />
+      {RAIL_GROUPS.map(({ group, label }, index) => (
+        <fieldset
+          key={group}
+          aria-label={label}
+          data-testid={`rail-group-${group}`}
+          className="m-0 min-w-0 border-0 p-0 flex flex-col gap-1"
+          style={groupStyle(index)}
+        >
+          {index > 0 && <RailGroupLabel label={label} phone={false} />}
+          {OPERON_MODULES.filter((module) => module.group === group).map(
+            (module) =>
+              module.key === "talk" ? (
+                talkUrl && (
+                  // A `<button>`, so unlike `ModuleRow`'s `<a>`/`<span>` it IS centred by
+                  // index.css's touch-target rule; `justify-start` puts it back on the left.
+                  <button
+                    key={module.key}
+                    type="button"
+                    data-testid="module-talk"
+                    onClick={() => openTalk(talkUrl)}
+                    className="flex min-h-[44px] w-full items-center justify-start rounded px-3 py-1.5 text-left text-sm"
+                    style={{
+                      color: OPERON_COLORS.textPrimary,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {module.icon} {module.label}
+                  </button>
+                )
+              ) : (
+                <ModuleRow key={module.key} module={module} apex={apex} />
+              ),
+          )}
+        </fieldset>
       ))}
     </nav>
   );
@@ -408,14 +695,35 @@ export function OperonModuleNav({ variant }: { variant: "top" | "settings" }) {
  */
 export function OperonPhoneModuleStrip() {
   const apex = apexUrl();
-  const appModules = OPERON_MODULES.filter(
-    (module) => module.key !== "settings",
-  );
+  const talkUrl = useApexValue("/api/talk", pickTeamTalkUrl);
   const settingsModule = OPERON_MODULES.find(
     (module) => module.key === "settings",
   );
 
   const renderTile = (module: OperonModule) => {
+    if (module.key === "talk") {
+      // Talk: a button once Operon answers with a team link, never an href (Talk spec R4).
+      return (
+        talkUrl && (
+          <button
+            key={module.key}
+            type="button"
+            data-testid="phone-module-talk"
+            aria-label={module.label}
+            onClick={() => openTalk(talkUrl)}
+            className="relative w-12 h-12 shrink-0 flex items-center justify-center rounded-2xl"
+          >
+            <span
+              aria-hidden="true"
+              className="w-12 h-12 flex items-center justify-center rounded-2xl text-xl"
+              style={{ backgroundColor: OPERON_COLORS.groundAccent10 }}
+            >
+              {module.icon}
+            </span>
+          </button>
+        )
+      );
+    }
     const isCurrent = module.key === CURRENT_MODULE;
     const shared = {
       key: module.key,
@@ -456,7 +764,7 @@ export function OperonPhoneModuleStrip() {
     return isCurrent ? (
       <span {...shared}>{inner}</span>
     ) : (
-      <a {...shared} href={moduleHref(apex, module.key)}>
+      <a {...shared} href={moduleHref(apex, module)}>
         {inner}
       </a>
     );
@@ -484,7 +792,22 @@ export function OperonPhoneModuleStrip() {
         data-testid="phone-module-strip-apps"
         className="px-2 flex flex-col items-center gap-2 min-h-0 overflow-y-auto"
       >
-        {appModules.map(renderTile)}
+        {/* Rail groups spec: the desktop rail's two groups, the label at 9px with no
+            letter-spacing so "PRODUCTS" fits the 48px column (Operon's MobileNavigate). */}
+        {RAIL_GROUPS.map(({ group, label }, index) => (
+          <fieldset
+            key={group}
+            aria-label={label}
+            data-testid={`phone-rail-group-${group}`}
+            className={`m-0 min-w-0 border-0 p-0 flex flex-col items-center gap-2 ${index > 0 ? "pt-2" : ""}`}
+            style={groupStyle(index)}
+          >
+            {index > 0 && <RailGroupLabel label={label} phone />}
+            {OPERON_MODULES.filter((module) => module.group === group).map(
+              renderTile,
+            )}
+          </fieldset>
+        ))}
       </div>
       <div
         data-testid="phone-module-strip-settings"
@@ -497,7 +820,7 @@ export function OperonPhoneModuleStrip() {
 }
 
 /**
- * The rail's bottom: user name + Sign out, matching `Sidebar.tsx`'s own footer markup
+ * The rail's bottom: the Operon display name + Sign out, matching `Sidebar.tsx`'s own footer markup
  * (`p-3 border-t`, a plain name span and a button — not `UserAvatar`'s dropdown menu, which
  * hides both behind a click and stays in the header row for that reason).
  *
@@ -512,6 +835,9 @@ export function OperonPhoneModuleStrip() {
  */
 export function OperonRailFooter({ phone = false }: { phone?: boolean } = {}) {
   const { user } = useAuth();
+  // Rail groups spec (John, 2026-10-11): the footer names the person as Operon does. Kaneo's
+  // own `user.name` shows until Operon's `GET /api/auth/session` answers, and if it fails.
+  const operonName = useApexValue("/api/auth/session", pickDisplayName);
   const { data: config } = useGetConfig();
   const { mutateAsync: signOut } = useSignOut(config?.customOAuthLogoutUrl);
 
@@ -529,7 +855,7 @@ export function OperonRailFooter({ phone = false }: { phone?: boolean } = {}) {
           className="truncate text-xs"
           style={{ color: OPERON_COLORS.textPrimary }}
         >
-          {user?.name ?? ""}
+          {operonName ?? user?.name ?? ""}
         </span>
         {phone && (
           <span

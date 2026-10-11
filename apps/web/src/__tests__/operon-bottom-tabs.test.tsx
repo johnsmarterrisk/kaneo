@@ -81,7 +81,6 @@ function tabs() {
 beforeEach(() => {
   router.pathname = "/dashboard/workspace/w1";
   router.navigate.mockClear();
-  phoneNav.takeTablesAnchor();
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockReturnValue({
@@ -136,7 +135,15 @@ describe("Bottom tab bar at 375px", () => {
     ).toBeNull();
   });
 
-  it("each tab's target: Telegraph and More reach Operon's Navigate, Initiative and Tables this workspace's list", () => {
+  it("marks Tables on the Tables page", () => {
+    router.pathname = "/dashboard/workspace/w1/tables";
+    renderShell();
+    expect(
+      screen.getByTestId("bottom-tab-tables").getAttribute("aria-current"),
+    ).toBe("page");
+  });
+
+  it("each tab's target: Telegraph and More reach Operon's Navigate, Initiative this workspace's list, Tables its Tables page", () => {
     renderShell();
     const href = (key: string) =>
       screen.getByTestId(`bottom-tab-${key}`).getAttribute("href");
@@ -144,7 +151,8 @@ describe("Bottom tab bar at 375px", () => {
     // "More" opens Operon's Navigate screen — the module strip, the two-screen model.
     expect(href("more")).toBe("https://operon.example.test/#/telegraph");
     expect(href("initiative")).toBe("/dashboard/workspace/w1");
-    expect(href("tables")).toBe("/dashboard/workspace/w1#tables");
+    // John's ruling 2026-10-11: the Tables page, never the list's old `#tables` anchor.
+    expect(href("tables")).toBe("/dashboard/workspace/w1/tables");
   });
 
   it("Initiative navigates in-app to the workspace list", () => {
@@ -152,40 +160,25 @@ describe("Bottom tab bar at 375px", () => {
     renderShell();
     fireEvent.click(screen.getByTestId("bottom-tab-initiative"));
     expect(router.navigate).toHaveBeenCalledWith({
-      to: "/dashboard/workspace/$workspaceId",
-      params: { workspaceId: "w1" },
-      hash: undefined,
+      to: "/dashboard/workspace/w1",
     });
-    expect(phoneNav.takeTablesAnchor()).toBe(false);
   });
 
-  it("Tables navigates to the list's Tables section and asks for the scroll", () => {
+  it("Tables navigates in-app to the Tables page", () => {
     router.pathname = "/dashboard/workspace/w1/project/p1/board";
     renderShell();
     fireEvent.click(screen.getByTestId("bottom-tab-tables"));
     expect(router.navigate).toHaveBeenCalledWith({
-      to: "/dashboard/workspace/$workspaceId",
-      params: { workspaceId: "w1" },
-      hash: "tables",
+      to: "/dashboard/workspace/w1/tables",
     });
-    expect(phoneNav.takeTablesAnchor()).toBe(true);
   });
 
-  it("Tables on the list itself scrolls to the section at once", () => {
-    const section = document.createElement("section");
-    section.id = "tables";
-    const scrollIntoView = vi.fn();
-    section.scrollIntoView = scrollIntoView;
-    document.body.appendChild(section);
-    try {
-      renderShell();
-      fireEvent.click(screen.getByTestId("bottom-tab-tables"));
-      expect(scrollIntoView).toHaveBeenCalled();
-      // Consumed by the immediate scroll, so the section does not scroll again on load.
-      expect(phoneNav.takeTablesAnchor()).toBe(false);
-    } finally {
-      section.remove();
-    }
+  it("Tables outside a workspace goes to the redirect that finds the session's workspace", () => {
+    router.pathname = "/dashboard/settings";
+    renderShell();
+    expect(screen.getByTestId("bottom-tab-tables").getAttribute("href")).toBe(
+      "/dashboard/tables",
+    );
   });
 
   it("desktop renders no bar", () => {
@@ -195,19 +188,19 @@ describe("Bottom tab bar at 375px", () => {
   });
 });
 
-describe("The Tables anchor across Initiative's redirects", () => {
-  it("is captured from Operon's /#tables before the router runs, once", () => {
-    phoneNav.captureTablesAnchor("#tables");
-    expect(phoneNav.takeTablesAnchor()).toBe(true);
-    expect(phoneNav.takeTablesAnchor()).toBe(false);
-    phoneNav.captureTablesAnchor("#other");
-    expect(phoneNav.takeTablesAnchor()).toBe(false);
+describe("The bottom tab's addressing", () => {
+  it("has no anchor capture left (the Tables page replaced it)", () => {
+    expect("captureTablesAnchor" in phoneNav).toBe(false);
+    expect("takeTablesAnchor" in phoneNav).toBe(false);
   });
 
   it("names the tab for each path", () => {
     expect(
       phoneNav.bottomTabForPath("/dashboard/workspace/w1/project/p1/table"),
     ).toBe("tables");
+    expect(phoneNav.bottomTabForPath("/dashboard/workspace/w1/tables")).toBe(
+      "tables",
+    );
     expect(phoneNav.bottomTabForPath("/dashboard/workspace/w1")).toBe(
       "initiative",
     );
