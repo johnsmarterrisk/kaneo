@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LINK_MAX_LENGTH } from "../task/validate-task-fields";
 import {
   type ColumnDef,
   optionList,
@@ -38,7 +39,14 @@ function columnSchema(def: ColumnDef): z.ZodType {
           : z.never(),
       );
     case "link":
-      return z.url().describe("An http(s) URL");
+      // The row writer accepts http(s) only (validate-task-fields.ts), so the published
+      // schema says exactly that: a protocol-limited URL plus a pattern JSON Schema carries
+      // (codex round 1, finding 6).
+      return z
+        .url({ protocol: /^https?$/ })
+        .max(LINK_MAX_LENGTH)
+        .regex(/^https?:\/\//i)
+        .describe("An http(s) URL");
     case "image":
       return z.string().describe("A Stash file id");
     default:

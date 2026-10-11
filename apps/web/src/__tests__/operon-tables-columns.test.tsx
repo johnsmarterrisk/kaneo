@@ -18,6 +18,7 @@ import ColumnsPage, {
 const permission = { isAdmin: true };
 const create = vi.fn(async () => ({}));
 const hide = vi.fn(async () => ({}));
+const historyNext = vi.fn();
 const reorder = vi.fn(async () => ({}));
 const editOptions = vi.fn(async () => ({ rowsRewritten: 2 }));
 const settings = vi.fn(async () => ({}));
@@ -99,10 +100,13 @@ vi.mock("@/hooks/queries/operon-tables/use-get-column-history", () => ({
               at: "2026-10-09T00:00:00Z",
             },
           ],
-          nextCursor: null,
+          nextCursor: "older",
         }
       : undefined,
     isLoading: false,
+    hasNextPage: Boolean(fieldId),
+    isFetchingNextPage: false,
+    fetchNextPage: historyNext,
   }),
 }));
 vi.mock("@/hooks/mutations/custom-field/use-create-custom-field", () => ({
@@ -216,6 +220,9 @@ describe("Columns page", () => {
     fireEvent.click(screen.getByText("View history"));
     expect(screen.getByText("Phishing tip: Summer")).toBeTruthy();
     expect(screen.getByText(/Spring → Summer/)).toBeTruthy();
+    // Codex round 1, finding 5: older changes stay reachable past the first page.
+    fireEvent.click(screen.getByText("Load older changes"));
+    expect(historyNext).toHaveBeenCalledTimes(1);
   });
 
   it("changes the group column through the settings route", async () => {

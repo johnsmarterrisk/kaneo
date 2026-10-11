@@ -366,6 +366,27 @@ describe("API integration: Tables — hide, not delete (task 6)", () => {
     });
   });
 
+  it("concurrent creates of different columns take distinct positions (codex round 1, finding 3)", async () => {
+    const s = await seed();
+    const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"];
+    const answers = await Promise.all(
+      names.map((name) =>
+        json("POST", "/api/custom-field", {
+          projectId: s.tableId,
+          name,
+          type: "text",
+        }),
+      ),
+    );
+    expect(answers.map((a) => a.status)).toEqual(names.map(() => 200));
+    const defs = await db
+      .select()
+      .from(customFieldDefinitionTable)
+      .where(eq(customFieldDefinitionTable.projectId, s.tableId));
+    const positions = defs.map((d) => d.position);
+    expect(new Set(positions).size).toBe(positions.length);
+  });
+
   it("two concurrent creates of one name in different case yield one active column", async () => {
     const s = await seed();
     const [a, b] = await Promise.all([

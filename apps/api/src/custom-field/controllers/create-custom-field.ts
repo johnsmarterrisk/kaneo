@@ -156,11 +156,6 @@ async function createCustomField(
     }
   }
 
-  const [maxPositionResult] = await db
-    .select({ maxPosition: max(customFieldDefinitionTable.position) })
-    .from(customFieldDefinitionTable)
-    .where(eq(customFieldDefinitionTable.projectId, projectId));
-
   const field = await db.transaction(async (tx) => {
     // Operon fork addition (Tables, row 18, R-D / RF-8): under the project lock every
     // definition writer takes, an active name is unique after trimming and case folding.
@@ -168,6 +163,12 @@ async function createCustomField(
       await lockProjectForDefinitions(tx, projectId);
       await assertUniqueActiveName(tx, projectId, name);
     }
+    // Read AFTER the lock (Tables codex round 1, finding 3): read before it, two concurrent
+    // creates on a table took the same maximum and inserted at the same position.
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(customFieldDefinitionTable.position) })
+      .from(customFieldDefinitionTable)
+      .where(eq(customFieldDefinitionTable.projectId, projectId));
     const [created] = await tx
       .insert(customFieldDefinitionTable)
       .values({

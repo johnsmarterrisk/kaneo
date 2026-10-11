@@ -41,6 +41,8 @@ type Received = {
 const received: Received[] = [];
 /** Statuses to answer `/webhooks/kaneo` with, in order; 200 once exhausted. */
 let statuses: number[] = [];
+/** How long `/webhooks/kaneo` takes to answer a ROW record (a slow Operon). */
+let rowDelayMs = 0;
 
 const platform = http.createServer((req, res) => {
   let raw = "";
@@ -53,6 +55,20 @@ const platform = http.createServer((req, res) => {
       return res.end('{"active":true}');
     }
     if (req.url === "/webhooks/kaneo" || req.url === "/elsewhere") {
+      const parsed = JSON.parse(raw);
+      if (rowDelayMs > 0 && parsed.event !== "project.created") {
+        setTimeout(() => {
+          received.push({
+            path: req.url as string,
+            raw,
+            signatureOk: true,
+            body: parsed,
+          });
+          res.writeHead(200);
+          res.end();
+        }, rowDelayMs);
+        return;
+      }
       received.push({
         path: req.url,
         raw,
@@ -193,9 +209,51 @@ describe("API integration: Tables — durable delivery (task 5)", () => {
     tableOutboxHooks.disableKick = true;
     received.length = 0;
     statuses = [];
+    rowDelayMs = 0;
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    tableOutboxHooks.passBudgetMs = undefined;
+  });
+
+  it("stops posting when a pass outruns its budget, hands the rest back, and never posts twice (finding 1)", async () => {
+    const { tableId } = await seedTable();
+    for (const n of [1, 2, 3]) await addRow(tableId, `Tip ${n}`);
+    expect(await pending()).toHaveLength(6);
+    received.length = 0;
+    // A slow Operon: each row post takes 150 ms against a 200 ms budget (the production
+    // budget is 40 s against a 60 s lease and claim, with a 10 s post timeout).
+    rowDelayMs = 150;
+    tableOutboxHooks.passBudgetMs = 200;
+
+    const first = await drainTableOutbox();
+    expect(first.delivered).toBeGreaterThan(0);
+    expect(first.released).toBeGreaterThan(0);
+    expect(first.delivered + first.released).toBe(6);
+    // Released records are due NOW and untouched: no attempt counted, no claim left to lapse.
+    const left = await pending();
+    expect(left).toHaveLength(first.released);
+    for (const record of left) {
+      expect(record.attempts).toBe(0);
+      expect(record.nextAttemptAt.getTime()).toBeLessThanOrEqual(
+        Date.now() + 1000,
+      );
+    }
+
+    tableOutboxHooks.passBudgetMs = undefined;
+    const second = await drainTableOutbox();
+    expect(second.delivered).toBe(first.released);
+    expect(await pending()).toHaveLength(0);
+    const posted = rows();
+    expect(posted).toHaveLength(6);
+    expect(new Set(posted.map((r) => r.raw)).size).toBe(6);
+    // Per-task order survives the hand-back: each row's created precedes its fields_changed.
+    for (const taskId of new Set(posted.map((r) => r.body.task?.id))) {
+      const events = posted
+        .filter((r) => r.body.task?.id === taskId)
+        .map((r) => r.body.event);
+      expect(events).toEqual(["task.created", "task.fields_changed"]);
+    }
   });
 
   it("retries a failing sink and delivers each record once, byte-identical every attempt", async () => {

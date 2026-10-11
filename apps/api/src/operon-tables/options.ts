@@ -10,6 +10,7 @@ import { kickTableOutbox } from "./outbox";
 import { optionList, tableError, unknownColumn } from "./values";
 import {
   lockTable,
+  notifyTableRowsChanged,
   readLabel,
   resolveActor,
   type WriteContext,
@@ -107,13 +108,27 @@ export async function editOptions({
     if (edit.action === "add") {
       const existing = find(edit.label);
       if (existing)
-        return { def, options, rows: 0, added: false, label: existing };
+        return {
+          def,
+          options,
+          rows: 0,
+          taskIds: [] as string[],
+          added: false,
+          label: existing,
+        };
       const next = [...options, edit.label];
       await tx
         .update(customFieldDefinitionTable)
         .set({ options: next })
         .where(eq(customFieldDefinitionTable.id, def.id));
-      return { def, options: next, rows: 0, added: true, label: edit.label };
+      return {
+        def,
+        options: next,
+        rows: 0,
+        taskIds: [] as string[],
+        added: true,
+        label: edit.label,
+      };
     }
 
     const from = options.find((o) => o === edit.from);
@@ -207,6 +222,7 @@ export async function editOptions({
       def,
       options: next,
       rows: taskIds.length,
+      taskIds,
       added: false,
       label: target,
     };
@@ -226,7 +242,10 @@ export async function editOptions({
       actorUserId,
     });
   }
-  if (result.rows > 0) kickTableOutbox();
+  if (result.rows > 0) {
+    await notifyTableRowsChanged(projectId, result.taskIds, actorUserId);
+    kickTableOutbox();
+  }
   return {
     fieldId,
     options: result.options,

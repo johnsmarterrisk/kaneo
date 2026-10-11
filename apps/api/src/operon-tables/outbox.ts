@@ -40,6 +40,19 @@ export const OUTBOX_BACKOFF_SECONDS = [5, 15, 60, 300] as const;
 export const OUTBOX_MAX_BACKOFF_SECONDS = 900;
 /** A claimed record is invisible to other drainers this long; a crash re-exposes it. */
 const CLAIM_SECONDS = 60;
+/** The job lease, equal to the claim: neither may lapse while this instance still posts. */
+const LEASE_MS = CLAIM_SECONDS * 1000;
+/** `postToGenericWebhook`'s own timeout (plugins/generic-webhook/client.ts). */
+const POST_TIMEOUT_MS = 10_000;
+/**
+ * Codex round 1, finding 1: a pass may START a post only before this budget runs out, so its
+ * last post ends (budget + one timeout + the bookkeeping margin) well inside the 60 s lease
+ * and claim. Records still unposted at the deadline are released (due now, attempts
+ * unchanged) for the next pass, in id order, so another instance can never claim a record
+ * this one is still posting and per-task order holds. Never raise it past
+ * LEASE_MS - POST_TIMEOUT_MS minus a margin.
+ */
+export const PASS_BUDGET_MS = LEASE_MS - POST_TIMEOUT_MS - 10_000;
 /** How soon a record held back by a precondition (announce, webhook) is looked at again. */
 const HOLD_SECONDS = 5;
 export const STALL_SECONDS = 900;
@@ -62,6 +75,8 @@ export function backoffSeconds(attempts: number) {
 export const tableOutboxHooks: {
   disableKick?: boolean;
   alert?: (message: string, extra: Record<string, number>) => void;
+  /** Overrides PASS_BUDGET_MS so a test can run a pass past its budget in milliseconds. */
+  passBudgetMs?: number;
 } = {};
 
 type Claimed = {
@@ -237,6 +252,8 @@ async function checkStall() {
  * each task only), check each project's preconditions, post, delete on 2xx.
  */
 export async function drainTableOutbox() {
+  const deadline =
+    Date.now() + (tableOutboxHooks.passBudgetMs ?? PASS_BUDGET_MS);
   const claimed = await db.execute<Claimed>(sql`
     UPDATE operon_table_row_outbox AS o
     SET next_attempt_at = now() + make_interval(secs => ${CLAIM_SECONDS})
@@ -272,7 +289,12 @@ export async function drainTableOutbox() {
   let delivered = 0;
   let failed = 0;
   let held = 0;
+  const released: number[] = [];
   for (const [projectId, list] of byProject) {
+    if (Date.now() > deadline) {
+      released.push(...list.map((r) => r.id));
+      continue;
+    }
     const block = await projectBlock(projectId, destination, secret);
     if (block.reason) {
       held += list.length;
@@ -288,6 +310,10 @@ export async function drainTableOutbox() {
     // wait too (the claim query keeps them back on the next pass while it backs off).
     const stopped = new Set<string>();
     for (const record of list) {
+      if (Date.now() > deadline) {
+        released.push(record.id);
+        continue;
+      }
       if (stopped.has(record.task_id)) {
         held += 1;
         await hold([record.id]);
@@ -350,12 +376,25 @@ export async function drainTableOutbox() {
     }
   }
 
+  if (released.length > 0) {
+    // Out of budget: hand the rest back now, untouched, rather than let the claim lapse
+    // under a post still in flight (finding 1).
+    await db
+      .update(operonTableRowOutboxTable)
+      .set({ nextAttemptAt: sql`now()` })
+      .where(inArray(operonTableRowOutboxTable.id, released));
+    console.warn("[operon] tables.outbox.pass_budget_spent", {
+      released: released.length,
+    });
+  }
+
   const stalled = await checkStall();
   return {
     claimed: records.length,
     delivered,
     failed,
     held,
+    released: released.length,
     degraded: stalled || failed > 0,
   };
 }
@@ -376,7 +415,12 @@ export function runTableOutboxDrain(): Promise<void> {
   running = (async () => {
     do {
       again = false;
-      await withJobLease("tables-outbox", drainTableOutbox, () => null, 60_000);
+      await withJobLease(
+        "tables-outbox",
+        drainTableOutbox,
+        () => null,
+        LEASE_MS,
+      );
     } while (again);
   })()
     .catch((error) => {

@@ -742,6 +742,24 @@ async function publishAll(events: RowWriteResult["events"]) {
 }
 
 /**
+ * Codex round 1, finding 4: after commit, tell every open client of the table that these
+ * rows changed. A save of custom values alone publishes no task event of its own, so other
+ * clients kept stale rows, search results and summaries. `task.updated` is the event the
+ * fork's WebSocket layer already turns into a project `TASK_UPDATED` broadcast, and nothing
+ * else subscribes to it (no activity, notification or webhook), so it adds no side effect;
+ * the web client's project socket invalidates the `operon-table-*` queries on receipt.
+ */
+export async function notifyTableRowsChanged(
+  projectId: string,
+  taskIds: string[],
+  userId: string,
+) {
+  for (const taskId of taskIds) {
+    await publishEvent("task.updated", { taskId, projectId, userId });
+  }
+}
+
+/**
  * The route wrapper (spec 7.3): pre-check outside any lock (fail fast, the Stash check),
  * then ONE transaction that locks, revalidates against the locked definitions (RF-8) and
  * writes; after commit, Initiative's events and a drain kick.
@@ -964,6 +982,9 @@ export async function writeTableRow({
         via,
       });
       await publishAll(result.events);
+      if (result.op === "update") {
+        await notifyTableRowsChanged(projectId, [result.taskId], actorUserId);
+      }
       kickTableOutbox();
     }
     return { taskId: result.taskId, changed: result.changed };

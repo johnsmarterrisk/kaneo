@@ -296,6 +296,60 @@ describe("API integration: Tables — row writes (task 5)", () => {
     ]);
   });
 
+  it("a values-only save reaches every other open client of the table (codex round 1, finding 4)", async () => {
+    const {
+      addConnection,
+      initializeWebSocketAdapter,
+      shutdownWebSocketAdapter,
+    } = await import("../../apps/api/src/ws/index");
+    delete process.env.REDIS_URL;
+    await initializeWebSocketAdapter();
+    try {
+      const { tableId } = await seedTable();
+      const created = await addRow(tableId, {
+        title: "Tip",
+        values: { Status: "Idea" },
+      });
+      const { row } = (await created.json()) as { row: { rowId: string } };
+      // Two other clients with the table open (two browser windows).
+      const clients = [vi.fn(), vi.fn()];
+      clients.forEach((send, i) => {
+        addConnection(
+          tableId,
+          { send, close: vi.fn(), readyState: 1 } as never,
+          `viewer-${i}`,
+          `window-${i}`,
+        );
+      });
+
+      const response = await json(
+        "PATCH",
+        `/api/operon/tables/${tableId}/rows/${row.rowId}`,
+        { values: { Status: "Published" } },
+      );
+      expect(response.status).toBe(200);
+      for (const send of clients) {
+        await vi.waitFor(
+          () => {
+            const messages = send.mock.calls.map((call) =>
+              JSON.parse(call[0] as string),
+            );
+            expect(messages).toContainEqual(
+              expect.objectContaining({
+                type: "TASK_UPDATED",
+                projectId: tableId,
+                taskId: row.rowId,
+              }),
+            );
+          },
+          { timeout: 2000 },
+        );
+      }
+    } finally {
+      await shutdownWebSocketAdapter();
+    }
+  });
+
   it("a save equal to the stored row writes nothing and answers 200 (R-G)", async () => {
     const { tableId } = await seedTable();
     const created = await addRow(tableId, {

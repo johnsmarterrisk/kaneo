@@ -17,13 +17,16 @@ export type ColumnHistory = {
   nextCursor: string | null;
 };
 
+/** `cursor` is the previous page's `nextCursor` (codex round 1, finding 5: older pages). */
 export async function getColumnHistory(
   projectId: string,
   fieldId: string,
+  cursor?: string | null,
 ): Promise<ColumnHistory> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   const response = await fetch(
     getApiUrl(
-      `/operon/tables/${encodeURIComponent(projectId)}/fields/${encodeURIComponent(fieldId)}/history`,
+      `/operon/tables/${encodeURIComponent(projectId)}/fields/${encodeURIComponent(fieldId)}/history${query}`,
     ),
     { credentials: "include" },
   );

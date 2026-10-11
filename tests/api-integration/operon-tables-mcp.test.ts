@@ -331,6 +331,13 @@ describe("the table tools over the hosted MCP endpoint, with an agent key", () =
     expect(
       first.body.jsonSchema.properties.values.properties.Topic.anyOf[0].enum,
     ).toEqual(["Cyber", "Fraud"]);
+    // Codex round 1, finding 6: the published Link schema is http(s) only, as the writer.
+    const link =
+      first.body.jsonSchema.properties.values.properties.Link.anyOf[0];
+    const linkPattern = new RegExp(link.pattern);
+    expect(linkPattern.test("https://example.com/a")).toBe(true);
+    expect(linkPattern.test("ftp://example.com/a")).toBe(false);
+    expect(linkPattern.test("javascript:alert(1)")).toBe(false);
 
     await db
       .update(schema.customFieldDefinitionTable)

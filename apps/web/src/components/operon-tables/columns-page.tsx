@@ -80,7 +80,14 @@ function HistoryPanel({
   projectId: string;
   fieldId: string;
 }) {
-  const { data, isLoading, error } = useGetColumnHistory(projectId, fieldId);
+  const {
+    data,
+    isLoading,
+    error,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useGetColumnHistory(projectId, fieldId);
   if (isLoading)
     return <p className="text-xs text-muted-foreground">Loading history…</p>;
   if (error || !data)
@@ -110,6 +117,17 @@ function HistoryPanel({
           </li>
         ))}
       </ul>
+      {hasNextPage && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isFetchingNextPage}
+          onClick={() => void fetchNextPage?.()}
+        >
+          {isFetchingNextPage ? "Loading…" : "Load older changes"}
+        </Button>
+      )}
     </div>
   );
 }
