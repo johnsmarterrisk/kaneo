@@ -268,7 +268,10 @@ const customField = apiRouter()
   .openapi(setCustomFieldValueRoute, async (c) => {
     const { taskId, fieldId, value } = c.req.valid("json");
 
-    return c.json(await setCustomFieldValue(taskId, fieldId, value), 200);
+    return c.json(
+      await setCustomFieldValue(taskId, fieldId, value, c.get("userId")),
+      200,
+    );
   })
   .openapi(deleteCustomFieldRoute, async (c) =>
     c.json(await deleteCustomField(c.req.valid("param").id), 200),

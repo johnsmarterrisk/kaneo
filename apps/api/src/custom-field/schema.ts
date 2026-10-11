@@ -15,7 +15,17 @@ export const customFieldIdParam = z.object({
 export const createCustomFieldBody = z.object({
   projectId: z.string(),
   name: z.string(),
-  type: z.enum(["text", "number", "date", "dropdown", "boolean"]),
+  type: z.enum([
+    "text",
+    "number",
+    "date",
+    "dropdown",
+    "boolean",
+    "multiselect",
+    // Operon fork addition (Tables, fork-discipline row 18): Stash image and link.
+    "image",
+    "link",
+  ]),
   required: z.boolean().optional().default(false),
   defaultValue: z.string().optional(),
   options: z.array(z.string()).optional(),

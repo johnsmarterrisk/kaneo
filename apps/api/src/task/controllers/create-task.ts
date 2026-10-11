@@ -11,6 +11,7 @@ import {
   userTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { checkStashImage } from "../../operon-tables/stash-image";
 import {
   assertAssignableUser,
   getProjectWorkspaceId,
@@ -18,6 +19,7 @@ import {
 import {
   assertRequiredCustomFields,
   assertValidTaskStatus,
+  isCustomFieldValueEmpty,
 } from "../validate-task-fields";
 import { claimTaskNumber } from "./claim-task-numbers";
 
@@ -88,12 +90,30 @@ async function createTask({
       !providedFieldIds.has(field.id) &&
       field.required &&
       field.defaultValue != null &&
-      field.defaultValue.trim() !== ""
+      !isCustomFieldValueEmpty(
+        field.defaultValue,
+        field.type as
+          | "number"
+          | "boolean"
+          | "date"
+          | "dropdown"
+          | "multiselect",
+      )
     ) {
       mergedCustomFields.push({
         fieldId: field.id,
         value: field.defaultValue,
       });
+    }
+  }
+
+  // Operon fork addition (Tables, fork-discipline row 18, spec 7.6): an image value is
+  // checked with Stash for the creator and stored as the bare file UUID (a pasted
+  // `/#/files/<uuid>` link is normalised). Fails closed: 422 image_refused / 503.
+  for (const input of mergedCustomFields) {
+    const field = allFields.find((f) => f.id === input.fieldId);
+    if (field?.type === "image" && input.value.trim() !== "") {
+      input.value = await checkStashImage(currentUserId, input.value);
     }
   }
 

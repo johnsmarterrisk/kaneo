@@ -3,9 +3,41 @@ import { HTTPException } from "hono/http-exception";
 import db from "../database";
 import { columnTable, customFieldDefinitionTable } from "../database/schema";
 
+// Operon fork addition (Tables, fork-discipline row 18, spec 7.1): `link` and `image` join
+// upstream's kinds. Both are stored as text; an image is a Stash file UUID (the Stash check
+// itself is async and lives in operon-tables/stash-image.ts), a link an http(s) URL.
+export type CustomFieldValueType =
+  | "number"
+  | "boolean"
+  | "date"
+  | "dropdown"
+  | "multiselect"
+  | "link"
+  | "image";
+
+export const LINK_MAX_LENGTH = 2000;
+
+export function isCustomFieldValueEmpty(
+  value: string,
+  type: CustomFieldValueType,
+): boolean {
+  if (value.trim() === "") return true;
+
+  if (type === "multiselect") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.length === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 export function validateCustomFieldValue(
   value: string,
-  type: "number" | "boolean" | "date" | "dropdown",
+  type: CustomFieldValueType,
   fieldName: string,
   options?: unknown,
 ): string | null {
@@ -70,6 +102,64 @@ export function validateCustomFieldValue(
     }
   }
 
+  if (type === "multiselect") {
+    let parsedOptions: string[] = Array.isArray(options) ? options : [];
+
+    if (typeof options === "string") {
+      try {
+        parsedOptions = JSON.parse(options);
+      } catch {
+        return `Custom field "${fieldName}" has invalid multiselect options.`;
+      }
+    }
+
+    let selectedValues: unknown;
+    try {
+      selectedValues = JSON.parse(value);
+    } catch {
+      return `Custom field "${fieldName}" expects a JSON array of selected options, got "${value}".`;
+    }
+
+    if (!Array.isArray(selectedValues) || selectedValues.length === 0) {
+      return `Custom field "${fieldName}" expects at least one selected option.`;
+    }
+
+    const invalidValues = selectedValues.filter(
+      (v) => typeof v !== "string" || !parsedOptions.includes(v),
+    );
+
+    if (invalidValues.length > 0) {
+      return `Custom field "${fieldName}" expects values from: ${parsedOptions.join(", ")}, got invalid value(s): ${invalidValues.join(", ")}.`;
+    }
+  }
+
+  if (type === "link") {
+    // Never echo the value: a rejected link may be anything a caller pasted.
+    let url: URL | null = null;
+    try {
+      url = new URL(value.trim());
+    } catch {
+      url = null;
+    }
+    if (
+      !url ||
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      value.trim().length > LINK_MAX_LENGTH
+    ) {
+      return `Custom field "${fieldName}" expects an http or https link of at most ${LINK_MAX_LENGTH} characters.`;
+    }
+  }
+
+  if (type === "image") {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        value.trim(),
+      )
+    ) {
+      return `Custom field "${fieldName}" expects a Stash file id.`;
+    }
+  }
+
   return null;
 }
 
@@ -100,13 +190,28 @@ export async function assertRequiredCustomFields(
   }
 
   for (const cf of customFields) {
-    if (cf.value.trim() === "") continue;
     const def = allFields.find((f) => f.id === cf.fieldId);
     if (!def) continue;
 
+    const type = def.type as
+      | "number"
+      | "boolean"
+      | "date"
+      | "dropdown"
+      | "multiselect";
+
+    if (isCustomFieldValueEmpty(cf.value, type)) {
+      if (def.required) {
+        throw new HTTPException(400, {
+          message: `Custom field "${def.name}" is required to create a task.`,
+        });
+      }
+      continue;
+    }
+
     const error = validateCustomFieldValue(
       cf.value,
-      def.type as "number" | "boolean" | "date" | "dropdown",
+      type,
       def.name,
       def.options,
     );
@@ -117,13 +222,37 @@ export async function assertRequiredCustomFields(
   }
 
   const providedIds = new Set(
-    customFields.filter((f) => f.value.trim() !== "").map((f) => f.fieldId),
+    customFields
+      .filter((cf) => {
+        const def = allFields.find((f) => f.id === cf.fieldId);
+        if (!def) return false;
+
+        return !isCustomFieldValueEmpty(
+          cf.value,
+          def.type as
+            | "number"
+            | "boolean"
+            | "date"
+            | "dropdown"
+            | "multiselect",
+        );
+      })
+      .map((f) => f.fieldId),
   );
 
   for (const field of allFields.filter((f) => f.required)) {
     const isSatisfied =
       providedIds.has(field.id) ||
-      (field.defaultValue != null && field.defaultValue.trim() !== "");
+      (field.defaultValue != null &&
+        !isCustomFieldValueEmpty(
+          field.defaultValue,
+          field.type as
+            | "number"
+            | "boolean"
+            | "date"
+            | "dropdown"
+            | "multiselect",
+        ));
 
     if (!isSatisfied) {
       throw new HTTPException(400, {

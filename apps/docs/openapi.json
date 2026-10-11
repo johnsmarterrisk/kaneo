@@ -13911,7 +13911,10 @@
                       "number",
                       "date",
                       "dropdown",
-                      "boolean"
+                      "boolean",
+                      "multiselect",
+                      "image",
+                      "link"
                     ]
                   },
                   "required": {
