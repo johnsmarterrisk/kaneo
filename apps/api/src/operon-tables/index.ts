@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { requireEntitlement } from "../billing/require-entitlement-middleware";
@@ -6,6 +6,7 @@ import db from "../database";
 import {
   customFieldDefinitionTable,
   operonTableProjectTable,
+  projectTable,
 } from "../database/schema";
 import type { BaseVariables } from "../openapi";
 import {
@@ -14,7 +15,11 @@ import {
 } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { isTableAdmin, requireTableAdmin } from "./admin";
-import { readColumnHistory } from "./columns";
+import {
+  readColumnHistory,
+  readTableSettings,
+  updateTableSettings,
+} from "./columns";
 import { createTable } from "./create-table";
 import { editOptions, readOptionEdit } from "./options";
 import { outboxHealth } from "./outbox";
@@ -110,10 +115,14 @@ operonTables.get(
   async (c) => c.json(await outboxHealth(c.get("workspaceId")), 200),
 );
 
-export async function readTable(projectId: string) {
+export async function readTable(projectId: string, includeHidden = false) {
   const [flag] = await db
-    .select()
+    .select({ flag: operonTableProjectTable, name: projectTable.name })
     .from(operonTableProjectTable)
+    .innerJoin(
+      projectTable,
+      eq(projectTable.id, operonTableProjectTable.projectId),
+    )
     .where(eq(operonTableProjectTable.projectId, projectId))
     .limit(1);
   if (!flag) return null;
@@ -137,13 +146,33 @@ export async function readTable(projectId: string) {
       asc(customFieldDefinitionTable.position),
       asc(customFieldDefinitionTable.id),
     );
+  // Hidden columns are listed for a table admin only (the Columns page's "Hidden columns").
+  const hiddenColumns = includeHidden
+    ? await db
+        .select({
+          id: customFieldDefinitionTable.id,
+          name: customFieldDefinitionTable.name,
+          kind: customFieldDefinitionTable.type,
+          hiddenAt: customFieldDefinitionTable.hiddenAt,
+        })
+        .from(customFieldDefinitionTable)
+        .where(
+          and(
+            eq(customFieldDefinitionTable.projectId, projectId),
+            isNotNull(customFieldDefinitionTable.hiddenAt),
+          ),
+        )
+        .orderBy(asc(customFieldDefinitionTable.hiddenAt))
+    : undefined;
   return {
     projectId,
+    name: flag.name,
     isTable: true,
-    groupFieldId: flag.groupFieldId,
-    dateFieldId: flag.dateFieldId,
-    statusFieldId: flag.statusFieldId,
+    groupFieldId: flag.flag.groupFieldId,
+    dateFieldId: flag.flag.dateFieldId,
+    statusFieldId: flag.flag.statusFieldId,
     columns,
+    ...(hiddenColumns ? { hiddenColumns } : {}),
   };
 }
 
@@ -152,7 +181,10 @@ operonTables.get(
   workspaceAccess.fromProject("projectId"),
   requireWorkspacePermission({ project: ["read"] }),
   async (c) => {
-    const table = await readTable(c.req.param("projectId") ?? "");
+    const table = await readTable(
+      c.req.param("projectId") ?? "",
+      await isTableAdmin(c),
+    );
     if (!table) {
       return c.json(
         { error: "not_a_table", message: "This project is not a table" },
@@ -213,6 +245,25 @@ async function readBody(c: { req: { json: () => Promise<unknown> } }) {
   }
   return body as RowBody;
 }
+
+/**
+ * The table's group, date and status columns (spec 7.1, task 10): table admin and
+ * project:update. Each id must be an ACTIVE column of THIS table of the right kind (group
+ * and status a dropdown, date a date); any refusal changes nothing. `null` clears one.
+ */
+operonTables.put(
+  "/tables/:projectId/settings",
+  workspaceAccess.fromProject("projectId"),
+  requireTableAdmin,
+  requireWorkspacePermission({ project: ["update"] }),
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const body = await c.req.json().catch(() => null);
+    const settings = readTableSettings(body);
+    await updateTableSettings(projectId, settings, c.get("userId"));
+    return c.json(await readTable(projectId, true), 200);
+  },
+);
 
 /** "New topic…" (spec 7.3 step 3): a table admin who also holds project:update. */
 async function canAddTopic(c: Context) {

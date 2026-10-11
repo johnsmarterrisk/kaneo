@@ -6,6 +6,7 @@ import { getApiUrl } from "@/fetchers/get-api-url";
  */
 export type OperonTable = {
   projectId: string;
+  name: string;
   isTable: true;
   groupFieldId: string | null;
   dateFieldId: string | null;
@@ -17,6 +18,13 @@ export type OperonTable = {
     required: boolean;
     options: string[] | null;
     position: number;
+  }[];
+  /** Present for a table admin only (the Columns page's "Hidden columns"). */
+  hiddenColumns?: {
+    id: string;
+    name: string;
+    kind: string;
+    hiddenAt: string;
   }[];
 };
 

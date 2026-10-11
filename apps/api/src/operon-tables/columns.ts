@@ -229,3 +229,76 @@ export async function readColumnHistory(
     nextCursor,
   };
 }
+
+const SETTING_KINDS = {
+  groupFieldId: "dropdown",
+  dateFieldId: "date",
+  statusFieldId: "dropdown",
+} as const;
+type SettingKey = keyof typeof SETTING_KINDS;
+export type TableSettings = Partial<Record<SettingKey, string | null>>;
+
+export function readTableSettings(body: unknown): TableSettings {
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    tableError(422, "validation_failed", "A JSON object body is required");
+  const settings: TableSettings = {};
+  for (const key of Object.keys(SETTING_KINDS) as SettingKey[]) {
+    const value = (body as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    if (value !== null && typeof value !== "string")
+      tableError(
+        422,
+        "validation_failed",
+        `${key} must be a column id or null`,
+      );
+    settings[key] = value;
+  }
+  if (Object.keys(settings).length === 0)
+    tableError(422, "validation_failed", "Nothing to change");
+  return settings;
+}
+
+/** Spec 7.1: a definition writer, so it locks the project FOR UPDATE first (RF-8). */
+export async function updateTableSettings(
+  projectId: string,
+  settings: TableSettings,
+  actorUserId: string,
+) {
+  await db.transaction(async (tx) => {
+    await lockProjectForDefinitions(tx, projectId);
+    for (const [key, fieldId] of Object.entries(settings) as [
+      SettingKey,
+      string | null,
+    ][]) {
+      if (fieldId === null) continue;
+      const [field] = await tx
+        .select()
+        .from(customFieldDefinitionTable)
+        .where(
+          and(
+            eq(customFieldDefinitionTable.id, fieldId),
+            eq(customFieldDefinitionTable.projectId, projectId),
+            isNull(customFieldDefinitionTable.hiddenAt),
+          ),
+        )
+        .for("update");
+      if (!field || field.type !== SETTING_KINDS[key]) {
+        tableError(
+          422,
+          "invalid_setting",
+          "That column cannot be used for this setting",
+          { setting: key },
+        );
+      }
+    }
+    await tx
+      .update(operonTableProjectTable)
+      .set(settings)
+      .where(eq(operonTableProjectTable.projectId, projectId));
+  });
+  console.log("[operon] tables.settings_changed", {
+    projectId,
+    settings: Object.keys(settings),
+    actorUserId,
+  });
+}

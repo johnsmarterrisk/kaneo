@@ -5,7 +5,7 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { Eye, GitBranch, Plug, Settings } from "lucide-react";
+import { Columns3, Eye, GitBranch, Plug, Settings } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import SettingsSidebar from "@/components/SettingsSidebar";
@@ -24,6 +24,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
@@ -72,6 +73,11 @@ function RouteComponent() {
     /^\/dashboard\/settings\/projects\/([^/]+)\//,
   );
   const selectedProjectId = selectedProjectMatch?.[1] || "";
+  // Operon fork addition (Tables task 10, row 18): a table project's Columns page.
+  const { data: selectedTable } = useGetTable(selectedProjectId || undefined);
+  if (selectedTable) {
+    menuItems.push({ title: "Columns", icon: Columns3, segment: "columns" });
+  }
   const selectedSegment =
     location.pathname.match(
       /^\/dashboard\/settings\/projects\/[^/]+\/([^/]+)/,
