@@ -7,6 +7,7 @@ import {
   customFieldDefinitionTable,
   customFieldValueTable,
   operonTableProjectTable,
+  operonTableRequestTable,
   operonTableRowMetaTable,
   operonTableRowOutboxTable,
   operonTableValueHistoryTable,
@@ -19,6 +20,14 @@ import { deleteS3Keys, getTaskAssetKeys } from "../storage/cleanup-assets";
 import { claimTaskNumber } from "../task/controllers/claim-task-numbers";
 import { assertAssignableUser } from "../utils/assert-assignable-user";
 import { kickTableOutbox } from "./outbox";
+import {
+  assertSameRequest,
+  findRequest,
+  isRequestKeyViolation,
+  requestFingerprint,
+  requestKey,
+  type TableRequest,
+} from "./request";
 import { checkStashImage } from "./stash-image";
 import {
   type ColumnDef,
@@ -143,12 +152,21 @@ export async function loadTable(
 /**
  * Lock the project row, then its definitions in `id` order — FOR SHARE for a row save,
  * FOR UPDATE for a definition writer (spec 7.3 step 3). Null when not a table.
+ *
+ * `create` (Tables task 12): an add's `claimTaskNumber` UPDATEs the project row, so a
+ * project row held FOR SHARE would be UPGRADED — and two concurrent adds, each holding the
+ * share lock and each waiting for the other's to upgrade, deadlock (Postgres 40P01; one
+ * add failed with a 500). An add therefore takes, up front, the FOR NO KEY UPDATE lock
+ * its own UPDATE would take, which serializes adds to one table; the definitions stay
+ * FOR SHARE. Never "fix" this back to `share`.
  */
 export async function lockTable(
   tx: Tx,
   projectId: string,
-  mode: "share" | "update",
+  mode: "share" | "update" | "create",
 ): Promise<LockedTable | null> {
+  const projectLock = mode === "create" ? "no key update" : mode;
+  const definitionLock = mode === "create" ? "share" : mode;
   const [project] = await tx
     .select({
       id: projectTable.id,
@@ -157,7 +175,7 @@ export async function lockTable(
     })
     .from(projectTable)
     .where(eq(projectTable.id, projectId))
-    .for(mode);
+    .for(projectLock);
   if (!project) return null;
   const [flag] = await tx
     .select({
@@ -173,7 +191,7 @@ export async function lockTable(
     .from(customFieldDefinitionTable)
     .where(eq(customFieldDefinitionTable.projectId, projectId))
     .orderBy(asc(customFieldDefinitionTable.id))
-    .for(mode);
+    .for(definitionLock);
   // Hidden definitions are locked with the rest (a hide takes the same locks) but are not
   // columns of the table: a key naming one is unknown_column (spec 7.1).
   return { project, groupFieldId: flag.groupFieldId, defs: active(defs) };
@@ -681,6 +699,42 @@ async function logRefused(
   });
 }
 
+/**
+ * Spec 7.3 step 2 (RF-6): a genuine retry answers the first attempt's row, or its id with
+ * `deleted: true` when the row was deleted since — never a second row.
+ */
+async function replayRequest(
+  found: TableRequest,
+  expected: { projectId: string; actorUserId: string; fingerprint: string },
+) {
+  assertSameRequest(found, expected);
+  const [task] = await db
+    .select({ id: taskTable.id })
+    .from(taskTable)
+    .where(
+      and(
+        eq(taskTable.id, found.taskId),
+        eq(taskTable.projectId, expected.projectId),
+      ),
+    )
+    .limit(1);
+  const deleted = !task;
+  console.log("[operon] tables.row_replayed", {
+    projectId: expected.projectId,
+    taskId: found.taskId,
+    actorUserId: expected.actorUserId,
+    deleted,
+  });
+  return { taskId: found.taskId, changed: false, replayed: true, deleted };
+}
+
+export type TableRowWrite = {
+  taskId: string;
+  changed: boolean;
+  replayed?: boolean;
+  deleted?: boolean;
+};
+
 async function publishAll(events: RowWriteResult["events"]) {
   for (const event of events) {
     await publishEvent(event.type, event.data);
@@ -709,16 +763,31 @@ export async function writeTableRow({
   body: RowBody;
   /** The route's verdict: a table admin with project:update (spec 7.3 step 3). */
   canAddTopic?: boolean;
-}): Promise<{ taskId: string; changed: boolean }> {
+}): Promise<TableRowWrite> {
   try {
     const creating = !taskId;
+    let request: { key: string; fingerprint: string } | null = null;
     if (creating) {
-      // Required of every caller (R-C); task 12 adds the request tombstone and replay.
+      // Required of every caller (R-C).
       if (
         typeof body.requestId !== "string" ||
         !REQUEST_ID.test(body.requestId)
       )
         validationFailed("requestId is required (1-64 of A-Z a-z 0-9 _ -)");
+      // Step 2 runs BEFORE any column validation, so a column hidden or renamed since
+      // the first attempt cannot break a genuine retry (spec 7.3 step 2).
+      request = {
+        key: requestKey(projectId, actorUserId, body.requestId),
+        fingerprint: requestFingerprint(projectId, body),
+      };
+      const found = await findRequest(request.key);
+      if (found) {
+        return await replayRequest(found, {
+          projectId,
+          actorUserId,
+          fingerprint: request.fingerprint,
+        });
+      }
     }
     const title = readTitle(body.title, creating);
     const notes = readNullableString(body.notes, "notes");
@@ -781,80 +850,108 @@ export async function writeTableRow({
       actor: await resolveActor(actorUserId),
     };
 
-    const result = await db.transaction(async (tx) => {
-      // A "New topic" save edits a definition, so it takes the project and definition locks
-      // FOR UPDATE from the start: never an upgrade of a held share lock (deadlock-free).
-      const locked = await lockTable(
-        tx,
-        projectId,
-        newTopic ? "update" : "share",
-      );
-      if (!locked)
-        tableError(404, "not_a_table", "This project is not a table");
-      await tableWriteHooks.afterProjectLock?.();
-      if (newTopic) {
-        const { def } = newTopicField(locked, newTopic, values);
-        const options = optionList(def);
-        const existing = options.find((o) => sameLabel(o, newTopic.label));
-        if (existing) {
-          // A concurrent winner (or an existing spelling) is reused, never duplicated.
-          for (const key of Object.keys(values)) {
-            if (resolveColumn(locked.defs, key)?.id === def.id)
-              values[key] = existing;
+    const write = () =>
+      db.transaction(async (tx) => {
+        // A "New topic" save edits a definition, so it takes the project and definition locks
+        // FOR UPDATE from the start: never an upgrade of a held share lock (deadlock-free).
+        const locked = await lockTable(
+          tx,
+          projectId,
+          newTopic ? "update" : creating ? "create" : "share",
+        );
+        if (!locked)
+          tableError(404, "not_a_table", "This project is not a table");
+        await tableWriteHooks.afterProjectLock?.();
+        if (newTopic) {
+          const { def } = newTopicField(locked, newTopic, values);
+          const options = optionList(def);
+          const existing = options.find((o) => sameLabel(o, newTopic.label));
+          if (existing) {
+            // A concurrent winner (or an existing spelling) is reused, never duplicated.
+            for (const key of Object.keys(values)) {
+              if (resolveColumn(locked.defs, key)?.id === def.id)
+                values[key] = existing;
+            }
+          } else {
+            for (const key of Object.keys(values)) {
+              if (resolveColumn(locked.defs, key)?.id === def.id)
+                values[key] = newTopic.label;
+            }
+            const next = [...options, newTopic.label];
+            await tx
+              .update(customFieldDefinitionTable)
+              .set({ options: next })
+              .where(eq(customFieldDefinitionTable.id, def.id));
+            def.options = next;
+            console.log("[operon] tables.option_added", {
+              projectId,
+              fieldId: def.id,
+              rowsRewritten: 0,
+              actorUserId,
+            });
           }
-        } else {
-          for (const key of Object.keys(values)) {
-            if (resolveColumn(locked.defs, key)?.id === def.id)
-              values[key] = newTopic.label;
-          }
-          const next = [...options, newTopic.label];
-          await tx
-            .update(customFieldDefinitionTable)
-            .set({ options: next })
-            .where(eq(customFieldDefinitionTable.id, def.id));
-          def.options = next;
-          console.log("[operon] tables.option_added", {
-            projectId,
-            fieldId: def.id,
-            rowsRewritten: 0,
-            actorUserId,
-          });
         }
-      }
 
-      // Step 3: the check of record, against the LOCKED definitions (RF-8).
-      const resolved = new Map<string, string | null>();
-      for (const [key, value] of Object.entries(values)) {
-        const def =
-          resolveColumn(locked.defs, key) ?? unknownColumn(locked.defs);
-        if (def.type === "image") {
-          const checked = images.get(key);
-          // The key now names a different column than the one Stash-checked.
-          if (!checked || checked.fieldId !== def.id)
-            unknownColumn(locked.defs);
-          resolved.set(def.id, checked.text);
-        } else {
-          resolved.set(def.id, toStoredText(def, value));
+        // Step 3: the check of record, against the LOCKED definitions (RF-8).
+        const resolved = new Map<string, string | null>();
+        for (const [key, value] of Object.entries(values)) {
+          const def =
+            resolveColumn(locked.defs, key) ?? unknownColumn(locked.defs);
+          if (def.type === "image") {
+            const checked = images.get(key);
+            // The key now names a different column than the one Stash-checked.
+            if (!checked || checked.fieldId !== def.id)
+              unknownColumn(locked.defs);
+            resolved.set(def.id, checked.text);
+          } else {
+            resolved.set(def.id, toStoredText(def, value));
+          }
         }
-      }
-      for (const def of locked.defs) {
-        if (!def.required) continue;
-        const cleared = resolved.has(def.id) && resolved.get(def.id) === null;
-        const missing = creating && !resolved.get(def.id);
-        if (cleared || missing) {
-          tableError(422, "required_value", "This column needs a value", {
-            column: def.name,
+        for (const def of locked.defs) {
+          if (!def.required) continue;
+          const cleared = resolved.has(def.id) && resolved.get(def.id) === null;
+          const missing = creating && !resolved.get(def.id);
+          if (cleared || missing) {
+            tableError(422, "required_value", "This column needs a value", {
+              column: def.name,
+            });
+          }
+        }
+        const written = await writeTableRowInTx(tx, locked, ctx, {
+          taskId,
+          title,
+          notes,
+          assigneeId,
+          values: resolved,
+        });
+        if (request) {
+          // The tombstone commits with the row. A concurrent add with the same key blocks
+          // on this primary key and fails 23505 once the winner commits (handled below).
+          await tx.insert(operonTableRequestTable).values({
+            key: request.key,
+            projectId,
+            actorUserId,
+            requestFingerprint: request.fingerprint,
+            taskId: written.taskId,
           });
         }
-      }
-      return writeTableRowInTx(tx, locked, ctx, {
-        taskId,
-        title,
-        notes,
-        assigneeId,
-        values: resolved,
+        return written;
       });
-    });
+
+    let result: RowWriteResult;
+    try {
+      result = await write();
+    } catch (error) {
+      if (!request || !isRequestKeyViolation(error)) throw error;
+      // Lost the race: the winner's row is this request's answer (spec 7.3 step 7).
+      const winner = await findRequest(request.key);
+      if (!winner) throw error;
+      return await replayRequest(winner, {
+        projectId,
+        actorUserId,
+        fingerprint: request.fingerprint,
+      });
+    }
 
     if (result.changed) {
       console.log("[operon] tables.row_written", {

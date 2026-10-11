@@ -26,6 +26,7 @@ import { editOptions, readOptionEdit } from "./options";
 import { outboxHealth } from "./outbox";
 import { readTableRow } from "./read-row";
 import { TABLE_DEFAULT_ICON } from "./schema";
+import { tableSchema } from "./schema-route";
 import { searchTableRows } from "./search";
 import { tableError } from "./values";
 import {
@@ -288,6 +289,22 @@ operonTables.get(
  * R-B3: the admin-only recovery read of one column, hidden or not — its current values and
  * its value history. Every other surface omits a hidden column.
  */
+/**
+ * Task 12 (spec 7.8): a table's ACTIVE columns and the JSON Schema of an entry's `values`,
+ * built from the current definitions on every call so an agent never works from a stale
+ * option list. `get_table_columns` answers this body as is.
+ */
+operonTables.get(
+  "/tables/:projectId/schema",
+  workspaceAccess.fromProject("projectId"),
+  requireWorkspacePermission({ project: ["read"] }),
+  async (c) => {
+    const table = await loadTable(c.req.param("projectId") ?? "");
+    if (!table) tableError(404, "not_a_table", "This project is not a table");
+    return c.json(tableSchema(table), 200);
+  },
+);
+
 operonTables.get(
   "/tables/:projectId/fields/:fieldId/history",
   workspaceAccess.fromProject("projectId"),
@@ -461,8 +478,22 @@ operonTables.post(
       body: await readBody(c),
       canAddTopic: await canAddTopic(c),
     });
+    if (result.replayed && result.deleted) {
+      // RF-6: the first attempt's row was deleted since; answer its id, never a new row.
+      return c.json(
+        {
+          row: { rowId: result.taskId, tableId: projectId },
+          replayed: true,
+          deleted: true,
+        },
+        200,
+      );
+    }
     return c.json(
-      { row: await answerRow(projectId, result.taskId), replayed: false },
+      {
+        row: await answerRow(projectId, result.taskId),
+        replayed: result.replayed === true,
+      },
       200,
     );
   },

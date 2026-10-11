@@ -1461,3 +1461,24 @@ export const operonTableRowOutboxTable = pgTable(
     index("operon_table_row_outbox_task_idx").on(table.taskId, table.id),
   ],
 );
+
+// Operon fork addition (Tables task 12, docs/fork-discipline.md row 18, spec 7.3 step 2 /
+// RF-6): the request tombstone of every keyed table-row add. `key` is
+// `tables:<projectId>:<sha256(actor + "\n" + requestId), first 40 hex>`; the fingerprint is
+// a keyed HMAC of the submitted payload. `task_id` deliberately has NO foreign key: a
+// retried add after the row's delete must find the tombstone and answer the original row
+// id with `deleted: true`, never create a second row. The project FK cascades only when an
+// empty table is deleted (spec 7.5).
+export const operonTableRequestTable = pgTable("operon_table_request", {
+  key: text("key").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projectTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  actorUserId: text("actor_user_id").notNull(),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  taskId: text("task_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
