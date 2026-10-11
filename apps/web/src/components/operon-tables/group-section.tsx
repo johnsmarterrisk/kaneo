@@ -3,6 +3,12 @@ import { ChevronRight } from "lucide-react";
 import type { OperonTable } from "@/fetchers/operon-tables/get-table";
 import type { TableRow } from "@/fetchers/operon-tables/get-table-rows";
 import { cn } from "@/lib/cn";
+import {
+  MADE_BY_KEY,
+  ResizeHandle,
+  TITLE_KEY,
+  useColumnWidthsContext,
+} from "./column-widths";
 
 /**
  * Operon fork addition (Tables task 8, docs/fork-discipline.md row 18, spec 7.10): one
@@ -58,6 +64,7 @@ export function RowLine({
       starting with the first; group headers are never striped. */
   alt?: boolean;
 }) {
+  const { width } = useColumnWidthsContext();
   if (phone) {
     return (
       <button
@@ -78,6 +85,8 @@ export function RowLine({
       </button>
     );
   }
+  // Desktop widths come from the table view's resizable columns (spec §16); every cell
+  // carries `data-col` so a handle's double-click can measure the widest one.
   return (
     <button
       type="button"
@@ -88,37 +97,68 @@ export function RowLine({
         alt && "bg-row-alt",
       )}
     >
-      <span className="min-w-0 flex-1 truncate text-sm text-card-foreground">
+      <span
+        data-col={TITLE_KEY}
+        style={{ width: width(TITLE_KEY) }}
+        className="shrink-0 truncate text-sm text-card-foreground"
+      >
         {row.title}
       </span>
       {columns.map((column) => (
         <span
           key={column.id}
-          className="hidden w-28 shrink-0 truncate text-xs text-muted-foreground md:inline"
+          data-col={column.id}
+          style={{ width: width(column.id) }}
+          className="hidden shrink-0 truncate text-xs text-muted-foreground md:inline"
         >
           {cellText(column, row.values[column.name])}
         </span>
       ))}
-      <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
+      <span
+        data-col={MADE_BY_KEY}
+        style={{ width: width(MADE_BY_KEY) }}
+        className="shrink-0 truncate text-xs text-muted-foreground"
+      >
         {row.madeBy.name ?? ""}
       </span>
     </button>
   );
 }
 
+/**
+ * The desktop header row. The border right of every column but the last (Made by) is a
+ * resize handle for that column (spec §16); the phone list has no header and no handles.
+ */
 export function ColumnHeader({ columns }: { columns: ShownColumn[] }) {
+  const { width } = useColumnWidthsContext();
+  const cells = [
+    { key: TITLE_KEY, label: "Title", md: false },
+    ...columns.map((c) => ({ key: c.id, label: c.name, md: true })),
+  ];
   return (
-    <div className="flex items-center gap-3 border-b border-border/50 bg-card px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-      <span className="min-w-0 flex-1">Title</span>
-      {columns.map((column) => (
+    <div className="flex w-full items-center gap-3 border-b border-border/50 bg-card px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      {cells.map((cell) => (
         <span
-          key={column.id}
-          className="hidden w-28 shrink-0 truncate md:inline"
+          key={cell.key}
+          style={{ width: width(cell.key) }}
+          className={cn(
+            "relative shrink-0",
+            cell.md && "hidden md:inline-block",
+          )}
         >
-          {column.name}
+          <span data-col={cell.key} className="block truncate">
+            {cell.label}
+          </span>
+          <ResizeHandle columnKey={cell.key} label={cell.label} />
         </span>
       ))}
-      <span className="w-28 shrink-0">Made by</span>
+      <span
+        data-col={MADE_BY_KEY}
+        style={{ width: width(MADE_BY_KEY) }}
+        className="shrink-0 truncate"
+      >
+        Made by
+      </span>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import useTableRows, {
 } from "@/hooks/queries/operon-tables/use-table-rows";
 import { cn } from "@/lib/cn";
 import ChipRows, { type ChipRow } from "./chip-rows";
+import { ColumnWidthsContext, useColumnWidths } from "./column-widths";
 import Gallery from "./gallery";
 import GroupSection, { ColumnHeader, type ShownColumn } from "./group-section";
 import { monthBuckets, VISIBLE_MONTHS } from "./month-section";
@@ -103,6 +104,8 @@ function TableViewBody({
   // carries the name and "+", the mode toggle reads "By topic | By date", one chip row,
   // two-line rows, no horizontal scroll.
   const phone = useSyncedIsMobile();
+  // Spec §16: per-table column widths, remembered in this browser only.
+  const columnWidths = useColumnWidths(table.projectId);
 
   const dropdowns = table.columns.filter((c) => c.kind === "dropdown");
   // Chip rows: Status first, then the other choice columns; the group column only when
@@ -395,8 +398,14 @@ function TableViewBody({
           phone ? "overflow-y-auto overflow-x-hidden" : "overflow-auto",
         )}
       >
-        {!query && !gallery && !phone && <ColumnHeader columns={shown} />}
-        {body}
+        <ColumnWidthsContext.Provider value={columnWidths}>
+          {/* Desktop: as wide as the columns need (min the pane), so wide columns scroll
+              sideways together with their header instead of squeezing. */}
+          <div className={phone || gallery ? undefined : "w-max min-w-full"}>
+            {!query && !gallery && !phone && <ColumnHeader columns={shown} />}
+            {body}
+          </div>
+        </ColumnWidthsContext.Provider>
       </div>
     </div>
   );

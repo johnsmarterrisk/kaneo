@@ -13,6 +13,7 @@ import useGetColumnHistory from "@/hooks/queries/operon-tables/use-get-column-hi
 import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { toast } from "@/lib/toast";
+import { clearColumnWidths } from "./column-widths";
 
 /**
  * Operon fork addition (Tables task 10, docs/fork-discipline.md row 18, spec 7.10 US6): a
@@ -528,6 +529,30 @@ function ColumnsPage({ projectId }: { projectId: string }) {
               )}
             </ul>
           )}
+        </Section>
+      ) : null}
+
+      {isAdmin ? (
+        <Section title="Column widths">
+          {/* Spec §16: widths are a per-browser view preference, so the reset is local. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Widths dragged in the list are kept on this browser only.
+            </p>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                if (clearColumnWidths(projectId)) {
+                  toast.success("Column widths reset on this browser");
+                } else {
+                  toast.error("This browser blocks saved widths");
+                }
+              }}
+            >
+              Reset widths
+            </Button>
+          </div>
         </Section>
       ) : null}
 
