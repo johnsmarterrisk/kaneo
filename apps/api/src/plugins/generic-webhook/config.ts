@@ -20,6 +20,9 @@ export const genericWebhookEventKeys = [
   "taskAssigneeChanged",
   "taskUnassigned",
   "dueDateReminder",
+  // Operon fork addition (Tables, docs/fork-discipline.md row 18, spec 7.4): a table row's
+  // changed columns, delivered only by the Tables outbox (operon-tables/outbox.ts).
+  "taskFieldsChanged",
 ] as const;
 
 export type GenericWebhookEventKey = (typeof genericWebhookEventKeys)[number];
@@ -64,6 +67,7 @@ export const genericWebhookConfigSchema = v.object({
       taskAssigneeChanged: v.optional(v.boolean()),
       taskUnassigned: v.optional(v.boolean()),
       dueDateReminder: v.optional(v.boolean()),
+      taskFieldsChanged: v.optional(v.boolean()),
     }),
   ),
   dueDateReminderLeadTimeMinutes: v.optional(
@@ -91,6 +95,7 @@ export const defaultGenericWebhookEvents: Record<
   taskAssigneeChanged: false,
   taskUnassigned: false,
   dueDateReminder: false,
+  taskFieldsChanged: false,
 };
 
 export function normalizeGenericWebhookConfig(

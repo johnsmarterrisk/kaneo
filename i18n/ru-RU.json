@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "Изменен срок выполнения",
 				"taskAssigneeChanged": "Изменен исполнитель",
 				"taskUnassigned": "Назначение снято",
-				"dueDateReminder": "Напоминания о сроках"
+				"dueDateReminder": "Напоминания о сроках",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Подключить вебхук",
 			"saveChanges": "Сохранить изменения",

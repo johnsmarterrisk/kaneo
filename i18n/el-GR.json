@@ -987,7 +987,8 @@
 				"taskStatusChanged": "Αλλαγές κατάστασης",
 				"taskTitleChanged": "Αλλαγές τίτλου",
 				"taskUnassigned": "Αφαίρεση ανάθεσης",
-				"dueDateReminder": "Υπενθυμίσεις ημερομηνίας λήξης"
+				"dueDateReminder": "Υπενθυμίσεις ημερομηνίας λήξης",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"eventsHint": "Επιλέξτε ποιες αλλαγές έργου θα ενεργοποιούν εξερχόμενα webhooks.",
 			"eventsTitle": "Ειδοποιήσεις γεγονότων",

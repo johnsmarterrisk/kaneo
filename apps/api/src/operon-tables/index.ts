@@ -12,7 +12,16 @@ import { requireWorkspacePermission } from "../utils/require-workspace-permissio
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import { requireTableAdmin } from "./admin";
 import { createTable } from "./create-table";
+import { outboxHealth } from "./outbox";
+import { readTableRow } from "./read-row";
 import { TABLE_DEFAULT_ICON } from "./schema";
+import { tableError } from "./values";
+import {
+  deleteTableRow,
+  loadTable,
+  type RowBody,
+  writeTableRow,
+} from "./write-row";
 
 /**
  * Operon fork addition (Tables, docs/fork-discipline.md row 18, spec 7.9): the Tables REST
@@ -81,6 +90,20 @@ operonTables.post(
   },
 );
 
+// Static paths first: Hono matches in registration order, and `/tables/:projectId` would
+// otherwise take `outbox-health` as a project id.
+
+/**
+ * RF-10: the Tables outbox backlog of ONE workspace, for that workspace's table admin. The
+ * instance-wide stall alert stays server-side (outbox.ts).
+ */
+operonTables.get(
+  "/tables/outbox-health",
+  workspaceAccess.fromQuery(),
+  requireTableAdmin,
+  async (c) => c.json(await outboxHealth(c.get("workspaceId")), 200),
+);
+
 export async function readTable(projectId: string) {
   const [flag] = await db
     .select()
@@ -126,6 +149,92 @@ operonTables.get(
       );
     }
     return c.json(table, 200);
+  },
+);
+
+function via(c: { get: (key: "apiKey") => unknown }) {
+  return c.get("apiKey") ? ("api_key" as const) : ("session" as const);
+}
+
+async function readBody(c: { req: { json: () => Promise<unknown> } }) {
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    tableError(422, "validation_failed", "A JSON object body is required");
+  }
+  return body as RowBody;
+}
+
+async function answerRow(projectId: string, taskId: string) {
+  const table = await loadTable(projectId);
+  if (!table) tableError(404, "not_a_table", "This project is not a table");
+  const row = await readTableRow(table, taskId);
+  if (!row)
+    tableError(404, "row_not_in_table", "That entry is not in this table");
+  return row;
+}
+
+/** Add an entry (spec 7.3): one transaction for the row, its history and its signals. */
+operonTables.post(
+  "/tables/:projectId/rows",
+  workspaceAccess.fromProject("projectId"),
+  requireWorkspacePermission({ task: ["create"] }),
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const result = await writeTableRow({
+      projectId,
+      workspaceId: c.get("workspaceId"),
+      actorUserId: c.get("userId"),
+      via: via(c),
+      body: await readBody(c),
+    });
+    return c.json(
+      { row: await answerRow(projectId, result.taskId), replayed: false },
+      200,
+    );
+  },
+);
+
+/** Change an entry; a save equal to what is stored writes nothing and answers 200 (R-G). */
+operonTables.patch(
+  "/tables/:projectId/rows/:taskId",
+  workspaceAccess.fromProject("projectId"),
+  requireWorkspacePermission({ task: ["update"] }),
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const taskId = c.req.param("taskId") ?? "";
+    const result = await writeTableRow({
+      projectId,
+      workspaceId: c.get("workspaceId"),
+      actorUserId: c.get("userId"),
+      via: via(c),
+      taskId,
+      body: await readBody(c),
+    });
+    return c.json(
+      {
+        row: await answerRow(projectId, result.taskId),
+        unchanged: !result.changed,
+      },
+      200,
+    );
+  },
+);
+
+/** Delete an entry: its `task.deleted` signal commits with the delete; history stays. */
+operonTables.delete(
+  "/tables/:projectId/rows/:taskId",
+  workspaceAccess.fromProject("projectId"),
+  requireWorkspacePermission({ task: ["delete"] }),
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const taskId = c.req.param("taskId") ?? "";
+    await deleteTableRow({
+      projectId,
+      actorUserId: c.get("userId"),
+      via: via(c),
+      taskId,
+    });
+    return c.json({ rowId: taskId, tableId: projectId, deleted: true }, 200);
   },
 );
 

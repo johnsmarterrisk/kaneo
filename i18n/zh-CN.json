@@ -1168,7 +1168,8 @@
 				"taskDueDateChanged": "截止日期已变更",
 				"taskAssigneeChanged": "负责人已变更",
 				"taskUnassigned": "任务已取消指派",
-				"dueDateReminder": "截止日期提醒"
+				"dueDateReminder": "截止日期提醒",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "提前这么多小时发送 Webhook",
 			"connect": "连接 Webhook",

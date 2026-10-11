@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "Fälligkeitsdatum geändert",
 				"taskAssigneeChanged": "Zuweisung geändert",
 				"taskUnassigned": "Zuweisung entfernt",
-				"dueDateReminder": "Erinnerungen an Fälligkeitstermine"
+				"dueDateReminder": "Erinnerungen an Fälligkeitstermine",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "Webhook so viele Stunden vorher senden",
 			"connect": "Webhook verbinden",

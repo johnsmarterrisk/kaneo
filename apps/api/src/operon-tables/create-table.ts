@@ -53,12 +53,15 @@ export async function tableAnnouncement(
   };
 }
 
-export async function markTableAnnounced(projectId: string) {
+export async function markTableAnnounced(
+  projectId: string,
+  via: "create" | "drain" = "create",
+) {
   await db
     .update(operonTableProjectTable)
     .set({ announcedAt: new Date() })
     .where(eq(operonTableProjectTable.projectId, projectId));
-  console.log("[operon] tables.table_announced", { projectId });
+  console.log("[operon] tables.table_announced", { projectId, via });
 }
 
 function observeAnnouncement(

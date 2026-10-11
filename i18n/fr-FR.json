@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "Date d'échéance modifiée",
 				"taskAssigneeChanged": "Assigné modifié",
 				"taskUnassigned": "Tâche désassignée",
-				"dueDateReminder": "Rappels d'échéance"
+				"dueDateReminder": "Rappels d'échéance",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Connecter le webhook",
 			"saveChanges": "Enregistrer les modifications",

@@ -1169,7 +1169,8 @@
 				"taskDueDateChanged": "नियत तारीख बदली",
 				"taskAssigneeChanged": "सौंपा गया बदला",
 				"taskUnassigned": "कार्य असाइन हटाया",
-				"dueDateReminder": "नियत तारीख अनुस्मारक"
+				"dueDateReminder": "नियत तारीख अनुस्मारक",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "इतने घंटे पहले वेबहुक भेजें",
 			"connect": "वेबहुक कनेक्ट करें",

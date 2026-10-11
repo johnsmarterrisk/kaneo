@@ -1168,7 +1168,8 @@
 				"taskDueDateChanged": "期限の変更",
 				"taskAssigneeChanged": "担当者の変更",
 				"taskUnassigned": "担当者の解除",
-				"dueDateReminder": "期限リマインダー"
+				"dueDateReminder": "期限リマインダー",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "期限の何時間前に Webhook を送信するか（時間）",
 			"connect": "Webhook を接続",

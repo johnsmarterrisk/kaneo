@@ -1170,7 +1170,8 @@
 				"taskDueDateChanged": "Data scadenza cambiata",
 				"taskAssigneeChanged": "Assegnatario cambiato",
 				"taskUnassigned": "Attività non assegnata",
-				"dueDateReminder": "Promemoria scadenza"
+				"dueDateReminder": "Promemoria scadenza",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "Invia il webhook questo numero di ore prima",
 			"connect": "Connetti webhook",

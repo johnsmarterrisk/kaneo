@@ -969,6 +969,7 @@
 			"disconnect": "Rozłącz",
 			"events": {
 				"dueDateReminder": "Przypomnienia o terminach",
+				"taskFieldsChanged": "Table entry changes",
 				"taskAssigneeChanged": "Zmieniono osobę przypisaną",
 				"taskCommentCreated": "Nowe komentarze",
 				"taskCreated": "Nowe zadania",

@@ -828,7 +828,8 @@
 				"taskDueDateChanged": "Cambio de fecha de vencimiento",
 				"taskAssigneeChanged": "Cambio de asignado",
 				"taskUnassigned": "Tarea desasignada",
-				"dueDateReminder": "Recordatorios de fecha de vencimiento"
+				"dueDateReminder": "Recordatorios de fecha de vencimiento",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Conectar al webhook",
 			"saveChanges": "Guardar cambios",

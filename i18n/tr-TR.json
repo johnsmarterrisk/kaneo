@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "Bitiş tarihi değişti",
 				"taskAssigneeChanged": "Atanan kişi değişti",
 				"taskUnassigned": "Atama kaldırıldı",
-				"dueDateReminder": "Bitiş tarihi hatırlatmaları"
+				"dueDateReminder": "Bitiş tarihi hatırlatmaları",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Webhook bağla",
 			"saveChanges": "Değişiklikleri kaydet",

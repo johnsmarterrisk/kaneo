@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "Tenggat diubah",
 				"taskAssigneeChanged": "Penanggung jawab diubah",
 				"taskUnassigned": "Penugasan dihapus",
-				"dueDateReminder": "Pengingat tenggat"
+				"dueDateReminder": "Pengingat tenggat",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Hubungkan webhook",
 			"saveChanges": "Simpan perubahan",

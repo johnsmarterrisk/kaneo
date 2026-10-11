@@ -1168,7 +1168,8 @@
 				"taskDueDateChanged": "Thay đổi ngày đến hạn",
 				"taskAssigneeChanged": "Thay đổi người được giao",
 				"taskUnassigned": "Hủy giao công việc",
-				"dueDateReminder": "Nhắc nhở ngày đến hạn"
+				"dueDateReminder": "Nhắc nhở ngày đến hạn",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "Gửi webhook trước bao nhiêu giờ",
 			"connect": "Kết nối webhook",

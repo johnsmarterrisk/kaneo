@@ -828,7 +828,8 @@
 				"taskDueDateChanged": "Einddatum gewijzigd",
 				"taskAssigneeChanged": "Toewijzing gewijzigd",
 				"taskUnassigned": "Toewijzing verwijderd",
-				"dueDateReminder": "Einddatum-herinneringen"
+				"dueDateReminder": "Einddatum-herinneringen",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "Webhook verbinden",
 			"saveChanges": "Wijzigingen opslaan",

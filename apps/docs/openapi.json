@@ -2480,6 +2480,9 @@
               },
               "dueDateReminder": {
                 "type": "boolean"
+              },
+              "taskFieldsChanged": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -2488,7 +2491,8 @@
               "taskDueDateChanged",
               "taskAssigneeChanged",
               "taskUnassigned",
-              "dueDateReminder"
+              "dueDateReminder",
+              "taskFieldsChanged"
             ]
           }
         ]
@@ -11457,6 +11461,9 @@
                       },
                       "dueDateReminder": {
                         "type": "boolean"
+                      },
+                      "taskFieldsChanged": {
+                        "type": "boolean"
                       }
                     }
                   },
@@ -11584,6 +11591,9 @@
                         "type": "boolean"
                       },
                       "dueDateReminder": {
+                        "type": "boolean"
+                      },
+                      "taskFieldsChanged": {
                         "type": "boolean"
                       }
                     }

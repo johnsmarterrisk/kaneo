@@ -1007,7 +1007,8 @@
 				"taskDueDateChanged": "마감일 변경",
 				"taskAssigneeChanged": "담당자 변경",
 				"taskUnassigned": "할당 해제",
-				"dueDateReminder": "마감일 미리 알림"
+				"dueDateReminder": "마감일 미리 알림",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"connect": "웹훅 연결",
 			"saveChanges": "변경사항 저장",

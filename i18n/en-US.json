@@ -1244,7 +1244,8 @@
 				"taskDueDateChanged": "Due date changed",
 				"taskAssigneeChanged": "Assignee changed",
 				"taskUnassigned": "Task unassigned",
-				"dueDateReminder": "Due-date reminders"
+				"dueDateReminder": "Due-date reminders",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "Send the webhook this many hours before",
 			"connect": "Connect webhook",

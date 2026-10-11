@@ -2,6 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { relations, sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   customType,
@@ -14,6 +15,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -1369,3 +1371,89 @@ export const operonTableProjectTable = pgTable("operon_table_project", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   announcedAt: timestamp("announced_at", { mode: "date" }),
 });
+
+// Operon fork addition (Tables task 5, docs/fork-discipline.md row 18, spec 7.1 / R-B2):
+// who made a table row and who changed it last. Written only by operon-tables/write-row.ts,
+// in the same transaction as the row; `last_change` is `{fieldIds, core}`.
+export const operonTableRowMetaTable = pgTable("operon_table_row_meta", {
+  taskId: text("task_id")
+    .primaryKey()
+    .references(() => taskTable.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+  projectId: text("project_id").notNull(),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  lastWriterUserId: text("last_writer_user_id").notNull(),
+  lastWriteId: uuid("last_write_id").notNull(),
+  lastChangedAt: timestamp("last_changed_at", { mode: "date" })
+    .defaultNow()
+    .notNull(),
+  lastChange: jsonb("last_change").notNull(),
+});
+
+// Operon fork addition (Tables task 5, R-B3): every changed custom value of a table row,
+// old and new. `task_id` deliberately has NO foreign key, so a deleted row's values stay
+// recoverable to an admin; the project FK cascades only when an empty table is deleted.
+export const operonTableValueHistoryTable = pgTable(
+  "operon_table_value_history",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    taskId: text("task_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    writeId: uuid("write_id").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("operon_table_value_history_project_field_idx").on(
+      table.projectId,
+      table.fieldId,
+      table.createdAt,
+    ),
+  ],
+);
+
+// Operon fork addition (Tables task 5, R-B / RF-3): the durable delivery of every table row
+// write, committed with the row. A record is DELETED on Operon's 2xx (raw values are kept
+// only as long as delivery needs them, R-A). `project_id` has no FK: a table project with
+// pending records cannot be deleted (spec 7.5), and a record must never vanish by cascade.
+export const operonTableRowOutboxTable = pgTable(
+  "operon_table_row_outbox",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    event: text("event").notNull(),
+    writeId: uuid("write_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+    lastStatus: integer("last_status"),
+    lastErrorClass: text("last_error_class"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("operon_table_row_outbox_event_write_task_unique").on(
+      table.event,
+      table.writeId,
+      table.taskId,
+    ),
+    index("operon_table_row_outbox_project_idx").on(table.projectId),
+    index("operon_table_row_outbox_task_idx").on(table.taskId, table.id),
+  ],
+);

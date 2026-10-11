@@ -1170,7 +1170,8 @@
 				"taskDueDateChanged": "Data de vencimento alterada",
 				"taskAssigneeChanged": "Responsável alterado",
 				"taskUnassigned": "Tarefa sem responsável",
-				"dueDateReminder": "Lembretes de vencimento"
+				"dueDateReminder": "Lembretes de vencimento",
+				"taskFieldsChanged": "Table entry changes"
 			},
 			"reminderLeadTimeLabel": "Enviar o webhook quantas horas antes",
 			"connect": "Conectar webhook",
