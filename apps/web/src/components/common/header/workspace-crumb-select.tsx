@@ -1,10 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { englishOr } from "@/components/nav-main";
 import { Button } from "@/components/ui/button";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 
 export default function WorkspaceCrumbSelect() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: workspace } = useActiveWorkspace();
   const navigate = useNavigate();
 
@@ -21,7 +22,12 @@ export default function WorkspaceCrumbSelect() {
       }}
     >
       <span className="truncate text-left">
-        {workspace?.name || t("navigation:workspaceSwitcher.selectWorkspace")}
+        {/* Operon (John's ruling 2026-10-11, row 18): "Initiative" in English. */}
+        {englishOr(
+          i18n?.language,
+          "Initiative",
+          workspace?.name || t("navigation:workspaceSwitcher.selectWorkspace"),
+        )}
       </span>
     </Button>
   );

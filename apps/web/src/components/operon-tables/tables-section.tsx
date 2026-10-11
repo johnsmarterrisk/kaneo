@@ -265,14 +265,16 @@ export default function TablesSection({
 
   return (
     <section className="flex flex-col gap-3 px-4 py-4">
-      <div className="relative max-w-md">
+      <div className="relative flex max-w-md items-center">
+        {/* No `type="search"`: its native appearance set the placeholder low; the classes
+            match the table view's box minus its fixed `h-8`, which squeezed the field and set the text
+            low (John, 2026-10-11). */}
         <Input
-          type="search"
           aria-label="Search all tables"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder="Search all tables"
-          className="h-8 pl-8 text-sm"
+          className="bg-card pl-8 text-sm"
         />
         {/* After the input, so the field's own background does not paint over it. */}
         <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

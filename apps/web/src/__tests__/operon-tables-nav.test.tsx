@@ -40,7 +40,7 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({}),
 }));
 vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
-  default: () => ({ data: { id: "w1" } }),
+  default: () => ({ data: { id: "w1", name: "Operon" } }),
 }));
 vi.mock("@/lib/auth-client", () => ({
   authClient: { useListOrganizations: () => ({ data: [] }) },
@@ -80,6 +80,9 @@ const { default: ProjectCrumbSelect } = await import(
   "@/components/common/header/project-crumb-select"
 );
 const { SidebarProvider } = await import("@/components/ui/sidebar");
+const { default: WorkspaceCrumbSelect } = await import(
+  "@/components/common/header/workspace-crumb-select"
+);
 
 function renderInSidebar(node: ReactNode) {
   const client = new QueryClient();
@@ -235,5 +238,24 @@ describe("The en-US labels (values only) and the other locales", () => {
     expect(fr.navigation.sidebar.projects).toBe("Projets");
     expect(fr.workspace.projects.pageTitle).not.toBe("Project Boards");
     expect(fr.workspace.projects.createProject).not.toBe("New board");
+  });
+});
+
+describe("The first breadcrumb (John's ruling 2026-10-11)", () => {
+  it("reads Initiative in English, not the workspace name, and still opens the boards list", () => {
+    renderInSidebar(<WorkspaceCrumbSelect />);
+    const crumb = screen.getByRole("button", { name: "Initiative" });
+    expect(screen.queryByText("Operon")).toBeNull();
+    fireEvent.click(crumb);
+    expect(state.navigate).toHaveBeenCalledWith({
+      to: "/dashboard/workspace/$workspaceId",
+      params: { workspaceId: "w1" },
+    });
+  });
+
+  it("keeps the workspace name in any other language", () => {
+    state.language = "fr-FR";
+    renderInSidebar(<WorkspaceCrumbSelect />);
+    expect(screen.getByRole("button", { name: "Operon" })).toBeTruthy();
   });
 });
