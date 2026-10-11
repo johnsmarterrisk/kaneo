@@ -1,5 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import useCreateCustomField from "@/hooks/mutations/custom-field/use-create-custom-field";
@@ -194,13 +195,17 @@ function TopicRow({
         </>
       ) : (
         <>
-          <span className="font-medium">{option}</span>
-          <span className="text-muted-foreground">{count}</span>
-          {hint ? (
-            <span className="text-xs text-muted-foreground">
-              looks like {hint}
-            </span>
-          ) : null}
+          {/* Spec §10 journey 5's exact text, "Cybersecurity 1 · looks like Cyber" (walk F2):
+              the spaces and the "·" are in the text, not only in the flex gap. */}
+          <span>
+            <span className="font-medium">{option}</span>
+            <span className="text-muted-foreground">{` ${count}`}</span>
+            {hint ? (
+              <span className="text-xs text-muted-foreground">
+                {` · looks like ${hint}`}
+              </span>
+            ) : null}
+          </span>
           <Button size="xs" variant="ghost" onClick={() => setRenaming(true)}>
             Rename
           </Button>
@@ -240,6 +245,15 @@ function ColumnsPage({ projectId }: { projectId: string }) {
   const { isAdmin } = useWorkspacePermission();
   const { data: table, isLoading } = useGetTable(projectId);
   const { data: values } = useGetCustomFieldValuesByProject(projectId);
+  // Walk finding F1: the app's queries default to `refetchOnMount: false`, and a row save
+  // never touches #1542's `custom-field-values` cache, so the topic counts kept the numbers
+  // of an earlier visit. Re-read them every time the page opens.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["custom-field-values", projectId],
+    });
+  }, [queryClient, projectId]);
   const createField = useCreateCustomField();
   const hideField = useDeleteCustomField(projectId);
   const reorder = useReorderCustomFields();

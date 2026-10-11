@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -126,6 +127,14 @@ vi.mock("@/hooks/mutations/operon-tables/use-update-table-settings", () => ({
 }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+function renderPage() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ColumnsPage projectId="p1" />
+    </QueryClientProvider>,
+  );
+}
+
 afterEach(() => {
   cleanup();
   permission.isAdmin = true;
@@ -134,7 +143,7 @@ afterEach(() => {
 
 describe("Columns page", () => {
   it("lists the template rows and the columns with their kind labels", () => {
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     expect(screen.getByText("Risk tips · Columns")).toBeTruthy();
     expect(
       screen.getByText("Started from the Marketing asset columns"),
@@ -145,7 +154,7 @@ describe("Columns page", () => {
   });
 
   it("adds, reorders and hides a column for an admin", async () => {
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     fireEvent.change(screen.getByLabelText("New column name"), {
       target: { value: "Channel" },
     });
@@ -184,11 +193,11 @@ describe("Columns page", () => {
   });
 
   it("shows topics with counts, the looks-like hint, rename and merge", async () => {
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     expect(screen.getByText("Topics in this table")).toBeTruthy();
     const cyber = screen.getAllByText("Cyber")[0].closest("li") as HTMLElement;
-    expect(cyber.textContent).toContain("2");
-    expect(cyber.textContent).toContain("looks like Cybersecurity");
+    // Walk F2: the spec's text, "<name> <count> · looks like <other>".
+    expect(cyber.textContent).toContain("Cyber 2 · looks like Cybersecurity");
     fireEvent.change(screen.getByLabelText("Merge Cybersecurity into"), {
       target: { value: "Cyber" },
     });
@@ -214,7 +223,7 @@ describe("Columns page", () => {
   });
 
   it("lists Series under Hidden columns with its history", () => {
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     expect(screen.getByText("Hidden columns")).toBeTruthy();
     expect(screen.getByText("Series")).toBeTruthy();
     fireEvent.click(screen.getByText("View history"));
@@ -226,7 +235,7 @@ describe("Columns page", () => {
   });
 
   it("changes the group column through the settings route", async () => {
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     fireEvent.change(screen.getByLabelText("Group by"), {
       target: { value: "status" },
     });
@@ -240,7 +249,7 @@ describe("Columns page", () => {
 
   it("shows a member Admins only. and no controls", () => {
     permission.isAdmin = false;
-    render(<ColumnsPage projectId="p1" />);
+    renderPage();
     expect(screen.getByText("Admins only.")).toBeTruthy();
     expect(screen.queryByText("Hide")).toBeNull();
     expect(screen.queryByText("Add")).toBeNull();
