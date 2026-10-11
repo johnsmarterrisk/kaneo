@@ -78,7 +78,10 @@ vi.mock("@/fetchers/operon-tables/get-table-rows", () => ({
   }),
 }));
 vi.mock("@/fetchers/operon-tables/search-table-rows", () => ({
-  searchTableRows: async () => ({ rows: [], nextCursor: null }),
+  searchTableRows: async () => ({
+    rows: [{ ...row("s1", "Found tip"), tableName: "Risk tips" }],
+    nextCursor: null,
+  }),
 }));
 
 function renderView(projectId = "p1") {
@@ -155,15 +158,27 @@ describe("Table view column resize", () => {
     expect(new Set(widths("title"))).toEqual(new Set([`${MIN_WIDTH}px`]));
   });
 
-  it("fits a column to its widest cell on double-click", async () => {
+  it("fits a column to its widest cell on double-click, shrinking an oversized one", async () => {
     renderView();
     await ready();
-    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(
+    const handle = screen.getByRole("button", { name: "Resize Title" });
+    drag(handle, 0, 400);
+    expect(new Set(widths("title"))).toEqual(
+      new Set([`${TITLE_DEFAULT + 400}px`]),
+    );
+    // jsdom has no layout: a cell reports a natural width only while it is measured at
+    // max-content, and its full fixed width otherwise (what scrollWidth used to give).
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function (this: HTMLElement) {
-        return this.textContent === "A fairly long title" ? 190 : 40;
+        const natural = this.textContent === "A fairly long title" ? 190 : 40;
+        const width =
+          this.style.width === "max-content"
+            ? natural
+            : Number.parseFloat(this.style.width) || 0;
+        return { width, top: 0, bottom: 0 } as DOMRect;
       },
     );
-    fireEvent.doubleClick(screen.getByRole("button", { name: "Resize Title" }));
+    fireEvent.doubleClick(handle);
     expect(new Set(widths("title"))).toEqual(new Set(["194px"]));
   });
 
@@ -251,5 +266,32 @@ describe("Table view column resize", () => {
     renderView();
     await ready();
     expect(screen.queryAllByTestId("column-resize-handle")).toHaveLength(0);
+  });
+});
+
+describe("Table search results on a phone (375px)", () => {
+  it("use the phone rows: no header, no resize handles", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 375,
+    });
+    renderView();
+    await ready();
+    fireEvent.change(screen.getByLabelText("Search risk tips"), {
+      target: { value: "found" },
+    });
+    const results = await screen.findByTestId("table-search-results");
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")[0]?.textContent).toContain(
+        "Found tip",
+      ),
+    );
+    expect(screen.queryAllByTestId("column-resize-handle")).toHaveLength(0);
+    expect(results.textContent).not.toContain("Made by");
+    // The phone row's second line (status · made by), not desktop cells.
+    expect(screen.getAllByTestId("table-row")[0]?.textContent).toContain(
+      "Idea · Dana",
+    );
   });
 });

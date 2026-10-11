@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type * as React from "react";
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetLoadedVersionForTests } from "@/lib/version-check";
 
@@ -510,6 +511,114 @@ describe("apex reads stay fresh and log no body (Codex round 1)", () => {
     expect(logged).not.toContain("secret");
     expect(logged).not.toContain("html");
     expect(screen.queryByTestId("module-talk")).toBeNull();
+  });
+});
+
+describe("apex reads: order, user change, unset apex (Codex round 2)", () => {
+  it("never restores a join link from an older read that lands after a newer 403", async () => {
+    let releaseOld: (res: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          releaseOld = resolve;
+        }),
+    );
+    let now = 3_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    render(<OperonModuleNav variant="top" />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    apexAnswers["/api/talk"] = { status: 403 };
+    now += 5_000;
+    fireEvent.focus(window);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    releaseOld(
+      new Response(
+        JSON.stringify({
+          rooms: [{ scope: "team", url: "https://mega.nz/chat/Old#k" }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByTestId("module-talk")).toBeNull();
+  });
+
+  it("never paints the previous person's Operon name after a user change", async () => {
+    apexAnswers["/api/auth/session"] = {
+      status: 200,
+      body: { displayName: "Jane (Operon)" },
+    };
+    // Records the footer on every commit, before passive effects run — the frame a
+    // clear-in-useEffect would still have shown the old name in.
+    const frames: string[] = [];
+    function Probe() {
+      useLayoutEffect(() => {
+        frames.push(
+          document.querySelector("[data-testid='operon-rail-footer']")
+            ?.textContent ?? "",
+        );
+      });
+      return null;
+    }
+    const { rerender } = render(
+      <>
+        <OperonRailFooter />
+        <Probe />
+      </>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+        "Jane (Operon)",
+      ),
+    );
+
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    auth.user = {
+      id: "u-omar",
+      name: "Omar Haddad",
+      email: "omar@example.com",
+    };
+    frames.length = 0;
+    rerender(
+      <>
+        <OperonRailFooter />
+        <Probe />
+      </>,
+    );
+    expect(frames.length).toBeGreaterThan(0);
+    for (const frame of frames) expect(frame).not.toContain("Jane");
+    expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+      "Omar Haddad",
+    );
+  });
+
+  it("sends no credentialed read when a built bundle has no apex configured", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("VITE_OPERON_APEX_URL", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    apexAnswers["/api/auth/session"] = {
+      status: 200,
+      body: { displayName: "Jane (Operon)" },
+    };
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      body: { rooms: [{ scope: "team", url: "https://mega.nz/chat/X#k" }] },
+    };
+    render(
+      <>
+        <OperonModuleNav variant="top" />
+        <OperonRailFooter />
+      </>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("module-talk")).toBeNull();
+    expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+      "Jane Rivera",
+    );
   });
 });
 

@@ -208,6 +208,7 @@ function TableViewBody({
         query={query}
         columns={shown}
         onOpen={onOpenRow}
+        phone={phone}
       />
     );
   } else if (isError) {

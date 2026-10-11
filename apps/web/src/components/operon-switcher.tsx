@@ -219,7 +219,8 @@ let apexUrlFallbackWarned = false;
  * placeholder token — `env.sh`'s `sed` would rewrite that too, and a diagnostic that
  * rewrites itself is worse than none.
  */
-export function apexUrl(): string {
+/** The configured apex as an absolute http(s) URL without trailing slashes, or null. */
+function configuredApexUrl(): string | null {
   // Read through a widened type: `apps/web/src/vite-env.d.ts` is not on the fork's touch
   // list, so this variable is not declared on `ImportMetaEnv` and must not be added there.
   const configured = (import.meta.env as Record<string, string | undefined>)
@@ -236,6 +237,12 @@ export function apexUrl(): string {
       // Not an absolute URL — the unsubstituted placeholder is the ordinary case.
     }
   }
+  return null;
+}
+
+export function apexUrl(): string {
+  const configured = configuredApexUrl();
+  if (configured !== null) return configured;
 
   if (!apexUrlFallbackWarned) {
     apexUrlFallbackWarned = true;
@@ -309,6 +316,12 @@ class ApexHttpError extends Error {
   }
 }
 
+class ApexUnsetError extends Error {
+  constructor() {
+    super("apex url unset");
+  }
+}
+
 const apexReads = new Map<string, { at: number; read: Promise<unknown> }>();
 
 function readApex(
@@ -316,6 +329,12 @@ function readApex(
   userKey: string,
   maxAgeMs: number,
 ): Promise<unknown> {
+  // Codex round 2, item 3: a credentialed read never goes to the development origin outside
+  // dev mode. An unset apex in a built bundle fails soft — no request, Kaneo's own name, no
+  // Talk row (apexUrl() has already said once, on the console, that the value is unset).
+  if (configuredApexUrl() === null && !import.meta.env.DEV) {
+    return Promise.reject(new ApexUnsetError());
+  }
   const key = `${path}|${userKey}`;
   const cached = apexReads.get(key);
   if (cached && Date.now() - cached.at < maxAgeMs) return cached.read;
@@ -353,21 +372,33 @@ function useApexValue(
 ): string | null {
   const { user } = useAuth();
   const userKey = user?.id ?? user?.email ?? "";
-  const [value, setValue] = useState<string | null>(null);
+  // Codex round 2, item 2: the value is stored WITH the user it was read for and shown only
+  // to that user, so the render right after a user change shows nothing — never the last
+  // person's name — before the effect below even runs.
+  const [held, setHeld] = useState<{ userKey: string; value: string | null }>({
+    userKey,
+    value: null,
+  });
   useEffect(() => {
     let live = true;
-    // A different user must never see the previous one's answer while theirs loads.
+    // Codex round 2, item 1: reads overlap (mount, focus, visibility) and can settle out of
+    // order; only the latest one started may change what is shown, so an older join link
+    // never comes back after a newer 401/403 cleared it.
+    let latest = 0;
+    const setValue = (value: string | null) => setHeld({ userKey, value });
     setValue(null);
     const load = (maxAgeMs: number) => {
+      const mine = ++latest;
       readApex(path, userKey, maxAgeMs).then(
         (body) => {
-          if (live) setValue(pick(body));
+          if (live && mine === latest) setValue(pick(body));
         },
         (err: unknown) => {
           // Signed out or no longer entitled: drop what was shown (Operon's useTalkLink rule).
           // Any other failure keeps the last good value until a read lands.
           if (
             live &&
+            mine === latest &&
             err instanceof ApexHttpError &&
             (err.status === 401 || err.status === 403)
           ) {
@@ -389,7 +420,7 @@ function useApexValue(
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [path, pick, userKey]);
-  return value;
+  return held.userKey === userKey ? held.value : null;
 }
 
 /** The team room's MEGA link from Operon's `GET /api/talk`, or null (none set, or a guest). */

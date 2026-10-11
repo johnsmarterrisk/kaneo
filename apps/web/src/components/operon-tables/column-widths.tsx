@@ -110,13 +110,27 @@ export function useColumnWidthsContext() {
   return useContext(ColumnWidthsContext);
 }
 
-/** The widest cell of one column in the list, so double-click can fit to content. */
+/**
+ * The widest cell of one column in the list, so double-click can fit to content. Each cell
+ * is measured at its natural width (`width: max-content` for the read, then put back):
+ * a fixed-width cell's scrollWidth never reports less than the cell itself, so fit could
+ * only ever grow a column, never shrink an oversized one (Codex round 2, item 4). All
+ * widths are set, then read, then restored, so the list lays out once.
+ */
 function contentWidth(from: HTMLElement, key: string): number | null {
   const list = from.closest('[data-testid="table-list"]') ?? document;
-  let widest = 0;
-  for (const cell of list.querySelectorAll<HTMLElement>("[data-col]")) {
-    if (cell.dataset.col === key) widest = Math.max(widest, cell.scrollWidth);
-  }
+  const cells = [...list.querySelectorAll<HTMLElement>("[data-col]")].filter(
+    (cell) => cell.dataset.col === key,
+  );
+  const before = cells.map((cell) => cell.style.width);
+  for (const cell of cells) cell.style.width = "max-content";
+  const widest = Math.max(
+    0,
+    ...cells.map((cell) => Math.ceil(cell.getBoundingClientRect().width)),
+  );
+  cells.forEach((cell, index) => {
+    cell.style.width = before[index] ?? "";
+  });
   return widest > 0 ? widest + 4 : null;
 }
 
