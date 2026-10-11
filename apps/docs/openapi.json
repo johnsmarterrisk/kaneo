@@ -226,6 +226,10 @@
               "statistics": {
                 "$ref": "#/components/schemas/ProjectStatistics"
               },
+              "isTable": {
+                "type": "boolean",
+                "description": "True when the project is an Operon table."
+              },
               "archivedTasks": {
                 "type": "array",
                 "items": {
@@ -250,6 +254,7 @@
             },
             "required": [
               "statistics",
+              "isTable",
               "archivedTasks",
               "plannedTasks",
               "columns"

@@ -41,6 +41,10 @@ export const projectStatisticsSchema = z
 export const projectListItemSchema = projectSchema
   .extend({
     statistics: projectStatisticsSchema,
+    // Operon fork addition (Tables, row 18): true for a table project, false otherwise.
+    isTable: z.boolean().openapi({
+      description: "True when the project is an Operon table.",
+    }),
     // Legacy, always empty. Fetch the board via GET /task/tasks/{id}.
     archivedTasks: z
       .array(boardTaskSchema)

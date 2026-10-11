@@ -58,32 +58,82 @@ export async function readTableRow(
   table: LockedTable,
   taskId: string,
 ): Promise<TableRow | null> {
+  const [row] = await readTableRows(table, [taskId]);
+  return row ?? null;
+}
+
+/**
+ * Many rows of ONE table in a fixed number of queries (the table view, summary and search
+ * pages), answered in the order of `taskIds`; an id not in this table is skipped.
+ */
+export async function readTableRows(
+  table: LockedTable,
+  taskIds: string[],
+): Promise<TableRow[]> {
   const projectId = table.project.id;
-  const [task] = await db
+  const ids = [...new Set(taskIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+  const tasks = await db
     .select()
     .from(taskTable)
-    .where(and(eq(taskTable.id, taskId), eq(taskTable.projectId, projectId)))
-    .limit(1);
-  if (!task) return null;
+    .where(and(inArray(taskTable.id, ids), eq(taskTable.projectId, projectId)));
+  if (tasks.length === 0) return [];
+  const found = tasks.map((t) => t.id);
   const stored = await db
     .select({
+      taskId: customFieldValueTable.taskId,
       fieldId: customFieldValueTable.fieldId,
       value: customFieldValueTable.value,
     })
     .from(customFieldValueTable)
-    .where(eq(customFieldValueTable.taskId, taskId));
-  const storedById = new Map(stored.map((s) => [s.fieldId, s.value ?? null]));
-  const [meta] = await db
+    .where(inArray(customFieldValueTable.taskId, found));
+  const metas = await db
     .select()
     .from(operonTableRowMetaTable)
-    .where(eq(operonTableRowMetaTable.taskId, taskId))
-    .limit(1);
-
+    .where(inArray(operonTableRowMetaTable.taskId, found));
+  const metaByTask = new Map(metas.map((m) => [m.taskId, m]));
+  const storedByTask = new Map<string, Map<string, string | null>>();
+  for (const s of stored) {
+    let byField = storedByTask.get(s.taskId);
+    if (!byField) {
+      byField = new Map();
+      storedByTask.set(s.taskId, byField);
+    }
+    byField.set(s.fieldId, s.value ?? null);
+  }
   const people = await names(
-    [meta?.createdByUserId, meta?.lastWriterUserId, task.userId].filter(
-      (id): id is string => typeof id === "string",
-    ),
+    tasks.flatMap((t) => {
+      const meta = metaByTask.get(t.id);
+      return [meta?.createdByUserId, meta?.lastWriterUserId, t.userId].filter(
+        (id): id is string => typeof id === "string",
+      );
+    }),
   );
+  const byId = new Map(
+    tasks.map((task) => [
+      task.id,
+      shapeRow(
+        table,
+        task,
+        storedByTask.get(task.id) ?? new Map(),
+        metaByTask.get(task.id),
+        people,
+      ),
+    ]),
+  );
+  return ids
+    .map((id) => byId.get(id))
+    .filter((row): row is TableRow => Boolean(row));
+}
+
+function shapeRow(
+  table: LockedTable,
+  task: typeof taskTable.$inferSelect,
+  storedById: Map<string, string | null>,
+  meta: typeof operonTableRowMetaTable.$inferSelect | undefined,
+  people: Map<string, string | null>,
+): TableRow {
+  const projectId = table.project.id;
 
   const values: Record<string, unknown> = {};
   for (const def of table.defs) {

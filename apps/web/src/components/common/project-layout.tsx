@@ -5,8 +5,9 @@ import {
   CalendarRange,
   SquareKanban,
   SquircleDashed,
+  Table2,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ProjectCrumbSelect from "@/components/common/header/project-crumb-select";
 import WorkspaceCrumbSelect from "@/components/common/header/workspace-crumb-select";
@@ -22,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { shortcuts } from "@/constants/shortcuts";
+import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import { useProjectWebSocket } from "@/hooks/use-project-websocket";
 import { cn } from "@/lib/cn";
@@ -32,7 +34,7 @@ type ProjectLayoutProps = {
   headerActions?: ReactNode;
   children: ReactNode;
   showViewSwitcher?: boolean;
-  activeView?: "backlog" | "board" | "calendar" | "gantt";
+  activeView?: "backlog" | "board" | "calendar" | "gantt" | "table";
 };
 
 export default function ProjectLayout({
@@ -52,6 +54,21 @@ export default function ProjectLayout({
     useState(false);
 
   useProjectWebSocket(projectId);
+
+  // Operon fork addition (Tables task 8, docs/fork-discipline.md row 18): a table project
+  // has one view, the table. Its tabs show only that view, and a link that lands a table
+  // on board/backlog/calendar/gantt (the sidebar and search link to /board) moves it there.
+  const { data: operonTable } = useGetTable(projectId);
+  const isTableProject = Boolean(operonTable);
+  useEffect(() => {
+    if (isTableProject && activeView !== "table") {
+      navigate({
+        to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
+        params: { workspaceId, projectId },
+        replace: true,
+      });
+    }
+  }, [isTableProject, activeView, navigate, workspaceId, projectId]);
 
   const resolvedView =
     activeView ??
@@ -94,13 +111,15 @@ export default function ProjectLayout({
   const handleProjectSwitch = (nextProjectId: string) => {
     navigate({
       to:
-        resolvedView === "backlog"
-          ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
-          : resolvedView === "calendar"
-            ? "/dashboard/workspace/$workspaceId/project/$projectId/calendar"
-            : resolvedView === "gantt"
-              ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
-              : "/dashboard/workspace/$workspaceId/project/$projectId/board",
+        resolvedView === "table"
+          ? "/dashboard/workspace/$workspaceId/project/$projectId"
+          : resolvedView === "backlog"
+            ? "/dashboard/workspace/$workspaceId/project/$projectId/backlog"
+            : resolvedView === "calendar"
+              ? "/dashboard/workspace/$workspaceId/project/$projectId/calendar"
+              : resolvedView === "gantt"
+                ? "/dashboard/workspace/$workspaceId/project/$projectId/gantt"
+                : "/dashboard/workspace/$workspaceId/project/$projectId/board",
       params: {
         workspaceId,
         projectId: nextProjectId,
@@ -170,7 +189,20 @@ export default function ProjectLayout({
               />
             </div>
 
-            {showViewSwitcher && (
+            {showViewSwitcher && isTableProject && (
+              <div className="hidden flex-wrap items-center gap-1 sm:inline-flex">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className="h-6 gap-1.5 rounded-md px-2 text-xs"
+                >
+                  <Table2 className="size-3.5" />
+                  Table
+                </Button>
+              </div>
+            )}
+
+            {showViewSwitcher && !isTableProject && (
               <div className="hidden flex-wrap items-center gap-1 sm:inline-flex">
                 <Button
                   variant={resolvedView === "backlog" ? "secondary" : "ghost"}

@@ -1,6 +1,10 @@
 import { and, count, eq, isNull, min, sql } from "drizzle-orm";
 import db from "../../database";
-import { projectTable, taskTable } from "../../database/schema";
+import {
+  operonTableProjectTable,
+  projectTable,
+  taskTable,
+} from "../../database/schema";
 
 type ProjectStatistics = {
   completionPercentage: number;
@@ -84,8 +88,25 @@ async function getProjects(workspaceId: string, includeArchived = false) {
     includeArchived,
   );
 
+  // Operon fork addition (Tables, docs/fork-discipline.md row 18): the server-derived table
+  // flag, so the workspace list's Tables section and Telegraph's task picker can tell a
+  // table from an ordinary project without a request per project.
+  const tableIds = new Set(
+    (
+      await db
+        .select({ projectId: operonTableProjectTable.projectId })
+        .from(operonTableProjectTable)
+        .innerJoin(
+          projectTable,
+          eq(projectTable.id, operonTableProjectTable.projectId),
+        )
+        .where(eq(projectTable.workspaceId, workspaceId))
+    ).map((row) => row.projectId),
+  );
+
   return projects.map((project) => ({
     ...project,
+    isTable: tableIds.has(project.id),
     statistics: statisticsByProject.get(project.id) ?? EMPTY_STATISTICS,
     archivedTasks: [],
     plannedTasks: [],

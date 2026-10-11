@@ -25,7 +25,14 @@ import { editOptions, readOptionEdit } from "./options";
 import { outboxHealth } from "./outbox";
 import { readTableRow } from "./read-row";
 import { TABLE_DEFAULT_ICON } from "./schema";
+import { searchTableRows } from "./search";
 import { tableError } from "./values";
+import {
+  listTableRows,
+  loadTableSettings,
+  readRowsQuery,
+  workspaceSummary,
+} from "./views";
 import {
   deleteTableRow,
   loadTable,
@@ -113,6 +120,48 @@ operonTables.get(
   workspaceAccess.fromQuery(),
   requireTableAdmin,
   async (c) => c.json(await outboxHealth(c.get("workspaceId")), 200),
+);
+
+/**
+ * The table view's search (RF-11) and task 12's `search_table_rows`: a literal substring
+ * over the workspace's tables (or one, `tableId`), for a caller who may read its projects
+ * and tasks. A `tableId` of another workspace is refused before any row or count.
+ */
+operonTables.get(
+  "/tables/search",
+  workspaceAccess.fromQuery(),
+  requireWorkspacePermission({ project: ["read"], task: ["read"] }),
+  async (c) => {
+    const limit = c.req.query("limit");
+    return c.json(
+      await searchTableRows({
+        workspaceId: c.get("workspaceId"),
+        query: c.req.query("q") ?? "",
+        tableId: c.req.query("tableId") || undefined,
+        cursor: c.req.query("cursor") || undefined,
+        limit: limit ? Number(limit) : undefined,
+      }),
+      200,
+    );
+  },
+);
+
+/**
+ * The workspace project list's Tables section (spec 7.10 US1): per table entries, group
+ * and status counts and the last added row; on the first page the five newest rows.
+ */
+operonTables.get(
+  "/tables/workspace/:workspaceId/summary",
+  workspaceAccess.fromParam("workspaceId"),
+  requireWorkspacePermission({ project: ["read"], task: ["read"] }),
+  async (c) =>
+    c.json(
+      await workspaceSummary(
+        c.get("workspaceId"),
+        c.req.query("cursor") || undefined,
+      ),
+      200,
+    ),
 );
 
 export async function readTable(projectId: string, includeHidden = false) {
@@ -318,6 +367,33 @@ operonTables.post(
       }
       throw error;
     }
+  },
+);
+
+/**
+ * The table view's rows (spec 7.9): sort and chip filters applied in SQL before the page is
+ * cut; values keyed by active column name, Made by and Last change on every row.
+ */
+operonTables.get(
+  "/tables/:projectId/rows",
+  workspaceAccess.fromProject("projectId"),
+  requireWorkspacePermission({ task: ["read"] }),
+  async (c) => {
+    const settings = await loadTableSettings(c.req.param("projectId") ?? "");
+    if (!settings) {
+      tableError(404, "not_a_table", "This project is not a table");
+    }
+    const q = readRowsQuery(
+      settings,
+      {
+        sort: c.req.query("sort"),
+        year: c.req.query("year"),
+        cursor: c.req.query("cursor") || undefined,
+        limit: c.req.query("limit"),
+      },
+      c.req.queries("filter") ?? [],
+    );
+    return c.json(await listTableRows(settings, q), 200);
   },
 );
 

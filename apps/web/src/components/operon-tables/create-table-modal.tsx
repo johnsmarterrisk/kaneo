@@ -51,8 +51,11 @@ function CreateTableModal({ open, onClose }: CreateTableModalProps) {
       });
       toast.success("Table created");
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["operon-tables-summary"],
+      });
       navigate({
-        to: "/dashboard/workspace/$workspaceId/project/$projectId",
+        to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
         params: { workspaceId: workspace.id, projectId: id },
       });
       handleClose();
