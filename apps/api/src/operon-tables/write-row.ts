@@ -24,6 +24,7 @@ import {
   type ColumnDef,
   capCodePoints,
   displayValue,
+  optionList,
   resolveColumn,
   TITLE_MAX_LENGTH,
   tableError,
@@ -46,6 +47,8 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type LockedTable = {
   project: { id: string; name: string; workspaceId: string };
+  /** The configured group column (Topic in the template), or null. */
+  groupFieldId: string | null;
   /** Active definitions in position order (task 6 filters hidden ones). */
   defs: ColumnDef[];
 };
@@ -119,6 +122,7 @@ export async function loadTable(
       id: projectTable.id,
       name: projectTable.name,
       workspaceId: projectTable.workspaceId,
+      groupFieldId: operonTableProjectTable.groupFieldId,
     })
     .from(projectTable)
     .innerJoin(
@@ -132,7 +136,8 @@ export async function loadTable(
     .select(DEF_COLUMNS)
     .from(customFieldDefinitionTable)
     .where(eq(customFieldDefinitionTable.projectId, projectId));
-  return { project, defs: active(defs) };
+  const { groupFieldId, ...rest } = project;
+  return { project: rest, groupFieldId, defs: active(defs) };
 }
 
 /**
@@ -155,7 +160,10 @@ export async function lockTable(
     .for(mode);
   if (!project) return null;
   const [flag] = await tx
-    .select({ projectId: operonTableProjectTable.projectId })
+    .select({
+      projectId: operonTableProjectTable.projectId,
+      groupFieldId: operonTableProjectTable.groupFieldId,
+    })
     .from(operonTableProjectTable)
     .where(eq(operonTableProjectTable.projectId, projectId))
     .limit(1);
@@ -168,7 +176,7 @@ export async function lockTable(
     .for(mode);
   // Hidden definitions are locked with the rest (a hide takes the same locks) but are not
   // columns of the table: a key naming one is unknown_column (spec 7.1).
-  return { project, defs: active(defs) };
+  return { project, groupFieldId: flag.groupFieldId, defs: active(defs) };
 }
 
 export async function resolveActor(userId: string) {
@@ -559,7 +567,64 @@ export type RowBody = {
   notes?: unknown;
   assigneeId?: unknown;
   values?: unknown;
+  newTopic?: unknown;
 };
+
+export const OPTION_MAX_LENGTH = 100;
+
+/** An option label: trimmed, 1-100 characters. */
+export function readLabel(value: unknown, name = "label"): string {
+  if (typeof value !== "string") validationFailed(`${name} is required`);
+  const label = value.trim();
+  if (!label || label.length > OPTION_MAX_LENGTH)
+    validationFailed(`${name} must be 1-${OPTION_MAX_LENGTH} characters`);
+  return label;
+}
+
+function readNewTopic(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value))
+    validationFailed("newTopic must be an object");
+  const { fieldId, label } = value as { fieldId?: unknown; label?: unknown };
+  if (typeof fieldId !== "string" || !fieldId)
+    validationFailed("newTopic.fieldId is required");
+  return { fieldId, label: readLabel(label, "newTopic.label") };
+}
+
+function sameLabel(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/** Spec 7.3 step 1: newTopic names the active group dropdown and the value it sets. */
+function newTopicField(
+  table: LockedTable,
+  newTopic: { fieldId: string; label: string },
+  values: Record<string, unknown>,
+) {
+  const def = table.defs.find((d) => d.id === newTopic.fieldId);
+  if (!def || def.id !== table.groupFieldId || def.type !== "dropdown") {
+    tableError(
+      422,
+      "invalid_new_topic",
+      "A new topic is added to the table's group column",
+    );
+  }
+  const entry = Object.entries(values).find(
+    ([key]) => resolveColumn(table.defs, key)?.id === def.id,
+  );
+  if (
+    !entry ||
+    typeof entry[1] !== "string" ||
+    !sameLabel(entry[1], newTopic.label)
+  ) {
+    tableError(
+      422,
+      "invalid_new_topic",
+      "The new topic must also be the entry's value",
+    );
+  }
+  return { def, key: entry[0] };
+}
 
 function validationFailed(message: string): never {
   tableError(422, "validation_failed", message);
@@ -634,6 +699,7 @@ export async function writeTableRow({
   via,
   taskId,
   body,
+  canAddTopic = false,
 }: {
   projectId: string;
   workspaceId: string;
@@ -641,6 +707,8 @@ export async function writeTableRow({
   via: "session" | "api_key";
   taskId?: string;
   body: RowBody;
+  /** The route's verdict: a table admin with project:update (spec 7.3 step 3). */
+  canAddTopic?: boolean;
 }): Promise<{ taskId: string; changed: boolean }> {
   try {
     const creating = !taskId;
@@ -657,13 +725,32 @@ export async function writeTableRow({
     let assigneeId = readNullableString(body.assigneeId, "assigneeId");
     if (assigneeId === "") assigneeId = null;
     const values = readValues(body.values);
+    const newTopic = readNewTopic(body.newTopic);
+    if (newTopic && !canAddTopic) {
+      console.warn("[operon] tables.admin_refused", {
+        route: "rows.newTopic",
+        projectId,
+        workspaceId,
+        actorUserId,
+        reason: "admin_only",
+      });
+      tableError(
+        403,
+        "admin_only",
+        "Only a workspace owner or admin can add a topic",
+      );
+    }
 
     // Step 1: fail fast, no lock held (the Stash check is an HTTP call).
     const pre = await loadTable(projectId);
     if (!pre) tableError(404, "not_a_table", "This project is not a table");
     const images = new Map<string, { fieldId: string; text: string | null }>();
+    // For ONLY the new topic's value the unknown-option verdict waits for step 3, where the
+    // option and the row commit together.
+    const topicKey = newTopic ? newTopicField(pre, newTopic, values).key : null;
     for (const [key, value] of Object.entries(values)) {
       const def = resolveColumn(pre.defs, key) ?? unknownColumn(pre.defs);
+      if (key === topicKey) continue;
       let text = toStoredText(def, value);
       if (def.type === "image" && text !== null) {
         text = await checkStashImage(actorUserId, text);
@@ -695,10 +782,45 @@ export async function writeTableRow({
     };
 
     const result = await db.transaction(async (tx) => {
-      const locked = await lockTable(tx, projectId, "share");
+      // A "New topic" save edits a definition, so it takes the project and definition locks
+      // FOR UPDATE from the start: never an upgrade of a held share lock (deadlock-free).
+      const locked = await lockTable(
+        tx,
+        projectId,
+        newTopic ? "update" : "share",
+      );
       if (!locked)
         tableError(404, "not_a_table", "This project is not a table");
       await tableWriteHooks.afterProjectLock?.();
+      if (newTopic) {
+        const { def } = newTopicField(locked, newTopic, values);
+        const options = optionList(def);
+        const existing = options.find((o) => sameLabel(o, newTopic.label));
+        if (existing) {
+          // A concurrent winner (or an existing spelling) is reused, never duplicated.
+          for (const key of Object.keys(values)) {
+            if (resolveColumn(locked.defs, key)?.id === def.id)
+              values[key] = existing;
+          }
+        } else {
+          for (const key of Object.keys(values)) {
+            if (resolveColumn(locked.defs, key)?.id === def.id)
+              values[key] = newTopic.label;
+          }
+          const next = [...options, newTopic.label];
+          await tx
+            .update(customFieldDefinitionTable)
+            .set({ options: next })
+            .where(eq(customFieldDefinitionTable.id, def.id));
+          def.options = next;
+          console.log("[operon] tables.option_added", {
+            projectId,
+            fieldId: def.id,
+            rowsRewritten: 0,
+            actorUserId,
+          });
+        }
+      }
 
       // Step 3: the check of record, against the LOCKED definitions (RF-8).
       const resolved = new Map<string, string | null>();

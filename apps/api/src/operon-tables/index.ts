@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { requireEntitlement } from "../billing/require-entitlement-middleware";
 import db from "../database";
@@ -8,11 +8,15 @@ import {
   operonTableProjectTable,
 } from "../database/schema";
 import type { BaseVariables } from "../openapi";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  hasWorkspacePermission,
+  requireWorkspacePermission,
+} from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
-import { requireTableAdmin } from "./admin";
+import { isTableAdmin, requireTableAdmin } from "./admin";
 import { readColumnHistory } from "./columns";
 import { createTable } from "./create-table";
+import { editOptions, readOptionEdit } from "./options";
 import { outboxHealth } from "./outbox";
 import { readTableRow } from "./read-row";
 import { TABLE_DEFAULT_ICON } from "./schema";
@@ -21,6 +25,7 @@ import {
   deleteTableRow,
   loadTable,
   type RowBody,
+  refusalReason,
   writeTableRow,
 } from "./write-row";
 
@@ -209,6 +214,62 @@ async function readBody(c: { req: { json: () => Promise<unknown> } }) {
   return body as RowBody;
 }
 
+/** "New topic…" (spec 7.3 step 3): a table admin who also holds project:update. */
+async function canAddTopic(c: Context) {
+  return (
+    (await isTableAdmin(c)) &&
+    (await hasWorkspacePermission(c, { project: ["update"] }))
+  );
+}
+
+/**
+ * Add, rename or merge a choice column's options (spec 7.3a, task 7): table admin and
+ * project:update. Rename and Merge rewrite every row carrying the option, one signal each.
+ */
+operonTables.post(
+  "/tables/:projectId/fields/:fieldId/options",
+  workspaceAccess.fromProject("projectId"),
+  async (c, next) => {
+    try {
+      await requireTableAdmin(c, next);
+    } catch (error) {
+      console.warn("[operon] tables.option_refused", {
+        projectId: c.req.param("projectId") ?? null,
+        fieldId: c.req.param("fieldId") ?? null,
+        reason: "admin_only",
+        actorUserId: c.get("userId") ?? null,
+      });
+      throw error;
+    }
+  },
+  requireWorkspacePermission({ project: ["update"] }),
+  async (c) => {
+    const projectId = c.req.param("projectId") ?? "";
+    const fieldId = c.req.param("fieldId") ?? "";
+    const edit = readOptionEdit(await c.req.json().catch(() => null));
+    try {
+      const result = await editOptions({
+        projectId,
+        fieldId,
+        actorUserId: c.get("userId"),
+        edit,
+      });
+      return c.json(result, 200);
+    } catch (error) {
+      const reason = await refusalReason(error);
+      if (reason) {
+        console.warn("[operon] tables.option_refused", {
+          projectId,
+          fieldId,
+          reason,
+          actorUserId: c.get("userId"),
+        });
+      }
+      throw error;
+    }
+  },
+);
+
 async function answerRow(projectId: string, taskId: string) {
   const table = await loadTable(projectId);
   if (!table) tableError(404, "not_a_table", "This project is not a table");
@@ -231,6 +292,7 @@ operonTables.post(
       actorUserId: c.get("userId"),
       via: via(c),
       body: await readBody(c),
+      canAddTopic: await canAddTopic(c),
     });
     return c.json(
       { row: await answerRow(projectId, result.taskId), replayed: false },
@@ -254,6 +316,7 @@ operonTables.patch(
       via: via(c),
       taskId,
       body: await readBody(c),
+      canAddTopic: await canAddTopic(c),
     });
     return c.json(
       {
