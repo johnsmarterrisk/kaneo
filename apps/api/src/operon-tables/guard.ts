@@ -10,6 +10,7 @@ import {
   taskRelationTable,
   taskTable,
 } from "../database/schema";
+import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 import { tableError } from "./values";
 import type { Tx } from "./write-row";
 
@@ -313,6 +314,22 @@ export async function tableRowWriteGuard(c: Context, next: Next) {
   }
   const refusal = await refusalFor(c);
   if (refusal) {
+    // This guard runs before the route's workspace middleware. Authorize the resource
+    // before returning a table-specific reason or logging its ids.
+    if (refusal.projectId) {
+      const [project] = await db
+        .select({ workspaceId: projectTable.workspaceId })
+        .from(projectTable)
+        .where(eq(projectTable.id, refusal.projectId))
+        .limit(1);
+      if (project) {
+        await validateWorkspaceAccess(
+          c.get("userId"),
+          project.workspaceId,
+          c.get("apiKey")?.id,
+        );
+      }
+    }
     const log =
       refusal.reason === "table_has_rows" ||
       refusal.reason === "table_outbox_pending"

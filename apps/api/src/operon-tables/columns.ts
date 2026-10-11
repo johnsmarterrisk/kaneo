@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import db from "../database";
 import {
@@ -154,30 +154,28 @@ export async function readColumnHistory(
     .limit(1);
   if (!field) tableError(404, "not_found", "That column is not in this table");
 
-  let after: { at: Date; id: string } | null = null;
+  let after: { at: string; id: string } | null = null;
   if (cursor) {
     const [at, id] = Buffer.from(cursor, "base64url").toString().split("|");
     const date = new Date(at ?? "");
-    if (!id || Number.isNaN(date.getTime()))
+    if (!at || at.length > 64 || !id || Number.isNaN(date.getTime()))
       tableError(422, "validation_failed", "Invalid cursor");
-    after = { at: date, id };
+    after = { at, id };
   }
 
   const history = await db
-    .select()
+    .select({
+      ...getTableColumns(operonTableValueHistoryTable),
+      // Drizzle's Date truncates PostgreSQL microseconds; the cursor must retain them.
+      cursorAt: sql<string>`${operonTableValueHistoryTable.createdAt}::text`,
+    })
     .from(operonTableValueHistoryTable)
     .where(
       and(
         eq(operonTableValueHistoryTable.projectId, projectId),
         eq(operonTableValueHistoryTable.fieldId, fieldId),
         after
-          ? or(
-              lt(operonTableValueHistoryTable.createdAt, after.at),
-              and(
-                eq(operonTableValueHistoryTable.createdAt, after.at),
-                lt(operonTableValueHistoryTable.id, after.id),
-              ),
-            )
+          ? sql`(${operonTableValueHistoryTable.createdAt}, ${operonTableValueHistoryTable.id}) < (${after.at}::timestamp, ${after.id})`
           : sql`true`,
       ),
     )
@@ -190,9 +188,7 @@ export async function readColumnHistory(
   const last = page[page.length - 1];
   const nextCursor =
     history.length > HISTORY_PAGE && last
-      ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString(
-          "base64url",
-        )
+      ? Buffer.from(`${last.cursorAt}|${last.id}`).toString("base64url")
       : null;
 
   const current = after
