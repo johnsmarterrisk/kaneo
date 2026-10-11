@@ -38,7 +38,8 @@ vi.mock("@/hooks/use-workspace-permission", () => ({
 }));
 vi.mock("@/hooks/queries/operon-tables/use-tables-summary", () => ({
   default: () => ({
-    data: state.isError ? undefined : state.summary,
+    // A failed refetch keeps the cached summary in `data`, as TanStack does.
+    data: state.summary,
     isLoading: false,
     isError: state.isError,
     refetch: state.refetch,
@@ -187,6 +188,9 @@ describe("The Tables page", () => {
     renderPage();
     expect(screen.getByText("Tables could not be loaded.")).toBeTruthy();
     expect(screen.queryByText("No tables yet")).toBeNull();
+    // The cached cards (and Recently added) of the denied workspace are not shown.
+    expect(screen.queryAllByTestId("table-card")).toHaveLength(0);
+    expect(screen.queryByText("Recently added")).toBeNull();
     cleanup();
     state.isAdmin = true;
     renderPage();

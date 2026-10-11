@@ -29,10 +29,12 @@ import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 export function NavTables() {
   const navigate = useNavigate();
   const { data: workspace } = useActiveWorkspace();
-  const { data: summary } = useTablesSummary(workspace?.id || "");
+  const { data: summary, isError } = useTablesSummary(workspace?.id || "");
   const { projectId: currentProjectId } = useParams({ strict: false });
   const tables = summary?.tables ?? [];
-  if (!workspace || tables.length === 0) return null;
+  // Codex round 2: a failed refresh (403 once project:read or task:read is revoked) keeps
+  // TanStack's cached list in `data`; names the caller may no longer read must not stay up.
+  if (!workspace || isError || tables.length === 0) return null;
 
   return (
     <Collapsible defaultOpen className="group/collapsible">

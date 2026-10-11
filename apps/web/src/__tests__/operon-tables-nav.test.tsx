@@ -25,6 +25,7 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   projects: [] as { id: string; name: string; isTable: boolean }[],
   readableTables: [] as { tableId: string; name: string }[],
+  summaryError: false,
 }));
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -49,7 +50,11 @@ vi.mock("@/hooks/queries/project/use-get-projects", () => ({
 }));
 // The summary route answers only the tables the caller may read (project:read, task:read).
 vi.mock("@/hooks/queries/operon-tables/use-tables-summary", () => ({
-  default: () => ({ data: { tables: state.readableTables, nextCursor: null } }),
+  // TanStack keeps the last good `data` when a refetch fails; `isError` is what changes.
+  default: () => ({
+    data: { tables: state.readableTables, nextCursor: null },
+    isError: state.summaryError,
+  }),
 }));
 vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({
@@ -95,6 +100,7 @@ beforeEach(() => {
     }),
   );
   state.language = "en-US";
+  state.summaryError = false;
   state.navigate.mockClear();
   state.projects = [
     { id: "p1", name: "Website relaunch", isTable: false },
@@ -180,6 +186,17 @@ describe("The sidebar groups", () => {
     renderInSidebar(<NavTables />);
     const group = screen.getByTestId("nav-tables");
     expect(within(group).getByText("Risk tips")).toBeTruthy();
+    expect(screen.queryByText("Roadmap")).toBeNull();
+  });
+
+  it("TABLES drops a cached list when the refetch is denied (Codex round 2)", () => {
+    renderInSidebar(<NavTables />);
+    expect(screen.getByText("Risk tips")).toBeTruthy();
+    cleanup();
+    state.summaryError = true;
+    renderInSidebar(<NavTables />);
+    expect(screen.queryByTestId("nav-tables")).toBeNull();
+    expect(screen.queryByText("Risk tips")).toBeNull();
     expect(screen.queryByText("Roadmap")).toBeNull();
   });
 
