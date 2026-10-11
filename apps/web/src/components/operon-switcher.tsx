@@ -490,31 +490,40 @@ export function OperonRailHeader() {
   );
 }
 
-/** A group's header — Operon's uppercase section label, small and muted (rail groups spec). */
+/**
+ * The Tools label, drawn ON the Tools group's top border (Operon's `Sidebar.tsx` treatment,
+ * John's fit ruling 2026-10-11): the border is the divider, the label sits on it with the
+ * ground behind it like a fieldset legend, and Products carries no label — so the grouping
+ * costs a pixel of rail height, not a header row. aria-hidden: the group's aria-label names it.
+ */
 function RailGroupLabel({ label, phone }: { label: string; phone: boolean }) {
   return (
     <p
+      aria-hidden="true"
       className={
         phone
-          ? "text-[9px] leading-3 font-medium uppercase opacity-70"
-          : "px-3 pt-0.5 text-[10px] leading-4 font-medium uppercase tracking-wide opacity-70"
+          ? "pointer-events-none absolute -top-1.5 left-1/2 -translate-x-1/2 px-0.5 text-[9px] leading-3 font-medium uppercase"
+          : "pointer-events-none absolute -top-1.5 left-2 px-1 text-[10px] leading-3 font-medium uppercase tracking-wide"
       }
-      style={{ color: OPERON_COLORS.textPrimary }}
+      style={{
+        color: OPERON_COLORS.textPrimary,
+        backgroundColor: OPERON_COLORS.ground,
+        opacity: 0.7,
+      }}
     >
       {label}
     </p>
   );
 }
 
-/** The thin rule between Products and Tools. */
-function RailDivider({ phone }: { phone: boolean }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={phone ? "w-8 border-t" : "mx-3 my-1 border-t"}
-      style={{ borderColor: OPERON_COLORS.border }}
-    />
-  );
+/** A group's fieldset reset; the Tools group (index > 0) gets the divider border. */
+function groupStyle(index: number) {
+  return index > 0
+    ? {
+        borderTop: `1px solid ${OPERON_COLORS.border}`,
+        position: "relative" as const,
+      }
+    : undefined;
 }
 
 /**
@@ -557,9 +566,9 @@ export function OperonModuleNav({ variant }: { variant: "top" | "settings" }) {
           aria-label={label}
           data-testid={`rail-group-${group}`}
           className="m-0 min-w-0 border-0 p-0 flex flex-col gap-1"
+          style={groupStyle(index)}
         >
-          {index > 0 && <RailDivider phone={false} />}
-          <RailGroupLabel label={label} phone={false} />
+          {index > 0 && <RailGroupLabel label={label} phone={false} />}
           {OPERON_MODULES.filter((module) => module.group === group).map(
             (module) =>
               module.key === "talk" ? (
@@ -709,10 +718,10 @@ export function OperonPhoneModuleStrip() {
             key={group}
             aria-label={label}
             data-testid={`phone-rail-group-${group}`}
-            className="m-0 min-w-0 border-0 p-0 flex flex-col items-center gap-2"
+            className={`m-0 min-w-0 border-0 p-0 flex flex-col items-center gap-2 ${index > 0 ? "pt-2" : ""}`}
+            style={groupStyle(index)}
           >
-            {index > 0 && <RailDivider phone />}
-            <RailGroupLabel label={label} phone />
+            {index > 0 && <RailGroupLabel label={label} phone />}
             {OPERON_MODULES.filter((module) => module.group === group).map(
               renderTile,
             )}

@@ -347,7 +347,7 @@ describe("OperonModuleNav", () => {
 });
 
 describe("OperonModuleNav — rail groups (John, 2026-10-11)", () => {
-  it("renders PRODUCTS, a divider, then TOOLS, matching Operon's rail", () => {
+  it("renders Products unlabelled, then TOOLS on its own top border, matching Operon's rail", () => {
     render(<OperonModuleNav variant="top" />);
 
     const nav = screen.getByTestId("operon-module-nav");
@@ -370,13 +370,15 @@ describe("OperonModuleNav — rail groups (John, 2026-10-11)", () => {
       "desk",
     ]);
     expect(keys("rail-group-tools")).toEqual(["inbox", "agents"]);
-    // The header is a label, not a row; the divider opens Tools, above its header.
-    expect(
-      screen.getByTestId("rail-group-products").firstElementChild?.textContent,
-    ).toBe("Products");
-    expect(
-      screen.getByTestId("rail-group-tools").firstElementChild?.className,
-    ).toContain("border-t");
+    // John's fit ruling: no label above Products; the Tools group's own top border is the
+    // divider and "Tools" sits on it — never a header row of its own.
+    const products = screen.getByTestId("rail-group-products");
+    const tools = screen.getByTestId("rail-group-tools");
+    expect(products.textContent).not.toContain("Products");
+    expect(products.style.borderTop).toBe("");
+    expect(tools.style.borderTop).toContain("1px solid");
+    expect(tools.firstElementChild?.textContent).toBe("Tools");
+    expect(tools.firstElementChild?.className).toContain("absolute");
   });
 
   it("shows Talk last in Tools once Operon answers with a team link, and opens it as a button", async () => {
