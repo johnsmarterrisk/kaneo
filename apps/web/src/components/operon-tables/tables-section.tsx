@@ -12,6 +12,7 @@ import type {
 import type { SearchRow } from "@/fetchers/operon-tables/search-table-rows";
 import useSearchTableRows from "@/hooks/queries/operon-tables/use-search-table-rows";
 import useTablesSummary from "@/hooks/queries/operon-tables/use-tables-summary";
+import { cn } from "@/lib/cn";
 import { formatDateMedium } from "@/lib/format";
 import CreateTableModal from "./create-table-modal";
 import { formatDay } from "./group-section";
@@ -138,10 +139,13 @@ function SearchResultLine({
   row,
   table,
   onOpen,
+  alt,
 }: {
   row: SearchRow;
   table: OperonTable | null | undefined;
   onOpen: () => void;
+  /** Operon's row striping (`bg-row-alt`, see `group-section.tsx`'s `RowLine`). */
+  alt: boolean;
 }) {
   const columnName = (fieldId: string | null | undefined) =>
     table?.columns.find((column) => column.id === fieldId)?.name;
@@ -156,7 +160,10 @@ function SearchResultLine({
         type="button"
         onClick={onOpen}
         data-testid="tables-search-row"
-        className="flex w-full items-center gap-3 px-4 py-1.5 text-left text-sm hover:bg-accent/60"
+        className={cn(
+          "flex w-full items-center gap-3 px-4 py-1.5 text-left text-sm hover:bg-accent/60",
+          alt && "bg-row-alt",
+        )}
       >
         <span className="w-32 shrink-0 truncate text-xs text-muted-foreground">
           {row.tableName}
@@ -219,8 +226,9 @@ function SearchResults({
   return (
     <div data-testid="tables-search-results">
       <ul className="divide-y divide-border/50 rounded-lg border border-border bg-card">
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <SearchResultLine
+            alt={index % 2 === 0}
             key={row.rowId}
             row={row}
             table={tableById.get(row.tableId)}

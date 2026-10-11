@@ -174,7 +174,7 @@ function TopicRow({
             aria-label={`New name for ${option}`}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="h-8 w-48"
+            className="w-48"
           />
           <Button
             size="xs"
@@ -437,7 +437,7 @@ function ColumnsPage({ projectId }: { projectId: string }) {
               placeholder="New column name"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
-              className="h-8 w-48"
+              className="w-48"
             />
             <select
               aria-label="New column kind"
@@ -457,7 +457,7 @@ function ColumnsPage({ projectId }: { projectId: string }) {
                 placeholder="Options, comma separated"
                 value={newOptions}
                 onChange={(event) => setNewOptions(event.target.value)}
-                className="h-8 w-56"
+                className="w-56"
               />
             ) : null}
             <Button size="sm" onClick={addColumn} disabled={!newName.trim()}>

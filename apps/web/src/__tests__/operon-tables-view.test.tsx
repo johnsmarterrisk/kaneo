@@ -259,6 +259,20 @@ describe("Table view", () => {
     );
   });
 
+  it("stripes rows as Operon does (bg-row-alt, first row tinted), never the group headers", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    const cyber = screen.getAllByTestId("table-section")[0] as HTMLElement;
+    const [first, second] = within(cyber).getAllByTestId("table-row");
+    expect(first.className).toContain("bg-row-alt");
+    expect(second.className).not.toContain("bg-row-alt");
+    expect(
+      within(cyber).getByRole("button", { expanded: true }).className,
+    ).not.toContain("bg-row-alt");
+  });
+
   it("sorts by date: No date on top, months newest first, the topic becomes a chip", async () => {
     renderView();
     await waitFor(() =>

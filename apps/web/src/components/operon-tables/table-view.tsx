@@ -331,7 +331,7 @@ function TableViewBody({
             onChange={(e) => setSearchText(e.target.value)}
             placeholder={`Search ${table.name.toLowerCase()}`}
             aria-label={`Search ${table.name.toLowerCase()}`}
-            className={cn("h-8 bg-card text-sm", phone ? "w-full" : "max-w-xs")}
+            className={cn("bg-card text-sm", phone ? "w-full" : "max-w-xs")}
           />
           <div className="inline-flex rounded-md border border-border p-0.5">
             <button

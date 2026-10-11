@@ -47,11 +47,16 @@ export function RowLine({
   columns,
   onOpen,
   phone = false,
+  alt = false,
 }: {
   row: TableRow;
   columns: ShownColumn[];
   onOpen: (rowId: string) => void;
   phone?: boolean;
+  /** Row striping as Operon's lists do it (John, 2026-10-11): `bg-row-alt` is the shared
+      `--row-alt` (#eef4fb light / #1e4270 dark, Operon's own values) on alternating rows,
+      starting with the first; group headers are never striped. */
+  alt?: boolean;
 }) {
   if (phone) {
     return (
@@ -59,7 +64,10 @@ export function RowLine({
         type="button"
         data-testid="table-row"
         onClick={() => onOpen(row.rowId)}
-        className="flex min-h-[44px] w-full min-w-0 flex-col items-start gap-0.5 border-b border-border/50 px-4 py-2 text-left"
+        className={cn(
+          "flex min-h-[44px] w-full min-w-0 flex-col items-start gap-0.5 border-b border-border/50 px-4 py-2 text-left",
+          alt && "bg-row-alt",
+        )}
       >
         <span className="w-full truncate text-sm text-card-foreground">
           {row.title}
@@ -75,7 +83,10 @@ export function RowLine({
       type="button"
       data-testid="table-row"
       onClick={() => onOpen(row.rowId)}
-      className="flex w-full items-center gap-3 border-b border-border/50 px-4 py-1.5 text-left transition-colors hover:bg-accent/60"
+      className={cn(
+        "flex w-full items-center gap-3 border-b border-border/50 px-4 py-1.5 text-left transition-colors hover:bg-accent/60",
+        alt && "bg-row-alt",
+      )}
     >
       <span className="min-w-0 flex-1 truncate text-sm text-card-foreground">
         {row.title}
@@ -152,13 +163,14 @@ export default function GroupSection({
       </button>
       {!collapsed && (
         <div className="bg-card">
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <RowLine
               key={row.rowId}
               row={row}
               columns={columns}
               onOpen={onOpen}
               phone={phone}
+              alt={index % 2 === 0}
             />
           ))}
         </div>

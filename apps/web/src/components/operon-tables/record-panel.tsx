@@ -185,7 +185,7 @@ function FieldEditor({
               placeholder={`New ${column.name.toLowerCase()} name`}
               value={newTopic}
               onChange={(e) => onNewTopic(e.target.value)}
-              className="h-9 bg-card text-sm"
+              className="bg-card text-sm"
               autoFocus
             />
           )}
@@ -456,7 +456,7 @@ function RecordForm({
             id="table-field-title"
             value={draft.title}
             onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-            className="h-9 bg-card text-sm"
+            className="bg-card text-sm"
           />
         </div>
         {table.columns.map((column) => (

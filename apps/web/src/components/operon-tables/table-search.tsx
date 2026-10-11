@@ -41,12 +41,13 @@ export default function TableSearchResults({
           No entries match “{query.trim()}”.
         </p>
       ) : (
-        rows.map((row) => (
+        rows.map((row, index) => (
           <RowLine
             key={row.rowId}
             row={row}
             columns={columns}
             onOpen={onOpen}
+            alt={index % 2 === 0}
           />
         ))
       )}
