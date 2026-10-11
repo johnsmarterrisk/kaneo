@@ -266,7 +266,6 @@ export default function TablesSection({
   return (
     <section className="flex flex-col gap-3 px-4 py-4">
       <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
           aria-label="Search all tables"
@@ -275,6 +274,8 @@ export default function TablesSection({
           placeholder="Search all tables"
           className="h-8 pl-8 text-sm"
         />
+        {/* After the input, so the field's own background does not paint over it. */}
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       </div>
       {query.trim() ? (
         <SearchResults

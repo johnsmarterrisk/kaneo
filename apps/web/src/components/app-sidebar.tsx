@@ -53,7 +53,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <OperonRailHeader />
         <OperonModuleNav variant="top" />
       </SidebarHeader>
-      <SidebarContent className="overflow-hidden gap-1 py-1">
+      {/* Operon (Tables follow-up 2026-10-11, row 18): scrolls rather than clips (upstream's
+          `overflow-hidden`), so the TABLES group under a long PROJECT BOARDS list stays
+          reachable. */}
+      <SidebarContent className="overflow-y-auto gap-1 py-1">
         <Search />
         <NavMain />
         <NavProjects />
