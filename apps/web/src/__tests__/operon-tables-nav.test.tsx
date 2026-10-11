@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   language: "en-US",
   navigate: vi.fn(),
   projects: [] as { id: string; name: string; isTable: boolean }[],
+  readableTables: [] as { tableId: string; name: string }[],
 }));
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -45,6 +46,10 @@ vi.mock("@/lib/auth-client", () => ({
 }));
 vi.mock("@/hooks/queries/project/use-get-projects", () => ({
   default: () => ({ data: state.projects }),
+}));
+// The summary route answers only the tables the caller may read (project:read, task:read).
+vi.mock("@/hooks/queries/operon-tables/use-tables-summary", () => ({
+  default: () => ({ data: { tables: state.readableTables, nextCursor: null } }),
 }));
 vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({
@@ -96,6 +101,10 @@ beforeEach(() => {
     { id: "t1", name: "Risk tips", isTable: true },
     { id: "p2", name: "Q4 campaign", isTable: false },
     { id: "t2", name: "Roadmap", isTable: true },
+  ];
+  state.readableTables = [
+    { tableId: "t1", name: "Risk tips" },
+    { tableId: "t2", name: "Roadmap" },
   ];
 });
 
@@ -165,8 +174,17 @@ describe("The sidebar groups", () => {
     });
   });
 
+  it("TABLES names only the tables the summary lets this member read (Codex round 1, finding 1)", () => {
+    // "Roadmap" is in the workspace's project list but the member may not read it.
+    state.readableTables = [{ tableId: "t1", name: "Risk tips" }];
+    renderInSidebar(<NavTables />);
+    const group = screen.getByTestId("nav-tables");
+    expect(within(group).getByText("Risk tips")).toBeTruthy();
+    expect(screen.queryByText("Roadmap")).toBeNull();
+  });
+
   it("TABLES renders nothing while the workspace has no table", () => {
-    state.projects = state.projects.filter((project) => !project.isTable);
+    state.readableTables = [];
     renderInSidebar(<NavTables />);
     expect(screen.queryByTestId("nav-tables")).toBeNull();
   });

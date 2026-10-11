@@ -249,7 +249,7 @@ export default function TablesSection({
   isAdmin: boolean;
 }) {
   const navigate = useNavigate();
-  const { data, isLoading } = useTablesSummary(workspaceId);
+  const { data, isLoading, isError, refetch } = useTablesSummary(workspaceId);
   const [creating, setCreating] = useState(false);
   const [input, setInput] = useState("");
   // Debounced as the table view's own search box is; clearing restores the cards at once.
@@ -283,6 +283,19 @@ export default function TablesSection({
           query={query}
           onOpen={(row) => openTable(row.tableId, row.rowId)}
         />
+      ) : isError ? (
+        // Codex round 1, finding 3: a failed or forbidden read is not an empty workspace —
+        // never "No tables yet", and no "New table" offered over a list that did not load.
+        <div className="flex items-center gap-3 py-6 text-sm">
+          <span className="text-destructive">Tables could not be loaded.</span>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/60"
+          >
+            Retry
+          </button>
+        </div>
       ) : (
         <>
           {!isLoading && tables.length === 0 && !isAdmin && (

@@ -21,6 +21,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   isAdmin: true,
   summary: null as unknown,
+  isError: false,
+  refetch: vi.fn(),
   navigate: vi.fn(),
 }));
 
@@ -35,7 +37,12 @@ vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({ isAdmin: state.isAdmin }),
 }));
 vi.mock("@/hooks/queries/operon-tables/use-tables-summary", () => ({
-  default: () => ({ data: state.summary, isLoading: false }),
+  default: () => ({
+    data: state.isError ? undefined : state.summary,
+    isLoading: false,
+    isError: state.isError,
+    refetch: state.refetch,
+  }),
 }));
 vi.mock("@/components/common/workspace-layout", () => ({
   default: ({ title, children }: { title: string; children: ReactNode }) => (
@@ -121,6 +128,8 @@ beforeEach(() => {
   state.isAdmin = true;
   state.summary = SUMMARY;
   state.navigate.mockClear();
+  state.isError = false;
+  state.refetch.mockClear();
   searchTableRows.mockReset();
   getTable.mockReset();
 });
@@ -170,6 +179,21 @@ describe("The Tables page", () => {
     renderPage();
     expect(screen.getByText("New table")).toBeTruthy();
     expect(screen.queryByText("No tables yet")).toBeNull();
+  });
+
+  it("a failed or forbidden summary shows the error and Retry, never No tables yet or New table (Codex round 1, finding 3)", () => {
+    state.isError = true;
+    state.isAdmin = false;
+    renderPage();
+    expect(screen.getByText("Tables could not be loaded.")).toBeTruthy();
+    expect(screen.queryByText("No tables yet")).toBeNull();
+    cleanup();
+    state.isAdmin = true;
+    renderPage();
+    expect(screen.getByText("Tables could not be loaded.")).toBeTruthy();
+    expect(screen.queryByText("New table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.refetch).toHaveBeenCalled();
   });
 
   it("searches every table on the server and lists table name, title, status and date; a row opens its record", async () => {

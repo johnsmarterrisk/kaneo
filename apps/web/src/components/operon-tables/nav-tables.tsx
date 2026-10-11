@@ -13,25 +13,25 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import useGetProjects from "@/hooks/queries/project/use-get-projects";
+import useTablesSummary from "@/hooks/queries/operon-tables/use-tables-summary";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 
 /**
  * Operon fork addition (John's ruling 2026-10-11, Tables follow-up; docs/fork-discipline.md
  * row 18): the sidebar's TABLES group, under PROJECT BOARDS — each table listed the way
  * `nav-projects.tsx` lists a board (same label styling, 44px rows, same collapse), each
- * opening its table view. Read from the same project list the boards come from (`isTable`),
- * so no second request. Nothing renders while the workspace has no table: the sub-rail's
- * "Tables" entry is the way to the Tables page and its "New table".
+ * opening its table view. Read from the Tables summary (Codex round 1, finding 1), never the
+ * general project list: the summary route lists only tables the caller passes `project:read`
+ * and `task:read` on, so a table a member may not read is never named here. It is the same
+ * query the Tables page uses. Nothing renders while there is no readable table: the
+ * sub-rail's "Tables" entry is the way to the Tables page and its "New table".
  */
 export function NavTables() {
   const navigate = useNavigate();
   const { data: workspace } = useActiveWorkspace();
-  const { data: projects } = useGetProjects({
-    workspaceId: workspace?.id || "",
-  });
+  const { data: summary } = useTablesSummary(workspace?.id || "");
   const { projectId: currentProjectId } = useParams({ strict: false });
-  const tables = projects?.filter((project) => project.isTable) ?? [];
+  const tables = summary?.tables ?? [];
   if (!workspace || tables.length === 0) return null;
 
   return (
@@ -53,9 +53,9 @@ export function NavTables() {
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {tables.map((table) => (
-                <SidebarMenuItem key={table.id}>
+                <SidebarMenuItem key={table.tableId}>
                   <SidebarMenuButton
-                    isActive={currentProjectId === table.id}
+                    isActive={currentProjectId === table.tableId}
                     size="default"
                     className="h-11 gap-0 ps-3.5 text-sm hover:bg-transparent hover:text-sidebar-accent-foreground active:bg-transparent"
                     onClick={() =>
@@ -63,7 +63,7 @@ export function NavTables() {
                         to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
                         params: {
                           workspaceId: workspace.id,
-                          projectId: table.id,
+                          projectId: table.tableId,
                         },
                       })
                     }
