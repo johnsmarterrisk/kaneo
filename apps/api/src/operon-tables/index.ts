@@ -7,6 +7,7 @@ import {
   customFieldDefinitionTable,
   operonTableProjectTable,
   projectTable,
+  taskTable,
 } from "../database/schema";
 import type { BaseVariables } from "../openapi";
 import {
@@ -162,6 +163,45 @@ operonTables.get(
       ),
       200,
     ),
+);
+
+/**
+ * One entry by its task id (spec 7.9, task 9): the record panel and Telegraph's record
+ * cards. An ordinary task answers 404 `not_a_table_row`; the table's name and its status
+ * and date column names ride along so a card can render without a second call.
+ */
+operonTables.get(
+  "/tables/rows/:taskId",
+  workspaceAccess.fromTaskId("taskId"),
+  requireWorkspacePermission({ task: ["read"] }),
+  async (c) => {
+    const taskId = c.req.param("taskId") ?? "";
+    const [task] = await db
+      .select({ projectId: taskTable.projectId })
+      .from(taskTable)
+      .where(eq(taskTable.id, taskId))
+      .limit(1);
+    const settings = task ? await loadTableSettings(task.projectId) : null;
+    const row = settings ? await readTableRow(settings.table, taskId) : null;
+    if (!settings || !row) {
+      tableError(404, "not_a_table_row", "That task is not a table entry");
+    }
+    const name = (id: string | null) =>
+      settings.table.defs.find((d) => d.id === id)?.name ?? null;
+    return c.json(
+      {
+        row,
+        table: {
+          tableId: settings.table.project.id,
+          name: settings.table.project.name,
+          groupColumn: name(settings.table.groupFieldId),
+          statusColumn: name(settings.statusFieldId),
+          dateColumn: name(settings.dateFieldId),
+        },
+      },
+      200,
+    );
+  },
 );
 
 export async function readTable(projectId: string, includeHidden = false) {

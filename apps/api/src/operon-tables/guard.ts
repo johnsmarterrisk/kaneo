@@ -1,7 +1,8 @@
-import { count, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import db from "../database";
 import {
+  activityTable,
   commentTable,
   operonTableProjectTable,
   operonTableRowOutboxTable,
@@ -88,6 +89,27 @@ async function projectRefusal(
   return (await isTableProject(projectId))
     ? { reason, projectId, taskId: null, message }
     : null;
+}
+
+/**
+ * The task a comment belongs to. Comments live in `activity` (type `comment`) — the id the
+ * comment routes take is an activity id; the legacy `comment` table is read as well so a
+ * row's dirty data from either store is refused.
+ */
+async function taskOfComment(id: string): Promise<string | null> {
+  if (!id) return null;
+  const [activity] = await db
+    .select({ taskId: activityTable.taskId })
+    .from(activityTable)
+    .where(and(eq(activityTable.id, id), eq(activityTable.type, "comment")))
+    .limit(1);
+  if (activity?.taskId) return activity.taskId;
+  const [legacy] = await db
+    .select({ taskId: commentTable.taskId })
+    .from(commentTable)
+    .where(eq(commentTable.id, id))
+    .limit(1);
+  return legacy?.taskId ?? null;
 }
 
 const TASK_FIELD_ROUTES =
@@ -186,13 +208,32 @@ async function refusalFor(c: Context): Promise<Refusal | null> {
       );
     }
     if (method === "PUT" || method === "DELETE") {
-      const [comment] = await db
-        .select({ taskId: commentTable.taskId })
-        .from(commentTable)
-        .where(eq(commentTable.id, match[1] ?? ""))
-        .limit(1);
-      return comment
-        ? rowRefusal([comment.taskId], "table_row_comments_disabled", message)
+      const taskId = await taskOfComment(match[1] ?? "");
+      return taskId
+        ? rowRefusal([taskId], "table_row_comments_disabled", message)
+        : null;
+    }
+    return null;
+  }
+
+  // The activity feed's own comment routes (`POST/PUT/DELETE /activity/comment`, the same
+  // controllers as `/comment`), with the task or the comment in the body (task 9, R-E).
+  if (path === "/api/activity/comment") {
+    const message = "Entries of a table have no comments";
+    const b = await body(c);
+    if (method === "POST") {
+      return rowRefusal(
+        [typeof b.taskId === "string" ? b.taskId : ""],
+        "table_row_comments_disabled",
+        message,
+      );
+    }
+    if (method === "PUT" || method === "DELETE") {
+      const taskId = await taskOfComment(
+        typeof b.activityId === "string" ? b.activityId : "",
+      );
+      return taskId
+        ? rowRefusal([taskId], "table_row_comments_disabled", message)
         : null;
     }
     return null;
@@ -250,7 +291,26 @@ async function refusalFor(c: Context): Promise<Refusal | null> {
   return null;
 }
 
+/**
+ * R-E dirty data: the comment and relation READ routes of a table row answer an empty list
+ * even if rows predating the guard hold some. The route runs first (its own workspace
+ * check decides 400/403), and only its 200 is replaced, so this reveals nothing to a
+ * caller the route would refuse.
+ */
+const EMPTY_READS = /^\/api\/(comment|task-relation)\/([^/]+)$/;
+
 export async function tableRowWriteGuard(c: Context, next: Next) {
+  const read = c.req.method === "GET" ? EMPTY_READS.exec(c.req.path) : null;
+  if (read) {
+    await next();
+    if (c.res.status === 200 && (await isTableRow(read[2]))) {
+      c.res = new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return;
+  }
   const refusal = await refusalFor(c);
   if (refusal) {
     const log =
