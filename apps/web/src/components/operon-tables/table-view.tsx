@@ -13,6 +13,7 @@ import useTableRows, {
 } from "@/hooks/queries/operon-tables/use-table-rows";
 import { cn } from "@/lib/cn";
 import ChipRows, { type ChipRow } from "./chip-rows";
+import Gallery from "./gallery";
 import GroupSection, { ColumnHeader, type ShownColumn } from "./group-section";
 import { monthBuckets, VISIBLE_MONTHS } from "./month-section";
 import TableSearchResults from "./table-search";
@@ -51,10 +52,6 @@ export type TableViewProps = {
   onOpenRow: (rowId: string) => void;
   onAddEntry: () => void;
   onOpenColumns: () => void;
-  /** The gallery toggle (task 11) renders here when the table has an image column. */
-  galleryToggle?: React.ReactNode;
-  /** When set, the gallery replaces the list body (task 11). */
-  renderBody?: (rows: TableRow[]) => React.ReactNode;
 };
 
 export default function TableView(props: TableViewProps) {
@@ -79,8 +76,6 @@ function TableViewBody({
   onOpenRow,
   onAddEntry,
   onOpenColumns,
-  galleryToggle,
-  renderBody,
 }: TableViewProps & { table: OperonTable }) {
   const group = byId(table, table.groupFieldId);
   const dateColumn = byId(table, table.dateFieldId);
@@ -98,6 +93,10 @@ function TableViewBody({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showOlder, setShowOlder] = useState(false);
   const [searchText, setSearchText] = useState("");
+  // "List | Gallery" (task 11) on a table with an image column.
+  const hasImage = table.columns.some((c) => c.kind === "image");
+  const [layout, setLayout] = useState<"list" | "gallery">("list");
+  const gallery = hasImage && layout === "gallery";
   const query = useDebounced(searchText, 300);
 
   const dropdowns = table.columns.filter((c) => c.kind === "dropdown");
@@ -203,8 +202,8 @@ function TableViewBody({
         The entries could not be loaded.
       </p>
     );
-  } else if (renderBody) {
-    body = renderBody(rows);
+  } else if (gallery) {
+    body = <Gallery table={table} rows={rows} onOpen={onOpenRow} />;
   } else if (effectiveMode === "group") {
     body = (
       <GroupedList
@@ -266,7 +265,26 @@ function TableViewBody({
             {header}
           </h1>
           <div className="flex items-center gap-1.5">
-            {galleryToggle}
+            {hasImage && (
+              <div className="inline-flex rounded-md border border-border p-0.5">
+                {(["list", "gallery"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={layout === option}
+                    onClick={() => setLayout(option)}
+                    className={cn(
+                      "rounded px-2 py-0.5 text-xs",
+                      layout === option
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {option === "list" ? "List" : "Gallery"}
+                  </button>
+                ))}
+              </div>
+            )}
             {isAdmin && (
               <Button
                 variant="outline"
@@ -347,7 +365,7 @@ function TableViewBody({
         )}
       </div>
       <div className="flex-1 overflow-auto bg-muted/20">
-        {!query && !renderBody && <ColumnHeader columns={shown} />}
+        {!query && !gallery && <ColumnHeader columns={shown} />}
         {body}
       </div>
     </div>

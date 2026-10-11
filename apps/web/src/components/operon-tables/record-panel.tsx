@@ -21,6 +21,7 @@ import {
 } from "@/hooks/mutations/operon-tables/use-table-row-writes";
 import useTableRow from "@/hooks/queries/operon-tables/use-table-row";
 import { toast } from "@/lib/toast";
+import { StashImageField } from "./stash-picker";
 
 /**
  * Operon fork addition (Tables task 9, docs/fork-discipline.md row 18, spec 7.10 US3/US9):
@@ -104,7 +105,6 @@ function FieldEditor({
   canAddTopic,
   newTopic,
   onNewTopic,
-  renderImageField,
 }: {
   column: Column;
   value: unknown;
@@ -113,11 +113,6 @@ function FieldEditor({
   canAddTopic: boolean;
   newTopic: string;
   onNewTopic: (label: string) => void;
-  renderImageField?: (props: {
-    column: Column;
-    value: string;
-    onChange: (value: string | null) => void;
-  }) => React.ReactNode;
 }) {
   const id = `table-field-${column.id}`;
   const options = column.options ?? [];
@@ -217,20 +212,11 @@ function FieldEditor({
       );
       break;
     case "image":
-      control = renderImageField ? (
-        renderImageField({
-          column,
-          value: typeof value === "string" ? value : "",
-          onChange,
-        })
-      ) : (
-        <input
+      control = (
+        <StashImageField
           id={id}
-          type="text"
-          className={FIELD_CLASS}
-          placeholder="Paste a Stash link"
           value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value || null)}
+          onChange={onChange}
         />
       );
       break;
@@ -275,9 +261,6 @@ export type RecordPanelProps = {
   /** Workspace owner/admin: offered "New topic…" (the server re-checks, R-D). */
   canAddTopic: boolean;
   onClose: () => void;
-  renderImageField?: React.ComponentProps<
-    typeof FieldEditor
-  >["renderImageField"];
 };
 
 export default function RecordPanel(props: RecordPanelProps) {
@@ -307,7 +290,6 @@ function RecordForm({
   row: initialRow,
   canAddTopic,
   onClose,
-  renderImageField,
 }: RecordPanelProps & { row: TableRow | null }) {
   const [row, setRow] = useState<TableRow | null>(initialRow);
   const [draft, setDraft] = useState<Draft>(() => draftFrom(table, initialRow));
@@ -417,7 +399,6 @@ function RecordForm({
             canAddTopic={canAddTopic}
             newTopic={draft.newTopic}
             onNewTopic={(label) => setDraft((d) => ({ ...d, newTopic: label }))}
-            renderImageField={renderImageField}
           />
         ))}
         <div className="flex flex-col gap-1">
