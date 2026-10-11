@@ -90,11 +90,36 @@ const {
   apexUrl,
   DEV_APEX_URL,
   __resetApexUrlWarning,
+  __resetApexReadsForTests,
 } = await import("@/components/operon-switcher");
+
+/**
+ * Operon's apex as the rail reads it (rail groups spec): `GET /api/talk` and
+ * `GET /api/auth/session`. Default: no team link and no session (401), so the Talk item is
+ * absent and the footer keeps Kaneo's name, which every older test here expects.
+ */
+let apexAnswers: Record<string, { status: number; body?: unknown }> = {};
+const fetchMock = vi.fn(async (url: string) => {
+  const path = new URL(url).pathname;
+  const answer = apexAnswers[path] ?? { status: 401 };
+  return new Response(JSON.stringify(answer.body ?? {}), {
+    status: answer.status,
+  });
+});
+
+beforeEach(() => {
+  apexAnswers = {};
+  fetchMock.mockClear();
+  __resetApexReadsForTests();
+  vi.stubGlobal("fetch", fetchMock);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
 
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("OperonModuleNav", () => {
@@ -111,17 +136,35 @@ describe("OperonModuleNav", () => {
       "initiative",
       "files",
       "desk",
+      "inbox",
+      "agents",
     ]);
     expect(
       OPERON_MODULES.filter((m) => m.key !== "settings").map((m) => m.key),
-    ).toEqual(["signals", "telegraph", "initiative", "files", "desk"]);
+    ).toEqual([
+      "signals",
+      "telegraph",
+      "initiative",
+      "files",
+      "desk",
+      "inbox",
+      "agents",
+      "talk",
+    ]);
 
     const initiative = screen.getByTestId("module-initiative");
     expect(initiative.getAttribute("aria-current")).toBe("page");
     expect(initiative.tagName).toBe("SPAN");
     expect(initiative.dataset.external).toBe("false");
 
-    for (const key of ["telegraph", "signals", "files", "desk"]) {
+    for (const key of [
+      "telegraph",
+      "signals",
+      "files",
+      "desk",
+      "inbox",
+      "agents",
+    ]) {
       const element = screen.getByTestId(`module-${key}`);
       expect(element.tagName).toBe("A");
       expect(element.dataset.external).toBe("true");
@@ -194,6 +237,12 @@ describe("OperonModuleNav", () => {
     expect(screen.getByTestId("module-desk").getAttribute("href")).toBe(
       "https://apex.g11.test:9443/#/desk",
     );
+    expect(screen.getByTestId("module-inbox").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/inbox",
+    );
+    expect(screen.getByTestId("module-agents").getAttribute("href")).toBe(
+      "https://apex.g11.test:9443/#/agents",
+    );
 
     // Initiative is the current module: a span, so it carries no href at all.
     expect(
@@ -227,7 +276,8 @@ describe("OperonModuleNav", () => {
     render(<OperonModuleNav variant="top" />);
     render(<OperonModuleNav variant="settings" />);
 
-    for (const module of OPERON_MODULES) {
+    // Talk renders only with a team link (asserted on its own below); none here.
+    for (const module of OPERON_MODULES.filter((m) => m.key !== "talk")) {
       const row = screen.getByTestId(`module-${module.key}`);
       expect(row.className).not.toMatch(/justify-center/);
     }
@@ -256,7 +306,7 @@ describe("OperonModuleNav", () => {
     expect(stash.textContent).toContain("📁");
   });
 
-  it("renders Stream, Telegraph, Initiative, Stash, Desk, then the separate Settings row (Smart Desk D25)", () => {
+  it("renders the Products, then Tools, then the separate Settings row (rail groups spec)", () => {
     // The rail as AppSidebar composes it: the top list, then Settings in its own nav.
     const { container } = render(
       <>
@@ -273,6 +323,8 @@ describe("OperonModuleNav", () => {
       "Initiative",
       "Stash",
       "SmartDesk",
+      "Inbox",
+      "Agents",
       "Settings",
     ];
     expect(rows).toHaveLength(labels.length);
@@ -280,7 +332,7 @@ describe("OperonModuleNav", () => {
       expect(row.textContent).toContain(labels[index]);
     });
     expect(rows[4].textContent).toContain("🎫");
-    // Settings is its own row, not the sixth entry of the top list.
+    // Settings is its own row, not an entry of the top list.
     expect(
       screen
         .getByTestId("operon-module-nav")
@@ -294,7 +346,90 @@ describe("OperonModuleNav", () => {
   });
 });
 
+describe("OperonModuleNav — rail groups (John, 2026-10-11)", () => {
+  it("renders PRODUCTS, a divider, then TOOLS, matching Operon's rail", () => {
+    render(<OperonModuleNav variant="top" />);
+
+    const nav = screen.getByTestId("operon-module-nav");
+    const groups = Array.from(nav.querySelectorAll("fieldset"));
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([
+      "Products",
+      "Tools",
+    ]);
+    const keys = (testId: string) =>
+      Array.from(
+        screen
+          .getByTestId(testId)
+          .querySelectorAll("[data-module]") as NodeListOf<HTMLElement>,
+      ).map((el) => el.dataset.module);
+    expect(keys("rail-group-products")).toEqual([
+      "signals",
+      "telegraph",
+      "initiative",
+      "files",
+      "desk",
+    ]);
+    expect(keys("rail-group-tools")).toEqual(["inbox", "agents"]);
+    // The header is a label, not a row; the divider opens Tools, above its header.
+    expect(
+      screen.getByTestId("rail-group-products").firstElementChild?.textContent,
+    ).toBe("Products");
+    expect(
+      screen.getByTestId("rail-group-tools").firstElementChild?.className,
+    ).toContain("border-t");
+  });
+
+  it("shows Talk last in Tools once Operon answers with a team link, and opens it as a button", async () => {
+    const link = "https://mega.nz/chat/AbCdEfGh#secret-key";
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      body: { rooms: [{ scope: "team", url: link }] },
+    };
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(<OperonModuleNav variant="top" />);
+
+    const talk = await screen.findByTestId("module-talk");
+    expect(talk.tagName).toBe("BUTTON");
+    expect(talk.textContent).toBe("📞 Talk");
+    // A button is centred by index.css's touch-target rule unless the row says otherwise.
+    expect(talk.className).toContain("justify-start");
+    const tools = screen.getByTestId("rail-group-tools");
+    expect(tools.lastElementChild).toBe(talk);
+    // The link is a join credential (Talk spec R4): never in the DOM.
+    expect(document.body.innerHTML).not.toContain("mega.nz");
+    fireEvent.click(talk);
+    expect(open).toHaveBeenCalledWith(link, "_blank", "noopener,noreferrer");
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/talk")),
+    ).toBe(true);
+  });
+
+  it("leaves Talk out when Operon has no team room", async () => {
+    apexAnswers["/api/talk"] = { status: 200, body: { rooms: [] } };
+    render(<OperonModuleNav variant="top" />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.queryByTestId("module-talk")).toBeNull();
+  });
+});
+
 describe("OperonRailFooter", () => {
+  it("shows the Operon display name once Operon's session answers (rail groups spec)", async () => {
+    apexAnswers["/api/auth/session"] = {
+      status: 200,
+      body: { displayName: "Jane R. (Operon)" },
+    };
+    render(<OperonRailFooter />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("operon-rail-footer").textContent).toContain(
+        "Jane R. (Operon)",
+      ),
+    );
+    expect(screen.getByTestId("operon-rail-footer").textContent).not.toContain(
+      "Jane Rivera",
+    );
+  });
+
   it("shows the signed-in user's name and a Sign out button, not a menu", () => {
     render(<OperonRailFooter />);
 
@@ -340,6 +475,10 @@ describe("OperonRailHeader", () => {
       "Operon",
     );
     expect(screen.queryByTestId("version-stamp")).toBeNull();
+    // Rail groups spec (John, 2026-10-11): the bell stays, the avatar is gone, so the
+    // header reads logo + name like Operon's.
+    expect(screen.getByTestId("notification-dropdown")).toBeTruthy();
+    expect(screen.queryByTestId("user-avatar")).toBeNull();
   });
 });
 
@@ -403,7 +542,7 @@ describe("OperonVersionStamp", () => {
 });
 
 describe("OperonPhoneModuleStrip", () => {
-  it("renders Stream/Telegraph/Initiative/Stash/Desk in order, Settings pinned in its own group, never mixed into the app tiles", () => {
+  it("renders the Products and Tools tiles in order, Settings pinned in its own group, never mixed into the app tiles", () => {
     render(<OperonPhoneModuleStrip />);
 
     const appsGroup = screen.getByTestId("phone-module-strip-apps");
@@ -416,7 +555,14 @@ describe("OperonPhoneModuleStrip", () => {
       "initiative",
       "files",
       "desk",
+      "inbox",
+      "agents",
     ]);
+    expect(
+      Array.from(appsGroup.querySelectorAll("fieldset")).map((g) =>
+        g.getAttribute("aria-label"),
+      ),
+    ).toEqual(["Products", "Tools"]);
     // Settings never appears in the scrolling apps group.
     expect(appsGroup.querySelector('[data-module="settings"]')).toBeNull();
 
@@ -458,6 +604,21 @@ describe("OperonPhoneModuleStrip", () => {
   // strip carried no safe-area-top inset of its own before this fix, relying entirely on
   // `operon-phone-navigate.tsx`'s outer wrapper, which the list panel beside it also
   // depended on — see that file's own test for the panel's half.
+  it("adds the Talk tile at the end of Tools once Operon answers with a team link", async () => {
+    apexAnswers["/api/talk"] = {
+      status: 200,
+      body: {
+        rooms: [{ scope: "team", url: "https://mega.nz/chat/AbCdEfGh#k" }],
+      },
+    };
+    render(<OperonPhoneModuleStrip />);
+    const talk = await screen.findByTestId("phone-module-talk");
+    expect(talk.tagName).toBe("BUTTON");
+    expect(screen.getByTestId("phone-rail-group-tools").lastElementChild).toBe(
+      talk,
+    );
+  });
+
   it("carries its own top safe-area inset, not only the outer screen's", () => {
     render(<OperonPhoneModuleStrip />);
     expect(screen.getByTestId("phone-module-strip").className).toContain(
