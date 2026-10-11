@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
@@ -284,5 +286,87 @@ describe("Record panel", () => {
     expect(requestId).toMatch(/\S{8,}/);
     expect(write.title).toBe("New tip");
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Tables task 15 (spec 7.11, US9; journey 8): the record at 375px — "‹ <name> · Edit
+ * entry", full-width Save and Cancel kept above a software keyboard (`visualViewport`), and
+ * a save returns to the list.
+ */
+describe("Record panel on a phone (375px)", () => {
+  const desktopWidth = window.innerWidth;
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: desktopWidth,
+    });
+    vi.unstubAllGlobals();
+  });
+  function atPhoneWidth() {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 375,
+    });
+  }
+
+  it("has a back arrow to the table, and Save and Cancel full width", async () => {
+    atPhoneWidth();
+    const { onClose } = renderSheet();
+    await waitFor(() => expect(screen.getByText("Edit entry")).toBeTruthy());
+    const back = screen.getByRole("button", { name: "Back to Risk tips" });
+    expect(back.textContent).toContain("‹");
+    // The panel's own X gives way to the back arrow (the sheet's stock X is CSS-hidden).
+    expect(
+      within(screen.getByTestId("record-panel")).queryByRole("button", {
+        name: "Close",
+      }),
+    ).toBeNull();
+    for (const name of ["Save", "Cancel"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.className).toContain("flex-1");
+      expect(button.className).toContain("min-h-[44px]");
+    }
+    fireEvent.click(back);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps Save above a simulated keyboard (visualViewport height reduced)", async () => {
+    const listeners: Array<() => void> = [];
+    const viewport = {
+      height: window.innerHeight,
+      offsetTop: 0,
+      addEventListener: (_: string, fn: () => void) => listeners.push(fn),
+      removeEventListener: () => {},
+    };
+    vi.stubGlobal("visualViewport", viewport);
+    atPhoneWidth();
+    renderSheet();
+    await waitFor(() => expect(screen.getByText("Edit entry")).toBeTruthy());
+    const panel = screen.getByTestId("record-panel");
+    expect(panel.style.height).toBe("");
+
+    act(() => {
+      viewport.height = window.innerHeight - 300;
+      for (const fn of listeners) fn();
+    });
+    // The panel ends where the visible area ends, and Save sits in its sticky bottom row.
+    expect(panel.style.height).toBe(`${window.innerHeight - 300}px`);
+    const actions = screen.getByTestId("record-actions");
+    expect(actions.className).toContain("sticky");
+    expect(actions.className).toContain("bottom-0");
+    expect(within(actions).getByRole("button", { name: "Save" })).toBeTruthy();
+    expect(panel.contains(actions)).toBe(true);
+  });
+
+  it("a save on an existing entry returns to the list", async () => {
+    atPhoneWidth();
+    const { onClose } = renderSheet();
+    await waitFor(() => expect(screen.getByText("Edit entry")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(updateTableRow).toHaveBeenCalled();
   });
 });

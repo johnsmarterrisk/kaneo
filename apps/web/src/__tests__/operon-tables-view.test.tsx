@@ -18,6 +18,7 @@ import type {
   TableRowsQuery,
 } from "@/fetchers/operon-tables/get-table-rows";
 import type { TableSummary } from "@/fetchers/operon-tables/get-tables-summary";
+import { requestTablesAnchor } from "@/store/phone-nav";
 
 /**
  * Operon fork check (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US2/US4,
@@ -415,5 +416,103 @@ describe("Tables section", () => {
   it("offers no New table card to a member", () => {
     render(<TablesSection workspaceId="w1" isAdmin={false} />);
     expect(screen.queryByText("New table")).toBeNull();
+  });
+
+  // Task 15: the "Tables" tab's anchor scrolls to this section once, when it has data.
+  it("scrolls to itself once when the Tables tab asked for it", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    requestTablesAnchor();
+    const { unmount } = render(
+      <TablesSection workspaceId="w1" isAdmin={false} />,
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(
+      document.getElementById("tables"),
+    );
+    unmount();
+    render(<TablesSection workspaceId="w1" isAdmin={false} />);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Tables task 15 (spec 7.11, US8; journey 8): the same list at 375px — "By topic | By
+ * date", one chip row (status, years, the first other choice column), two-line rows, no
+ * column header, nothing wider than the screen. The layout's bar carries the name and "+".
+ */
+describe("Table view on a phone (375px)", () => {
+  const desktopWidth = window.innerWidth;
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: desktopWidth,
+    });
+  });
+  function atPhoneWidth() {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 375,
+    });
+  }
+
+  it("reads By topic | By date, keeps one chip row and drops the desktop header row", async () => {
+    atPhoneWidth();
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    expect(screen.getByRole("button", { name: "By topic" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "By date" })).toBeTruthy();
+    expect(screen.queryByText("Group by topic")).toBeNull();
+    // Name and "+" live in the phone bar (project-layout); none of these here.
+    expect(screen.queryByTestId("table-header")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add entry" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Columns/ })).toBeNull();
+    // One chip row: Status options, the years, then Channel (the first other choice).
+    const chips = screen.getByTestId("chip-row-inline");
+    expect(
+      within(chips)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual([
+      "Idea",
+      "In progress",
+      "Published",
+      "2026",
+      "LinkedIn",
+      "Newsletter",
+      "Site",
+    ]);
+    expect(screen.getByPlaceholderText("Search risk tips")).toBeTruthy();
+  });
+
+  it("draws two-line rows and never scrolls sideways", async () => {
+    atPhoneWidth();
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    const fleet = screen
+      .getAllByTestId("table-row")
+      .find((r) => r.textContent?.startsWith("Fleet one")) as HTMLElement;
+    expect(fleet.children).toHaveLength(2);
+    expect(fleet.children[1].textContent).toBe("6 Oct · LinkedIn · Dana");
+    const list = screen.getByTestId("table-list");
+    expect(list.className).toContain("overflow-x-hidden");
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+    expect(screen.queryByText("Made by")).toBeNull();
+  });
+
+  it("By date switches to month headers, as Sort by date does on desktop", async () => {
+    atPhoneWidth();
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "By date" }));
+    await waitFor(() => expect(sectionTitles()[0]).toBe("No date"));
   });
 });

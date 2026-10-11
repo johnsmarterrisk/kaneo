@@ -1,6 +1,7 @@
 import { format, isValid, parseISO } from "date-fns";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSyncedIsMobile } from "@/components/common/layout";
 import TaskDescriptionEditor from "@/components/task/task-description-editor";
 import {
   AlertDialog,
@@ -20,6 +21,7 @@ import {
   useSaveTableRow,
 } from "@/hooks/mutations/operon-tables/use-table-row-writes";
 import useTableRow from "@/hooks/queries/operon-tables/use-table-row";
+import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { StashImageField } from "./stash-picker";
 
@@ -63,6 +65,45 @@ function draftFrom(table: OperonTable, row: TableRow | null): Draft {
     values,
     newTopic: "",
   };
+}
+
+/** Below this much shrink it is the URL bar animating, not a keyboard (Operon's
+    `useAppFrameHeight` uses the same threshold). */
+export const KEYBOARD_THRESHOLD_PX = 120;
+
+/**
+ * Task 15 (spec 7.11, US9): while a phone's software keyboard is open, the height of what is
+ * actually visible. iOS keeps the layout viewport full-height and lays the keyboard over its
+ * bottom, so a Save pinned to the bottom of a full-height sheet sits behind the keyboard;
+ * `visualViewport` is the only thing that reports the shrunken area. Null = no keyboard.
+ */
+export function useVisibleHeight(enabled: boolean): number | null {
+  const [height, setHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!enabled || !viewport) {
+      setHeight(null);
+      return;
+    }
+    const sync = () => {
+      const vp = window.visualViewport;
+      if (!vp) return;
+      const shrunk = window.innerHeight - vp.height;
+      setHeight(
+        shrunk > KEYBOARD_THRESHOLD_PX
+          ? Math.round(vp.height + vp.offsetTop)
+          : null,
+      );
+    };
+    sync();
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+    };
+  }, [enabled]);
+  return height;
 }
 
 export function madeByLine(row: TableRow): string | null {
@@ -298,6 +339,8 @@ function RecordForm({
   const save = useSaveTableRow(table.projectId);
   const remove = useDeleteTableRow(table.projectId);
   const group = table.columns.find((c) => c.id === table.groupFieldId) ?? null;
+  const phone = useSyncedIsMobile();
+  const visibleHeight = useVisibleHeight(phone);
 
   useEffect(() => {
     setRow(initialRow);
@@ -325,7 +368,8 @@ function RecordForm({
         write: { title: draft.title, notes: draft.notes, values, newTopic },
       });
       toast.success("Saved");
-      if (!row) {
+      // A new entry, or any save on a phone, returns to the list (spec 7.11).
+      if (!row || phone) {
         onClose();
         return;
       }
@@ -351,22 +395,48 @@ function RecordForm({
   const lastChange = row ? lastChangeLine(row) : null;
 
   return (
-    <div className="flex h-full flex-col bg-card text-card-foreground">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+    <div
+      data-testid="record-panel"
+      className="flex h-full flex-col bg-card text-card-foreground"
+      // The keyboard case only: the panel ends where the visible area ends, so the sticky
+      // Save/Cancel row rides above the keyboard instead of under it.
+      style={visibleHeight ? { height: `${visibleHeight}px` } : undefined}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-between border-b border-border px-4 py-2.5",
+          phone && "pt-[calc(0.625rem+env(safe-area-inset-top))]",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2 text-sm">
-          <span className="truncate text-muted-foreground">{table.name}</span>
+          {phone ? (
+            <button
+              type="button"
+              aria-label={`Back to ${table.name}`}
+              data-testid="record-back"
+              onClick={onClose}
+              className="-ml-2 flex min-h-[44px] min-w-[44px] items-center gap-1 truncate"
+            >
+              <span aria-hidden="true">‹</span>
+              <span className="truncate">{table.name}</span>
+            </button>
+          ) : (
+            <span className="truncate text-muted-foreground">{table.name}</span>
+          )}
           <span className="text-muted-foreground">·</span>
           <span className="font-medium">Edit entry</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Close"
-          onClick={onClose}
-          className="text-card-foreground"
-        >
-          <X className="size-4" />
-        </Button>
+        {!phone && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Close"
+            onClick={onClose}
+            className="text-card-foreground"
+          >
+            <X className="size-4" />
+          </Button>
+        )}
       </div>
       <form
         className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
@@ -417,11 +487,28 @@ function RecordForm({
           {lastChange && <span data-testid="last-change">{lastChange}</span>}
           <span>Ledger: every change is a Proof-of-Work signal</span>
         </div>
-        <div className="sticky bottom-0 flex items-center gap-2 border-t border-border bg-card pt-3">
-          <Button type="submit" size="sm" disabled={save.isPending}>
+        <div
+          data-testid="record-actions"
+          className={cn(
+            "sticky bottom-0 flex items-center gap-2 border-t border-border bg-card pt-3",
+            phone && "pb-[env(safe-area-inset-bottom)]",
+          )}
+        >
+          <Button
+            type="submit"
+            size="sm"
+            disabled={save.isPending}
+            className={cn(phone && "min-h-[44px] flex-1")}
+          >
             Save
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            className={cn(phone && "min-h-[44px] flex-1")}
+          >
             Cancel
           </Button>
           {row && (

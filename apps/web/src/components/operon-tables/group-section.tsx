@@ -26,15 +26,50 @@ export function cellText(column: ShownColumn, value: unknown): string {
   return String(value);
 }
 
+/**
+ * Task 15 (spec 7.11, US8): the phone row's second line — the shown columns' values (a date
+ * as "6 Oct") then Made by, e.g. "Published · 6 Oct · LinkedIn · Rella agent".
+ */
+export function phoneDetailLine(row: TableRow, columns: ShownColumn[]): string {
+  const parts = columns.map((column) => {
+    const value = row.values[column.name];
+    if (column.kind === "date" && typeof value === "string" && value) {
+      const date = parseISO(value);
+      return isValid(date) ? format(date, "d MMM") : value;
+    }
+    return cellText(column, value);
+  });
+  return [...parts, row.madeBy.name ?? ""].filter(Boolean).join(" · ");
+}
+
 export function RowLine({
   row,
   columns,
   onOpen,
+  phone = false,
 }: {
   row: TableRow;
   columns: ShownColumn[];
   onOpen: (rowId: string) => void;
+  phone?: boolean;
 }) {
+  if (phone) {
+    return (
+      <button
+        type="button"
+        data-testid="table-row"
+        onClick={() => onOpen(row.rowId)}
+        className="flex min-h-[44px] w-full min-w-0 flex-col items-start gap-0.5 border-b border-border/50 px-4 py-2 text-left"
+      >
+        <span className="w-full truncate text-sm text-card-foreground">
+          {row.title}
+        </span>
+        <span className="w-full truncate text-xs text-muted-foreground">
+          {phoneDetailLine(row, columns)}
+        </span>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -84,6 +119,7 @@ export default function GroupSection({
   collapsed,
   onToggle,
   onOpen,
+  phone = false,
 }: {
   title: string;
   rows: TableRow[];
@@ -91,6 +127,7 @@ export default function GroupSection({
   collapsed: boolean;
   onToggle: () => void;
   onOpen: (rowId: string) => void;
+  phone?: boolean;
 }) {
   return (
     <section
@@ -121,6 +158,7 @@ export default function GroupSection({
               row={row}
               columns={columns}
               onOpen={onOpen}
+              phone={phone}
             />
           ))}
         </div>

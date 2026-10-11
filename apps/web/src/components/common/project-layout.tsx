@@ -27,6 +27,7 @@ import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import { useProjectWebSocket } from "@/hooks/use-project-websocket";
 import { cn } from "@/lib/cn";
+import { requestTablesAnchor, TABLES_ANCHOR_ID } from "@/store/phone-nav";
 
 type ProjectLayoutProps = {
   projectId: string;
@@ -140,20 +141,67 @@ export default function ProjectLayout({
               width any more. Backlog/Calendar/Gantt on phones is unreached by this brief
               (Piece B names project list, board/list view and task detail only) — filed as
               an open item, not silently dropped. */}
-          <div className="flex md:hidden min-w-0 items-center gap-2">
-            <button
-              type="button"
-              data-testid="phone-back-to-navigate"
-              aria-label="Back to Navigate"
-              onClick={() => phoneNav?.goBack()}
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
-            >
-              <ArrowLeft className="size-5" aria-hidden="true" />
-            </button>
-            <span className="truncate text-base font-bold">
-              {project?.name ?? t("navigation:sidebar.projects")}
-            </span>
-          </div>
+          {/* Tables task 15 (spec 7.11, US8): a table's phone bar reads "‹ Tables", the
+              table's name and "+" — back goes to the workspace list's Tables section (not
+              the project list top), and "+" opens an empty entry, as "Add entry" does on
+              desktop. Every other project keeps the Piece B bar unchanged. */}
+          {isTableProject ? (
+            <div className="flex md:hidden min-w-0 flex-1 items-center gap-2">
+              <button
+                type="button"
+                data-testid="phone-back-to-tables"
+                onClick={() => {
+                  requestTablesAnchor();
+                  navigate({
+                    to: "/dashboard/workspace/$workspaceId",
+                    params: { workspaceId },
+                    hash: TABLES_ANCHOR_ID,
+                  });
+                }}
+                className="min-w-[44px] min-h-[44px] flex items-center gap-1 -ml-2 text-sm font-medium"
+              >
+                <span aria-hidden="true">‹</span>
+                Tables
+              </button>
+              <span
+                data-testid="phone-table-name"
+                className="min-w-0 flex-1 truncate text-base font-bold"
+              >
+                {operonTable?.name ?? project?.name}
+              </span>
+              <button
+                type="button"
+                data-testid="phone-add-entry"
+                aria-label="Add entry"
+                onClick={() =>
+                  navigate({
+                    to: "/dashboard/workspace/$workspaceId/project/$projectId/table",
+                    params: { workspaceId, projectId },
+                    search: { taskId: "new" },
+                    replace: true,
+                  })
+                }
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-2xl leading-none"
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <div className="flex md:hidden min-w-0 items-center gap-2">
+              <button
+                type="button"
+                data-testid="phone-back-to-navigate"
+                aria-label="Back to Navigate"
+                onClick={() => phoneNav?.goBack()}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2"
+              >
+                <ArrowLeft className="size-5" aria-hidden="true" />
+              </button>
+              <span className="truncate text-base font-bold">
+                {project?.name ?? t("navigation:sidebar.projects")}
+              </span>
+            </div>
+          )}
 
           <div className="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
             <TooltipProvider>

@@ -45,6 +45,31 @@ vi.mock("@/hooks/queries/config/use-get-config", () => ({
   default: () => ({ data: undefined }),
 }));
 
+// Tables task 15: the phone list carries the workspace's Tables section (the "Tables" tab's
+// `#tables` target). Its data hooks are mocked; the section itself is a marker that echoes
+// the props it was given.
+vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
+  default: () => ({ data: { id: "w1" } }),
+}));
+vi.mock("@/hooks/use-workspace-permission", () => ({
+  useWorkspacePermission: () => ({ isAdmin: true }),
+}));
+vi.mock("@/components/operon-tables/tables-section", () => ({
+  default: ({
+    workspaceId,
+    isAdmin,
+  }: {
+    workspaceId: string;
+    isAdmin: boolean;
+  }) => (
+    <section
+      data-testid="tables-section"
+      data-workspace={workspaceId}
+      data-admin={String(isAdmin)}
+    />
+  ),
+}));
+
 const { default: OperonPhoneNavigate } = await import(
   "@/components/common/operon-phone-navigate"
 );
@@ -70,7 +95,9 @@ describe("OperonPhoneNavigate — iPhone pass 1, defect 2 (stamp placement)", ()
 
     const row = screen.getByTestId("phone-navigate-version-row");
     expect(row.contains(stamps[0])).toBe(true);
-    expect(row.className).toContain("env(safe-area-inset-bottom)");
+    // Tables task 15: the home-indicator inset moved to the bottom tab bar below the
+    // screen (`operon-bottom-tabs.tsx`), so the stamp row no longer stacks a second one.
+    expect(row.className).not.toContain("env(safe-area-inset-bottom)");
 
     // "Below the account row" as DOM order: the stamp row is the footer's immediately
     // following sibling.
@@ -88,5 +115,19 @@ describe("OperonPhoneNavigate — iPhone pass 1, defect 3 (top inset)", () => {
       .closest("div") as HTMLElement;
     const panel = headerRow.parentElement as HTMLElement;
     expect(panel.className).toContain("env(safe-area-inset-top)");
+  });
+});
+
+describe("OperonPhoneNavigate — Tables task 15", () => {
+  it("lists the workspace's Tables section after the projects, for the active workspace", () => {
+    render(<OperonPhoneNavigate />);
+    const section = screen.getByTestId("tables-section");
+    expect(section.getAttribute("data-workspace")).toBe("w1");
+    expect(section.getAttribute("data-admin")).toBe("true");
+    const projects = screen.getByTestId("nav-projects");
+    expect(
+      projects.compareDocumentPosition(section) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

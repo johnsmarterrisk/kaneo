@@ -7,7 +7,10 @@ import {
   OperonRailFooter,
   OperonVersionStamp,
 } from "@/components/operon-switcher";
+import TablesSection from "@/components/operon-tables/tables-section";
 import Search from "@/components/search";
+import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
+import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 
 /**
  * The fork's phone Navigate screen (Piece B, Round 2 mobile-nav brief) — mounted by
@@ -29,6 +32,8 @@ import Search from "@/components/search";
  * so a future rename only ever happens in one place.
  */
 function OperonPhoneNavigate() {
+  const { data: workspace } = useActiveWorkspace();
+  const { isAdmin } = useWorkspacePermission();
   const currentModuleLabel =
     OPERON_MODULES.find((module) => module.key === "initiative")?.label ??
     "Initiative";
@@ -80,6 +85,14 @@ function OperonPhoneNavigate() {
           <Search />
           <NavMain />
           <NavProjects />
+          {/* Tables task 15 (spec 7.11): the phone's workspace list carries the same Tables
+              section the desktop list does — the "Tables" tab's target (`#tables`). Its
+              headings take the navy ground's ink here; the cards keep their own. */}
+          {workspace?.id && (
+            <div className="[&_h2]:text-sidebar-foreground [&_h3]:text-sidebar-foreground">
+              <TablesSection workspaceId={workspace.id} isAdmin={isAdmin} />
+            </div>
+          )}
         </div>
 
         <OperonRailFooter phone />
@@ -87,9 +100,11 @@ function OperonPhoneNavigate() {
             safe area — see `operon-switcher.tsx`'s own doc comment on
             `OperonVersionStamp`. `OperonRailFooter` itself carries no bottom inset (its
             desktop use has none to carry), so the inset lives on this wrapper instead. */}
+        {/* Tables task 15: the home-indicator inset moved to the bottom tab bar below this
+            screen (`operon-bottom-tabs.tsx`); two stacked would leave a blank band. */}
         <div
           data-testid="phone-navigate-version-row"
-          className="px-3 pt-1 pb-[calc(0.25rem_+_env(safe-area-inset-bottom))]"
+          className="px-3 pt-1 pb-1"
         >
           <OperonVersionStamp />
         </div>

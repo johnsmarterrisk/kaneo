@@ -1,5 +1,6 @@
 import { Plus, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSyncedIsMobile } from "@/components/common/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { OperonTable } from "@/fetchers/operon-tables/get-table";
@@ -98,6 +99,10 @@ function TableViewBody({
   const [layout, setLayout] = useState<"list" | "gallery">("list");
   const gallery = hasImage && layout === "gallery";
   const query = useDebounced(searchText, 300);
+  // Task 15 (spec 7.11, US8): below 768px the same list, phone-shaped — the layout's bar
+  // carries the name and "+", the mode toggle reads "By topic | By date", one chip row,
+  // two-line rows, no horizontal scroll.
+  const phone = useSyncedIsMobile();
 
   const dropdowns = table.columns.filter((c) => c.kind === "dropdown");
   // Chip rows: Status first, then the other choice columns; the group column only when
@@ -143,14 +148,14 @@ function TableViewBody({
     return [...seen].sort((a, b) => b - a);
   }, [rows, dateColumn, year]);
 
-  const chipRows: ChipRow[] = [
-    ...chipColumns.map((c) => ({
-      key: c.id,
-      label: c.name,
-      options: c.options ?? [],
-      selected: activeFilters[c.id] ?? null,
-    })),
-    ...(dateColumn && years.length > 0
+  const columnChipRows: ChipRow[] = chipColumns.map((c) => ({
+    key: c.id,
+    label: c.name,
+    options: c.options ?? [],
+    selected: activeFilters[c.id] ?? null,
+  }));
+  const yearChipRows: ChipRow[] =
+    dateColumn && years.length > 0
       ? [
           {
             key: "__year",
@@ -159,8 +164,14 @@ function TableViewBody({
             selected: year === null ? null : String(year),
           },
         ]
-      : []),
-  ];
+      : [];
+  // Phone: ONE chip row — the status options, the years, then the first other choice
+  // column's options (spec 7.11); desktop keeps one labelled row per column.
+  const statusChipRows = status ? columnChipRows.slice(0, 1) : [];
+  const otherChipRows = status ? columnChipRows.slice(1) : columnChipRows;
+  const chipRows: ChipRow[] = phone
+    ? [...statusChipRows, ...yearChipRows, ...otherChipRows.slice(0, 1)]
+    : [...columnChipRows, ...yearChipRows];
 
   // Columns: Title, the group column when sorted, Status, the date column, other choices.
   const shown: ShownColumn[] = [
@@ -213,6 +224,7 @@ function TableViewBody({
         collapsed={collapsed}
         onToggle={toggle}
         onOpen={onOpenRow}
+        phone={phone}
       />
     );
   } else {
@@ -231,6 +243,7 @@ function TableViewBody({
             collapsed={collapsed.has("__nodate")}
             onToggle={() => toggle("__nodate")}
             onOpen={onOpenRow}
+            phone={phone}
           />
         )}
         {visible.map((bucket) => (
@@ -242,6 +255,7 @@ function TableViewBody({
             collapsed={collapsed.has(bucket.key)}
             onToggle={() => toggle(bucket.key)}
             onOpen={onOpenRow}
+            phone={phone}
           />
         ))}
         {!showOlder && older > 0 && (
@@ -260,10 +274,17 @@ function TableViewBody({
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-border bg-card px-4 py-3 text-card-foreground">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-base font-semibold" data-testid="table-header">
-            {header}
-          </h1>
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2",
+            phone && !hasImage && "hidden",
+          )}
+        >
+          {!phone && (
+            <h1 className="text-base font-semibold" data-testid="table-header">
+              {header}
+            </h1>
+          )}
           <div className="flex items-center gap-1.5">
             {hasImage && (
               <div className="inline-flex rounded-md border border-border p-0.5">
@@ -285,7 +306,7 @@ function TableViewBody({
                 ))}
               </div>
             )}
-            {isAdmin && (
+            {isAdmin && !phone && (
               <Button
                 variant="outline"
                 size="xs"
@@ -296,10 +317,12 @@ function TableViewBody({
                 Columns
               </Button>
             )}
-            <Button size="xs" onClick={onAddEntry} className="gap-1">
-              <Plus className="h-3 w-3" />
-              Add entry
-            </Button>
+            {!phone && (
+              <Button size="xs" onClick={onAddEntry} className="gap-1">
+                <Plus className="h-3 w-3" />
+                Add entry
+              </Button>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -308,7 +331,7 @@ function TableViewBody({
             onChange={(e) => setSearchText(e.target.value)}
             placeholder={`Search ${table.name.toLowerCase()}`}
             aria-label={`Search ${table.name.toLowerCase()}`}
-            className="h-8 max-w-xs bg-card text-sm"
+            className={cn("h-8 bg-card text-sm", phone ? "w-full" : "max-w-xs")}
           />
           <div className="inline-flex rounded-md border border-border p-0.5">
             <button
@@ -324,7 +347,7 @@ function TableViewBody({
                 !group && "cursor-not-allowed opacity-50",
               )}
             >
-              Group by {groupWord}
+              {phone ? `By ${groupWord}` : `Group by ${groupWord}`}
             </button>
             <button
               type="button"
@@ -339,12 +362,13 @@ function TableViewBody({
                 !dateColumn && "cursor-not-allowed opacity-50",
               )}
             >
-              Sort by date
+              {phone ? "By date" : "Sort by date"}
             </button>
           </div>
         </div>
         <ChipRows
           rows={chipRows}
+          inline={phone}
           onSelect={(key, option) => {
             if (key === "__year") {
               setYear(option === null ? null : Number(option));
@@ -364,8 +388,14 @@ function TableViewBody({
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-auto bg-muted/20">
-        {!query && !gallery && <ColumnHeader columns={shown} />}
+      <div
+        data-testid="table-list"
+        className={cn(
+          "flex-1 bg-muted/20",
+          phone ? "overflow-y-auto overflow-x-hidden" : "overflow-auto",
+        )}
+      >
+        {!query && !gallery && !phone && <ColumnHeader columns={shown} />}
         {body}
       </div>
     </div>
@@ -379,6 +409,7 @@ function GroupedList({
   collapsed,
   onToggle,
   onOpen,
+  phone,
 }: {
   rows: TableRow[];
   group: ShownColumn | null;
@@ -386,6 +417,7 @@ function GroupedList({
   collapsed: Set<string>;
   onToggle: (key: string) => void;
   onOpen: (rowId: string) => void;
+  phone: boolean;
 }) {
   if (!group) {
     return (
@@ -396,6 +428,7 @@ function GroupedList({
         collapsed={collapsed.has("__all")}
         onToggle={() => onToggle("__all")}
         onOpen={onOpen}
+        phone={phone}
       />
     );
   }
@@ -421,6 +454,7 @@ function GroupedList({
             collapsed={collapsed.has(`g:${option}`)}
             onToggle={() => onToggle(`g:${option}`)}
             onOpen={onOpen}
+            phone={phone}
           />
         ))}
       {none.length > 0 && (
@@ -431,6 +465,7 @@ function GroupedList({
           collapsed={collapsed.has("__none")}
           onToggle={() => onToggle("__none")}
           onOpen={onOpen}
+          phone={phone}
         />
       )}
     </>

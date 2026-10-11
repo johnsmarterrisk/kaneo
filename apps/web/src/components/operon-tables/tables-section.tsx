@@ -1,13 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
 import { formatDistanceToNow, isValid, parseISO } from "date-fns";
 import { Plus, Table2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   RecentRow,
   TableSummary,
 } from "@/fetchers/operon-tables/get-tables-summary";
 import useTablesSummary from "@/hooks/queries/operon-tables/use-tables-summary";
 import { formatDateMedium } from "@/lib/format";
+import { TABLES_ANCHOR_ID, takeTablesAnchor } from "@/store/phone-nav";
 import CreateTableModal from "./create-table-modal";
 
 /**
@@ -132,7 +133,16 @@ export default function TablesSection({
   const { data } = useTablesSummary(workspaceId);
   const [creating, setCreating] = useState(false);
   const tables = data?.tables ?? [];
-  if (tables.length === 0 && !isAdmin) return null;
+  const hidden = tables.length === 0 && !isAdmin;
+  // Task 15: the "Tables" tab's anchor (`store/phone-nav.ts`), consumed once the summary has
+  // answered — before that the section has no height to scroll to.
+  useEffect(() => {
+    if (!data || !takeTablesAnchor() || hidden) return;
+    document
+      .getElementById(TABLES_ANCHOR_ID)
+      ?.scrollIntoView({ block: "start" });
+  }, [data, hidden]);
+  if (hidden) return null;
 
   const openTable = (tableId: string, taskId?: string) =>
     navigate({
@@ -142,7 +152,7 @@ export default function TablesSection({
     });
 
   return (
-    <section id="tables" className="flex flex-col gap-3 px-4 py-4">
+    <section id={TABLES_ANCHOR_ID} className="flex flex-col gap-3 px-4 py-4">
       <h2 className="text-md font-medium text-card-foreground">Tables</h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {tables.map((table) => (

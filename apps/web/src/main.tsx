@@ -17,10 +17,14 @@ import { KeyboardShortcutsProvider } from "./hooks/use-keyboard-shortcuts";
 import { captureCheckoutIntent } from "./lib/checkout-intent";
 import { AppI18nProvider } from "./lib/i18n/provider";
 import { routeTree } from "./routeTree.gen";
+import { captureTablesAnchor } from "./store/phone-nav";
 
 // Capture a pricing-page `?checkout=<plan>-<interval>` deep link before the
 // router runs and strips it across the sign-up → onboarding redirect chain.
 captureCheckoutIntent();
+// Operon fork addition (Tables task 15): Operon's "Tables" tab lands on `/#tables`; keep the
+// anchor across the same redirect chain (see `store/phone-nav.ts`).
+captureTablesAnchor();
 
 console.log(`
                      ////////  
