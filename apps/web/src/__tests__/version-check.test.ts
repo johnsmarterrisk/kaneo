@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runtimeDefines } from "../../vite.config";
 
 // Hoisted so `vi.mock` factories below (themselves hoisted above these imports at
 // execution time) can close over a MUTABLE mutation count each `useVersionCheck` test
@@ -66,10 +69,10 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   // Stage 1 finding 4: the document's OWN loaded version is now read from the
-  // container-start-embedded `__KANEO_LOADED_VERSION_JSON__` constant, not fetched —
+  // `window.__OPERON_LOADED_VERSION__` env.sh writes into index.html, not fetched —
   // stub it to `VALID` as the default baseline every test compares the fetched
   // "latest" against.
-  vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", JSON.stringify(VALID));
+  vi.stubGlobal("__OPERON_LOADED_VERSION__", VALID);
   resetLoadedVersionForTests();
   resetReloadScheduledForTests();
   resetDirtyEditorsForTests();
@@ -123,21 +126,37 @@ describe("fetchVersionJson", () => {
   });
 });
 
-describe("getLoadedVersion — Stage 1 finding 4: read from the embedded constant, never fetched", () => {
-  it("reads the embedded __KANEO_LOADED_VERSION_JSON__ constant without ever calling fetch", async () => {
+describe("getLoadedVersion — read from index.html's slot (open-items 458), never fetched", () => {
+  it("reads window.__OPERON_LOADED_VERSION__ without ever calling fetch", async () => {
     const [a, b] = await Promise.all([getLoadedVersion(), getLoadedVersion()]);
     expect(a).toEqual(VALID);
     expect(b).toEqual(VALID);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("an un-substituted placeholder (a dev build with no env.sh run) resolves to null, never throws", async () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
-    );
+  it("the un-filled slot (null — vite dev, no env.sh run) resolves to null, never throws", async () => {
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", null);
     resetLoadedVersionForTests();
     await expect(getLoadedVersion()).resolves.toBeNull();
+  });
+
+  it("a malformed slot value resolves to null", async () => {
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", { ...VALID, config_hash: 7 });
+    resetLoadedVersionForTests();
+    await expect(getLoadedVersion()).resolves.toBeNull();
+  });
+
+  it("index.html carries the slot env.sh fills, and vite defines no bundle slot for it", () => {
+    const html = readFileSync(
+      resolve(import.meta.dirname, "../../index.html"),
+      "utf8",
+    );
+    expect(html).toContain(
+      '<script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = null;</script>',
+    );
+    expect(
+      Object.keys(runtimeDefines({ VITE_API_URL: "KANEO_API_URL" })),
+    ).toEqual(["import.meta.env.VITE_API_URL"]);
   });
 });
 

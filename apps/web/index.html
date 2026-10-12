@@ -53,6 +53,13 @@
   <link rel="preload" as="font" type="font/woff2" crossorigin
     href="/fonts/manrope-latin-wght-normal.woff2">
 
+  <!-- Loaded-version slot (open-items 458, Operon repo). env.sh replaces this whole element
+    at container start with the deployment identity. It lives in index.html, which is
+    served no-cache, and never in a hashed .js chunk: rewriting a chunk's bytes under an
+    unchanged filename let a CDN serve the previous release's identity for hours, and the
+    version check reloaded in a loop. `null` here means "no identity" (vite dev). -->
+  <script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = null;</script>
+
   <script>
     // Pre-paint theme resolution (Codex round-1 finding 12, manager ruling; mirrors
     // `app/index.html`'s pre-paint script in the Operon repository, GUI pass task 1;

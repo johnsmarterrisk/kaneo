@@ -10,6 +10,11 @@ import config, { runtimeDefines } from "../vite.config";
 import { formatStamp } from "./lib/version-check";
 
 const ENV_SH = readFileSync(resolve(import.meta.dirname, "../env.sh"), "utf8");
+// The real source index.html: its loaded-version slot is what env.sh rewrites.
+const INDEX_HTML = readFileSync(
+  resolve(import.meta.dirname, "../index.html"),
+  "utf8",
+);
 const ROOT = "/usr/share/nginx/html";
 const NGINX = "/etc/nginx/conf.d/default.conf";
 const identityEnv = {
@@ -23,6 +28,7 @@ const identityEnv = {
 function runEntrypoint(
   bundle: string,
   env: Record<string, string | undefined> = {},
+  html: string = INDEX_HTML,
 ) {
   const harness = `
     const fs = require('node:fs');
@@ -50,6 +56,7 @@ function runEntrypoint(
           HARNESS: harness,
           FIXTURE_FILES: JSON.stringify({
             [`${ROOT}/probe.js`]: bundle,
+            [`${ROOT}/index.html`]: html,
             [NGINX]:
               "return 200 'MCP_PRM_JSON_PLACEHOLDER';\nreturn 200 'MCP_AS_JSON_PLACEHOLDER';",
           }),
@@ -73,13 +80,32 @@ function identity(files: Record<string, string>) {
 }
 
 describe("runtime entrypoint", () => {
-  it("evaluates the actual identity substitution as JS and matches version.json", () => {
-    const bundle = `globalThis.identity = ${definitions.__KANEO_LOADED_VERSION_JSON__};`;
-    const files = runEntrypoint(bundle);
-    const context: { identity?: string } = {};
-    new Script(files[`${ROOT}/probe.js`]).runInNewContext(context);
-    expect(JSON.parse(context.identity ?? "null")).toEqual(identity(files));
+  it("writes the identity into index.html's slot, matching version.json (open-items 458)", () => {
+    const files = runEntrypoint("");
+    const html = files[`${ROOT}/index.html`];
+    const script = html.match(
+      /<script id="operon-loaded-version">([\s\S]*?)<\/script>/,
+    );
+    const context: { window: { __OPERON_LOADED_VERSION__?: unknown } } = {
+      window: {},
+    };
+    new Script(script?.[1] ?? "").runInNewContext(context);
+    expect(context.window.__OPERON_LOADED_VERSION__).toEqual(identity(files));
     expect(identity(files).release).toBe("2026.09.22-4");
+    // Everything outside the slot is byte-for-byte the source document.
+    expect(html.replace(script?.[0] ?? "", "")).toBe(
+      INDEX_HTML.replace(
+        /<script id="operon-loaded-version">[\s\S]*?<\/script>/,
+        "",
+      ),
+    );
+  });
+
+  it("is idempotent across container restarts and fails loud without the slot", () => {
+    const once = runEntrypoint("")[`${ROOT}/index.html`];
+    const twice = runEntrypoint("", {}, once)[`${ROOT}/index.html`];
+    expect(twice.match(/operon-loaded-version/g)).toHaveLength(1);
+    expect(() => runEntrypoint("", {}, "<html><head></head></html>")).toThrow();
   });
 
   it("escapes quotes, backslashes, controls and Unicode without shifting any code", () => {
@@ -188,7 +214,6 @@ it("keeps real Vite source-map positions valid after every runtime substitution"
   const source = [
     "globalThis.api = import.meta.env.VITE_API_URL;",
     "globalThis.apex = import.meta.env.VITE_OPERON_APEX_URL;",
-    "globalThis.identity = __KANEO_LOADED_VERSION_JSON__;",
     // biome-ignore lint/suspicious/noTemplateCurlyInString: input source for Vite
     "globalThis.callback = `${import.meta.env.VITE_CLIENT_URL}/auth/sign-in`;",
     'throw new Error("mapping probe");',
@@ -236,7 +261,7 @@ it("keeps real Vite source-map positions valid after every runtime substitution"
     Number(location?.[1]) - 1,
     Number(location?.[2]) - 1,
   );
-  expect("originalLine" in original && original.originalLine).toBe(4);
+  expect("originalLine" in original && original.originalLine).toBe(3);
   expect(context.callback).toBe(
     "https://initiative.example.invalid/auth/sign-in",
   );

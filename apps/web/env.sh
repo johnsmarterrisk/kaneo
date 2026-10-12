@@ -38,8 +38,7 @@ if (!/^(?:unknown|v[1-9]\d*\.(?:0|[1-9]\d*)|\d{4}\.\d{2}\.\d{2}-\d+)$/.test(iden
 function substitute(source) {
   return source.replace(/(["'`])((?:KANEO_[A-Z0-9_]+|OPERON_APEX_URL) +)\1/g, (slot, quote, paddedKey) => {
     const key = paddedKey.trimEnd();
-    const value = key === "KANEO_LOADED_VERSION_JSON_PLACEHOLDER" ? JSON.stringify(identity)
-      : env[key] || (key === "KANEO_TURNSTILE_SITE_KEY" ? "" : key);
+    const value = env[key] || (key === "KANEO_TURNSTILE_SITE_KEY" ? "" : key);
     // ASCII escapes keep byte offsets, UTF-16 columns and line counts identical,
     // including for quotes, backslashes, controls and non-ASCII configuration.
     const literal = JSON.stringify(JSON.stringify(value)).replace(/[\u007f-\uffff]/g,
@@ -62,6 +61,21 @@ function visit(directory) {
   }
 }
 visit(root);
+
+// The loaded identity lives in index.html, never in a hashed .js chunk (open-items 458,
+// Operon repo). index.html is served no-cache and is not edge-cached, so a reload always
+// sees the release it belongs to. Writing the identity into a chunk changed its bytes
+// under an unchanged hashed filename, and a CDN that rewrote no-cache to max-age kept
+// serving the previous release's identity: the version check then reloaded forever.
+// The slot element is replaced whole, so a container restart rewrites it idempotently.
+const indexPath = `${root}/index.html`;
+const VERSION_SLOT = /<script id="operon-loaded-version">[\s\S]*?<\/script>/;
+const indexSource = fs.readFileSync(indexPath, "utf8");
+if (!VERSION_SLOT.test(indexSource)) throw new Error("index.html has no loaded-version slot");
+// "<" escaped so no value can close the script element early.
+const versionScript = `<script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = ${
+  JSON.stringify(identity).replaceAll("<", "\\u003c")};</script>`;
+writes.push([indexPath, indexSource.replace(VERSION_SLOT, () => versionScript)]);
 
 // Validate everything before publishing any changed bundle or manifest.
 let prm = {};

@@ -22,9 +22,9 @@ const RUNTIME_SLOT_SIZE = 4096;
 export function runtimeDefines(
   env: Record<string, string>,
 ): Record<string, string> {
-  const definitions: Record<string, string> = {
-    __KANEO_LOADED_VERSION_JSON__: `JSON.parse(${JSON.stringify("KANEO_LOADED_VERSION_JSON_PLACEHOLDER".padEnd(RUNTIME_SLOT_SIZE))})`,
-  };
+  // The loaded version identity is NOT a slot here: env.sh writes it into index.html
+  // (window.__OPERON_LOADED_VERSION__) so it never changes a hashed chunk's bytes.
+  const definitions: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (/^(KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/.test(value)) {
       definitions[`import.meta.env.${key}`] =

@@ -727,16 +727,13 @@ describe("OperonVersionStamp", () => {
     });
 
     it("renders v1.0 and the known-SHA tooltip — Codex round 1 finding 12: a real render, not just class/default-tooltip assertions", async () => {
-      vi.stubGlobal(
-        "__KANEO_LOADED_VERSION_JSON__",
-        JSON.stringify({
-          release: "v1.0",
-          operon_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-          fork_sha: "f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5",
-          config_hash: "deadbeef",
-          built_at: "2026-09-22T12:00:00.000Z",
-        }),
-      );
+      vi.stubGlobal("__OPERON_LOADED_VERSION__", {
+        release: "v1.0",
+        operon_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        fork_sha: "f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5",
+        config_hash: "deadbeef",
+        built_at: "2026-09-22T12:00:00.000Z",
+      });
 
       render(<OperonVersionStamp />);
       const stamp = screen.getByTestId("version-stamp");

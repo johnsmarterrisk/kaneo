@@ -179,16 +179,13 @@ describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
   });
 
   it("carries both deployment SHAs as validated tags alongside the immutable build release", async () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      JSON.stringify({
-        release: "2026.09.22-4",
-        operon_sha: "a".repeat(40),
-        fork_sha: "b".repeat(40),
-        config_hash: "deadbeef",
-        built_at: "2026-09-22T00:00:00.000Z",
-      }),
-    );
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", {
+      release: "2026.09.22-4",
+      operon_sha: "a".repeat(40),
+      fork_sha: "b".repeat(40),
+      config_hash: "deadbeef",
+      built_at: "2026-09-22T00:00:00.000Z",
+    });
     const result = await redactEvent({ type: undefined });
     expect(result.tags).toEqual({
       deployment_release: "2026.09.22-4",
@@ -198,20 +195,17 @@ describe("releaseIdentity (Stage 1 round-1 finding 17)", () => {
   });
 
   it("falls back to unknown when no build release is defined", () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
-    );
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", null);
     expect(releaseIdentity()).toBe("unknown"); // __APP_VERSION__ is also undefined in this test env
   });
 
   it("falls back on malformed embedded JSON, never throws", () => {
-    vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", "not json");
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", "not an object");
     expect(() => releaseIdentity()).not.toThrow();
   });
 
   it("falls back when the embedded constant is entirely absent", () => {
-    vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", undefined);
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", undefined);
     expect(() => releaseIdentity()).not.toThrow();
   });
 });

@@ -3,11 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { i18n } from "@/lib/i18n";
 
-/** Vite emits a fixed-width runtime slot. env.sh fills it at container start;
-    JSON.parse in the define prevents constant folding into surrounding strings. */
-declare const __KANEO_LOADED_VERSION_JSON__: string;
-
-/** The loaded identity belongs to these bundle bytes. Only the target is fetched:
+/** The loaded identity belongs to this document: env.sh writes it into index.html as
+    `window.__OPERON_LOADED_VERSION__` (open-items 458, Operon repo). It must never live in
+    a hashed .js chunk — env.sh rewriting a chunk under an unchanged filename let a CDN
+    serve the previous release's identity for hours and the check reloaded in a loop. Only the target is fetched:
     fetching both from /version.json would make a cached document compare the newest
     manifest to itself and miss every update. Keep the config hash in the comparison
     because the same build can be deployed with different runtime URLs. */
@@ -85,32 +84,29 @@ export function resetInFlightVersionFetchForTests(): void {
 
 let cachedLoadedVersion: VersionInfo | null | undefined;
 
-/** Parses the build-time/container-start-embedded `__KANEO_LOADED_VERSION_JSON__`
-    constant. `undefined` (the define never ran — a non-Vite test environment), the raw,
-    never-substituted placeholder text (a dev build with no `env.sh` run, e.g. `vite dev`),
-    and a malformed/unparseable payload all become `null` — the same "cannot tell" contract
-    `fetchVersionJson()` uses for a network failure. */
-function parseEmbeddedVersion(): VersionInfo | null {
+/** Reads the identity env.sh wrote into index.html. Absent (a non-browser test
+    environment), `null` (vite dev, no env.sh run) and a malformed object all become
+    `null` — the same "cannot tell" contract `fetchVersionJson()` uses for a network
+    failure. */
+export function readEmbeddedVersion(): VersionInfo | null {
   try {
-    const raw =
-      typeof __KANEO_LOADED_VERSION_JSON__ === "string"
-        ? __KANEO_LOADED_VERSION_JSON__
-        : "";
-    if (!raw || raw === "KANEO_LOADED_VERSION_JSON_PLACEHOLDER") return null;
-    const body: unknown = JSON.parse(raw);
-    return isVersionInfo(body) ? body : null;
+    const embedded =
+      typeof window === "undefined"
+        ? undefined
+        : window.__OPERON_LOADED_VERSION__;
+    return isVersionInfo(embedded) ? embedded : null;
   } catch {
     return null;
   }
 }
 
-/** The version THIS document loaded with — read from the embedded constant exactly once
+/** The version THIS document loaded with — read from index.html's slot exactly once
     per document lifetime and cached. `resetLoadedVersionForTests()` is the only way to
     clear it; a real browser document never needs it (a reload is a fresh module graph and
-    a fresh embedded constant). */
+    a fresh index.html). */
 export function getLoadedVersion(): Promise<VersionInfo | null> {
   if (cachedLoadedVersion === undefined) {
-    cachedLoadedVersion = parseEmbeddedVersion();
+    cachedLoadedVersion = readEmbeddedVersion();
   }
   return Promise.resolve(cachedLoadedVersion);
 }

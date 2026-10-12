@@ -22,16 +22,13 @@ afterEach(() => {
 
 describe("OperonVersionAbout", () => {
   it("renders the version and both full SHAs from the same embedded identity OperonVersionStamp reads", async () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      JSON.stringify({
-        release: "2026.09.22-4",
-        operon_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-        fork_sha: "f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5",
-        config_hash: "deadbeef",
-        built_at: "2026-09-22T12:00:00.000Z",
-      }),
-    );
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", {
+      release: "2026.09.22-4",
+      operon_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      fork_sha: "f4e5d6c7b8a9f4e5d6c7b8a9f4e5d6c7b8a9f4e5",
+      config_hash: "deadbeef",
+      built_at: "2026-09-22T12:00:00.000Z",
+    });
 
     render(<OperonVersionAbout />);
 
@@ -51,16 +48,13 @@ describe("OperonVersionAbout", () => {
   });
 
   it('renders "dev" and "unknown" for a local build with no release identity, never throwing', async () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      JSON.stringify({
-        release: "",
-        operon_sha: "unknown",
-        fork_sha: "unknown",
-        config_hash: "deadbeef",
-        built_at: "2026-09-22T12:00:00.000Z",
-      }),
-    );
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", {
+      release: "",
+      operon_sha: "unknown",
+      fork_sha: "unknown",
+      config_hash: "deadbeef",
+      built_at: "2026-09-22T12:00:00.000Z",
+    });
 
     render(<OperonVersionAbout />);
 
@@ -78,7 +72,7 @@ describe("OperonVersionAbout", () => {
   });
 
   it('renders "unknown" placeholders before the embedded identity resolves, never a blank cell', () => {
-    vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", undefined);
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", undefined);
     render(<OperonVersionAbout />);
     expect(screen.getByTestId("about-version-operon-sha").textContent).toBe(
       "unknown",
