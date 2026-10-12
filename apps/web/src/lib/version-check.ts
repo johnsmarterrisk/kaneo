@@ -296,6 +296,9 @@ export function resetMutationAdmissionForTests(): void {
     between two flapping targets never hit the per-target cap. */
 interface StoredAttempts {
   perTarget: Record<string, number>;
+  /** The loaded key the counts were taken under (open-items 458). Absent in ledgers
+      written before it existed — treated as "a different document". */
+  loadedKey?: string;
 }
 
 /** `null` means the ledger could not be read — the caller must treat that as "cannot
@@ -326,7 +329,11 @@ function readAttempts(): StoredAttempts | null {
           return null;
         clean[key] = value;
       }
-      return { perTarget: clean };
+      const loadedKey = (parsed as StoredAttempts).loadedKey;
+      if (loadedKey !== undefined && typeof loadedKey !== "string") return null;
+      return loadedKey === undefined
+        ? { perTarget: clean }
+        : { perTarget: clean, loadedKey };
     }
     return null;
   } catch {
@@ -349,8 +356,66 @@ function totalAttempts(attempts: StoredAttempts): number {
   return Object.values(attempts.perTarget).reduce((sum, n) => sum + n, 0);
 }
 
+/**
+ * Open-items 458: the ledger resets when the document's loaded key changes. A document
+ * that loaded a new identity has made progress, so counts from the previous document must
+ * not leave it stuck at "automatic reload is paused" (the ledger survives reloads in a
+ * standalone PWA). The count for the key just LEFT is kept: when two deployments flap
+ * (document A, version.json B, then the reverse), going back to that key still hits
+ * MAX_RELOAD_ATTEMPTS_PER_VERSION, so the reset can never make the reload loop unbounded.
+ * An unreadable ledger is left alone; attemptReload already refuses on it.
+ */
+function syncLedgerToLoadedKey(loadedKey: string): void {
+  const attempts = readAttempts();
+  if (attempts === null || attempts.loadedKey === loadedKey) return;
+  const left = attempts.loadedKey;
+  const kept: Record<string, number> = {};
+  if (left !== undefined && attempts.perTarget[left] !== undefined)
+    kept[left] = attempts.perTarget[left];
+  writeAttempts({ perTarget: kept, loadedKey });
+}
+
+export const HARD_RELOAD_TIMEOUT_MS = 5000;
+
+/**
+ * Open-items 458: re-fetch the document and every same-origin /assets/*.js this document
+ * loaded with `cache: "reload"`, then reload. `cache: "reload"` overwrites the browser's
+ * HTTP-cache entry for those exact URLs, which is the entry a stale CDN max-age pinned.
+ * A `?__v=` query on the document would not help: it changes the document URL only, and
+ * the module graph still imports the same /assets URLs from the stale cache entry. The
+ * refresh is bounded by HARD_RELOAD_TIMEOUT_MS and best-effort: the reload always runs.
+ */
+export async function hardReload(): Promise<void> {
+  const urls = new Set<string>([window.location.href]);
+  try {
+    for (const entry of performance.getEntriesByType("resource")) {
+      const url = new URL(entry.name, window.location.href);
+      if (
+        url.origin === window.location.origin &&
+        url.pathname.startsWith("/assets/") &&
+        url.pathname.endsWith(".js")
+      )
+        urls.add(url.href);
+    }
+  } catch {
+    // Resource timing unavailable — the document refresh alone still runs.
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HARD_RELOAD_TIMEOUT_MS);
+  try {
+    await Promise.allSettled(
+      [...urls].map((url) =>
+        fetch(url, { cache: "reload", signal: controller.signal }),
+      ),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  window.location.reload();
+}
+
 export type Reloader = () => void;
-const defaultReloader: Reloader = () => window.location.reload();
+const defaultReloader: Reloader = () => void hardReload();
 
 export interface UseVersionCheckOptions {
   /** Test seam only — production always uses `defaultReloader`. */
@@ -381,6 +446,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
     let drainTimer: ReturnType<typeof setInterval> | null = null;
     let hasReloaded = false;
     let notifiedForTargetKey: string | null = null;
+    let loadedKey: string | null = null;
 
     const isProtected = () =>
       mutationCountRef.current > 0 || inFlightWrites > 0 || hasDirtyEditor();
@@ -392,18 +458,27 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       }
     }
 
-    function showRecovery() {
+    /** "dirty": unsaved work is protected, the copy says reloading discards it.
+        "failed" (open-items 458): nothing is dirty but automatic reload gave up — the
+        ledger is exhausted, unreadable or unwritable — so the copy must not claim edits. */
+    function showRecovery(kind: "dirty" | "failed") {
       reloadScheduled = true;
-      toast.info(i18n.t("common:versionUpdate.pending"), {
+      const copy =
+        kind === "dirty"
+          ? { message: "pending", label: "discardAndReload" }
+          : { message: "failed", label: "reload" };
+      toast.info(i18n.t(`common:versionUpdate.${copy.message}`), {
         id: "version-update",
         duration: Number.POSITIVE_INFINITY,
         dismissible: false,
         action: {
-          label: i18n.t("common:versionUpdate.discardAndReload"),
+          label: i18n.t(`common:versionUpdate.${copy.label}`),
           onClick: () => {
             if (cancelled || hasReloaded || navigator.onLine === false) return;
             hasReloaded = true;
             clearDrainTimer();
+            // A deliberate reload starts a fresh ledger: the user asked for it.
+            if (loadedKey !== null) writeAttempts({ perTarget: {}, loadedKey });
             reloaderRef.current();
           },
         },
@@ -411,7 +486,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
     }
 
     function requireManualRecovery() {
-      showRecovery();
+      showRecovery("failed");
       clearDrainTimer();
     }
 
@@ -419,6 +494,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       if (hasReloaded || cancelled) return;
       if (isProtected()) return; // still protected — the drain poller will retry
 
+      if (loadedKey !== null) syncLedgerToLoadedKey(loadedKey);
       const attempts = readAttempts();
       if (attempts === null) {
         // Finding 11: the ledger is unreadable — cannot prove this is bounded, refuse.
@@ -436,6 +512,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       }
 
       const wrote = writeAttempts({
+        ...attempts,
         perTarget: { ...attempts.perTarget, [targetKey]: alreadyTried + 1 },
       });
       if (!wrote) {
@@ -458,14 +535,15 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
 
       const loaded = await getLoadedVersion();
       if (!loaded || cancelled) return;
+      loadedKey ??= versionKey(loaded);
 
       const latest = await fetchVersionJson();
       if (!latest || cancelled || hasReloaded || navigator.onLine === false)
         return;
 
       const targetKey = versionKey(latest);
-      if (targetKey === versionKey(loaded)) {
-        writeAttempts({ perTarget: {} });
+      if (targetKey === loadedKey) {
+        writeAttempts({ perTarget: {}, loadedKey });
         toast.dismiss("version-update");
         // Finding 12: "withdrawn updates" — the server reverted to the version this
         // document already has. Cancel any previously deferred reload rather than leave
@@ -480,7 +558,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         reloadScheduled = true;
         if (notifiedForTargetKey !== targetKey) {
           notifiedForTargetKey = targetKey;
-          showRecovery();
+          showRecovery("dirty");
         }
         if (drainTimer === null) {
           // Finding 12: re-run the FULL check (fresh fetch) on drain rather than blindly

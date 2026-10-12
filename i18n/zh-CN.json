@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "新版本已可用。自动重新加载已暂停。立即重新加载将丢弃未保存的更改。",
 			"writeRefused": "新版本正在等待。请先重新加载，再进行其他更改。",
-			"discardAndReload": "丢弃未保存的更改并重新加载"
+			"discardAndReload": "丢弃未保存的更改并重新加载",
+			"failed": "无法自动更新。",
+			"reload": "重新加载"
 		},
 		"appName": "Initiative",
 		"actions": {

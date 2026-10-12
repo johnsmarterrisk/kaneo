@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "Er is een nieuwe versie beschikbaar. Automatisch herladen is gepauzeerd. Als je nu herlaadt, gaan niet-opgeslagen wijzigingen verloren.",
 			"writeRefused": "Er staat een nieuwe versie klaar. Herlaad voordat je nog een wijziging maakt.",
-			"discardAndReload": "Niet-opgeslagen wijzigingen verwerpen en herladen"
+			"discardAndReload": "Niet-opgeslagen wijzigingen verwerpen en herladen",
+			"failed": "Automatisch bijwerken is niet gelukt.",
+			"reload": "Herladen"
 		},
 		"appName": "Initiative",
 		"actions": {

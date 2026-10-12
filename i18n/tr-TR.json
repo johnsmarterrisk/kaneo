@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "Yeni bir sürüm mevcut. Otomatik yeniden yükleme duraklatıldı. Şimdi yeniden yüklemek kaydedilmemiş değişiklikleri siler.",
 			"writeRefused": "Yeni bir sürüm bekliyor. Başka bir değişiklik yapmadan önce yeniden yükleyin.",
-			"discardAndReload": "Kaydedilmemiş değişiklikleri sil ve yeniden yükle"
+			"discardAndReload": "Kaydedilmemiş değişiklikleri sil ve yeniden yükle",
+			"failed": "Otomatik olarak güncellenemedi.",
+			"reload": "Yeniden yükle"
 		},
 		"appName": "Initiative",
 		"actions": {

@@ -15,9 +15,17 @@
 					"properties": {
 						"pending": { "type": "string" },
 						"writeRefused": { "type": "string" },
-						"discardAndReload": { "type": "string" }
+						"discardAndReload": { "type": "string" },
+						"failed": { "type": "string" },
+						"reload": { "type": "string" }
 					},
-					"required": ["pending", "writeRefused", "discardAndReload"]
+					"required": [
+						"pending",
+						"writeRefused",
+						"discardAndReload",
+						"failed",
+						"reload"
+					]
 				},
 				"appName": {
 					"type": "string"
