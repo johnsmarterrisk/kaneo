@@ -2,6 +2,7 @@
 
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { runtimeDefines } from "../../vite.config";
 
 /**
  * Operon fork check (spec R14, task B11) — the apex placeholder, in the artefact that
@@ -17,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 const DEV_APEX_URL = "https://operon.lvh.me:8443";
 
-describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
+describe("apexUrl in the COMPILED bundle, with env.sh's runtime config", () => {
   /**
    * The regression Codex found could not be caught by any test that ran the source:
    * it lived in the interaction between the compiled output and `apps/web/env.sh`,
@@ -30,7 +31,7 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
    * real output bytes, and evaluates the result. Everything the component imports is
    * stubbed: nothing is rendered here, only `apexUrl` is called.
    */
-  async function compileAndSubstitute(bakedValue: string, apex: string) {
+  async function compileAndSubstitute(bakedValue: string, apex: string | null) {
     const esbuild = await import("esbuild");
     const entry = fileURLToPath(
       new URL("../components/operon-switcher.tsx", import.meta.url),
@@ -89,34 +90,37 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
       jsxFactory: "__stubJsx",
       jsxFragment: "__stubFragment",
       banner: {
-        js: "var __stubJsx = () => null; var __stubFragment = null;",
+        js: `var __stubJsx = () => null; var __stubFragment = null; var __runtimeApex = ${
+          runtimeDefines({ VITE_OPERON_APEX_URL: bakedValue })[
+            "import.meta.env.VITE_OPERON_APEX_URL"
+          ]
+        };`,
       },
-      define: {
-        // What Vite bakes from `apps/web/.env.production` at image build time: the
-        // MEMBER, inlined, so no `VITE_OPERON_APEX_URL` identifier survives into the
-        // output — which is what production really looks like, and what makes the
-        // substitution below hit only the value.
-        "import.meta.env.VITE_OPERON_APEX_URL": JSON.stringify(bakedValue),
-      },
+      // The build's real define expression (open-items 458): it reads
+      // window.__OPERON_RUNTIME_CONFIG__, which env.sh writes into index.html. esbuild's
+      // define takes only identifiers, so the expression is bound once in the banner —
+      // the config is in place before the bundle runs, exactly as in the page.
+      define: { "import.meta.env.VITE_OPERON_APEX_URL": "__runtimeApex" },
       plugins: [stubEverythingButTheEntry],
     });
 
     const compiled = result.outputFiles[0]?.text ?? "";
-    expect(compiled).toContain(bakedValue);
-    // Vite inlines the member, so the variable NAME is gone from the artefact and the
-    // only occurrences of the token are the baked value itself.
+    // Vite inlines the member, so the variable NAME is gone from the artefact.
     expect(compiled).not.toContain("VITE_" + bakedValue);
 
-    // EXACTLY what `apps/web/env.sh` does to every .js file in the image:
-    //   sed -i "s#OPERON_APEX_URL#$OPERON_APEX_URL#g"
-    // — global, over the whole file, with no idea which occurrence is which.
-    const substituted = compiled.split(bakedValue).join(apex);
-
+    // What index.html's runtime-config slot leaves on the page; `null` = no env.sh
+    // value for the key, which env.sh writes as the key's own name.
+    const runtime = globalThis as { __OPERON_RUNTIME_CONFIG__?: unknown };
+    runtime.__OPERON_RUNTIME_CONFIG__ = { [bakedValue]: apex ?? bakedValue };
     const load = new Function(
-      `var operonSwitcherModule; ${substituted}; return operonSwitcherModule;`,
+      `var operonSwitcherModule; ${compiled}; return operonSwitcherModule;`,
     ) as () => { apexUrl: () => string };
 
-    return load().apexUrl();
+    try {
+      return load().apexUrl();
+    } finally {
+      delete runtime.__OPERON_RUNTIME_CONFIG__;
+    }
   }
 
   it("returns the substituted apex, not the dev fallback", async () => {
@@ -127,10 +131,7 @@ describe("apexUrl in the COMPILED bundle, after env.sh's substitution", () => {
 
   it("still falls back when env.sh substituted nothing", async () => {
     // `OPERON_APEX_URL` unset in the container: the token survives verbatim.
-    const compiledResult = await compileAndSubstitute(
-      "OPERON_APEX_URL",
-      "OPERON_APEX_URL",
-    );
+    const compiledResult = await compileAndSubstitute("OPERON_APEX_URL", null);
     expect(compiledResult).toBe(DEV_APEX_URL);
   }, 30_000);
 });

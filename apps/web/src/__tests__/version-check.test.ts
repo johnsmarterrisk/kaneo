@@ -25,8 +25,11 @@ import {
   HARD_RELOAD_TIMEOUT_MS,
   hardReload,
   isReloadScheduled,
+  LEDGER_MAX_KEYS,
   MAX_RELOAD_ATTEMPTS_PER_VERSION,
+  MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION,
   RELOAD_ATTEMPTS_STORAGE_KEY,
+  RELOAD_WINDOW_MS,
   registerDirtyEditor,
   resetDirtyEditorsForTests,
   resetLoadedVersionForTests,
@@ -432,7 +435,6 @@ describe("useVersionCheck", () => {
       RELOAD_ATTEMPTS_STORAGE_KEY,
       JSON.stringify({
         perTarget: { [boundedTargetKey]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
-        loadedKey: versionKey(VALID),
       }),
     );
     fetchMock.mockResolvedValueOnce(
@@ -463,7 +465,7 @@ describe("useVersionCheck", () => {
     );
     expect(stored).toEqual({
       perTarget: { [targetKey("hash-2")]: 1 },
-      loadedKey: versionKey(VALID),
+      recent: [expect.any(Number)],
     });
   });
 
@@ -479,7 +481,6 @@ describe("useVersionCheck", () => {
             [targetB]: MAX_RELOAD_ATTEMPTS_PER_VERSION,
             [targetC]: MAX_RELOAD_ATTEMPTS_PER_VERSION,
           },
-          loadedKey: versionKey(VALID),
         }),
       );
       fetchMock.mockResolvedValueOnce(
@@ -505,7 +506,7 @@ describe("useVersionCheck", () => {
             [targetKey("h3")]: 1,
             [targetKey("h4")]: 1,
           },
-          loadedKey: versionKey(VALID),
+          recent: [1, 2, 3, 4].map((n) => Date.now() - n * 1000),
         }),
       );
       fetchMock.mockResolvedValueOnce(
@@ -635,17 +636,20 @@ describe("round 2 reload safety", () => {
     },
   );
 
-  it("convergence resets the episode budget", async () => {
+  it("convergence clears only the loaded key's count (open-items 458)", async () => {
     sessionStorage.setItem(
       RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({ perTarget: { old: 4 }, loadedKey: versionKey(VALID) }),
+      JSON.stringify({
+        perTarget: { [versionKey(VALID)]: 2, other: 1 },
+        recent: [5],
+      }),
     );
     fetchMock.mockResolvedValue(jsonResponse(VALID));
     renderHook(() => useVersionCheck());
     await act(async () => {});
     expect(
       JSON.parse(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null"),
-    ).toEqual({ perTarget: {}, loadedKey: versionKey(VALID) });
+    ).toEqual({ perTarget: { other: 1 }, recent: [5] });
   });
 
   it("going offline while the manifest resolves cannot trigger reload", async () => {
@@ -761,62 +765,73 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
   const ledger = () =>
     JSON.parse(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null");
 
-  it("an exhausted ledger from a DIFFERENT loaded document is reset: the new document reloads", async () => {
+  /** One real document load: fresh module state, the given loaded identity and
+      manifest, and whatever sessionStorage the previous load left behind. */
+  async function loadDocument(loaded: VersionInfo, latest: VersionInfo) {
+    cleanup();
+    resetMutationAdmissionForTests();
+    resetReloadScheduledForTests();
+    resetLoadedVersionForTests();
+    toastMock.info.mockReset();
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", loaded);
+    fetchMock.mockResolvedValueOnce(jsonResponse(latest));
     const reloader = vi.fn();
-    sessionStorage.setItem(
-      RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({
-        perTarget: { [targetKey("hash-2")]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
-        loadedKey: targetKey("previous-document"),
-      }),
-    );
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ ...VALID, config_hash: "hash-2" }),
-    );
     renderHook(() => useVersionCheck({ reloader }));
     await settle();
-    expect(reloader).toHaveBeenCalledTimes(1);
-    expect(ledger()).toEqual({
-      perTarget: { [targetKey("hash-2")]: 1 },
-      loadedKey: versionKey(VALID),
-    });
+    return reloader.mock.calls.length > 0;
+  }
+
+  it("an A→B→A flap across consecutive document loads stays bounded", async () => {
+    const a = { ...VALID, config_hash: "a" };
+    const b = { ...VALID, config_hash: "b" };
+    let reloads = 0;
+    let loaded = a;
+    for (let i = 0; i < 12; i += 1) {
+      // Each load sees the OTHER deployment in version.json, and a reload lands on it.
+      const other = loaded === a ? b : a;
+      if (!(await loadDocument(loaded, other))) break;
+      reloads += 1;
+      loaded = other;
+    }
+    expect(reloads).toBe(2 * MAX_RELOAD_ATTEMPTS_PER_VERSION);
+    expect(lastToast()?.[0]).toBe("Couldn't update automatically.");
   });
 
-  it("a pre-458 ledger (no loadedKey) no longer pins the document at the paused state", async () => {
-    const reloader = vi.fn();
-    sessionStorage.setItem(
-      RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({ perTarget: { [targetKey("hash-2")]: 2, x: 2 } }),
-    );
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ ...VALID, config_hash: "hash-2" }),
-    );
-    renderHook(() => useVersionCheck({ reloader }));
-    await settle();
-    expect(reloader).toHaveBeenCalledTimes(1);
+  it("a stale document whose reloads never land stops at the per-target cap", async () => {
+    const target = { ...VALID, config_hash: "new" };
+    let reloads = 0;
+    for (let i = 0; i < 6; i += 1)
+      if (await loadDocument(VALID, target)) reloads += 1;
+    expect(reloads).toBe(MAX_RELOAD_ATTEMPTS_PER_VERSION);
   });
 
-  it("flapping stays bounded: the count for the key just left survives the reset", async () => {
-    // Document was hash-b, now VALID, and version.json points back at hash-b.
-    const reloader = vi.fn();
-    const left = targetKey("hash-b");
-    sessionStorage.setItem(
-      RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({
-        perTarget: { [left]: MAX_RELOAD_ATTEMPTS_PER_VERSION, other: 1 },
-        loadedKey: left,
-      }),
+  it("an exhausted count clears once that key loads and matches version.json", async () => {
+    const target = { ...VALID, config_hash: "new" };
+    for (let i = 0; i < 3; i += 1) await loadDocument(VALID, target);
+    expect(ledger().perTarget[versionKey(target)]).toBe(
+      MAX_RELOAD_ATTEMPTS_PER_VERSION,
     );
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ ...VALID, config_hash: "hash-b" }),
+    // The fixed document finally arrives: it matches, so its count clears.
+    expect(await loadDocument(target, target)).toBe(false);
+    expect(ledger().perTarget[versionKey(target)]).toBeUndefined();
+  });
+
+  it("the window cap stops a many-key flap, and lapses after RELOAD_WINDOW_MS", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    let reloads = 0;
+    for (let i = 0; i < 6; i += 1)
+      if (await loadDocument(VALID, { ...VALID, config_hash: `k${i}` }))
+        reloads += 1;
+    expect(reloads).toBe(MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION);
+    expect(Object.keys(ledger().perTarget).length).toBeLessThanOrEqual(
+      LEDGER_MAX_KEYS,
     );
-    renderHook(() => useVersionCheck({ reloader }));
-    await settle();
-    expect(reloader).not.toHaveBeenCalled();
-    expect(ledger()).toEqual({
-      perTarget: { [left]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
-      loadedKey: versionKey(VALID),
-    });
+    vi.spyOn(Date, "now").mockReturnValue(now + RELOAD_WINDOW_MS);
+    expect(await loadDocument(VALID, { ...VALID, config_hash: "later" })).toBe(
+      true,
+    );
+    vi.restoreAllMocks();
   });
 
   it("the exhausted state shows the Reload copy, never the unsaved-edits copy", async () => {
@@ -825,7 +840,6 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
       RELOAD_ATTEMPTS_STORAGE_KEY,
       JSON.stringify({
         perTarget: { [targetKey("hash-2")]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
-        loadedKey: versionKey(VALID),
       }),
     );
     fetchMock.mockResolvedValueOnce(
@@ -845,7 +859,6 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
       RELOAD_ATTEMPTS_STORAGE_KEY,
       JSON.stringify({
         perTarget: { [targetKey("hash-2")]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
-        loadedKey: versionKey(VALID),
       }),
     );
     fetchMock.mockResolvedValueOnce(
@@ -855,7 +868,7 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
     await settle();
     act(() => lastToast()?.[1].action.onClick());
     expect(reloader).toHaveBeenCalledTimes(1);
-    expect(ledger()).toEqual({ perTarget: {}, loadedKey: versionKey(VALID) });
+    expect(ledger()).toEqual({ perTarget: {}, recent: [] });
   });
 
   it("the dirty path keeps the unsaved-edits copy, and its button also clears the ledger", async () => {
@@ -863,7 +876,7 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
     const reloader = vi.fn();
     sessionStorage.setItem(
       RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({ perTarget: { stale: 1 }, loadedKey: versionKey(VALID) }),
+      JSON.stringify({ perTarget: { stale: 1 } }),
     );
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ ...VALID, config_hash: "hash-2" }),
@@ -878,7 +891,7 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
     expect(options.action.label).toBe("Discard unsaved edits and reload");
     act(() => options.action.onClick());
     expect(reloader).toHaveBeenCalledTimes(1);
-    expect(ledger()).toEqual({ perTarget: {}, loadedKey: versionKey(VALID) });
+    expect(ledger()).toEqual({ perTarget: {}, recent: [] });
   });
 });
 

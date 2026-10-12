@@ -5,7 +5,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import packageJson from "../../package.json";
 
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
@@ -15,23 +15,52 @@ const sentryProject = process.env.SENTRY_PROJECT;
 // A build ID names the exact uploaded artifacts, independently of runtime deployment
 // labels. The SDK and uploader receive the same ID from this config evaluation.
 const sentryRelease = `initiative-${randomUUID().replaceAll("-", "")}`;
-const RUNTIME_SLOT_SIZE = 4096;
+const RUNTIME_KEY = /^(KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/;
 
-// JSON.parse prevents the minifier from folding a slot into a larger string or
-// evaluating a configuration-dependent branch before runtime substitution.
+/** The runtime keys this build reads: every `.env` value that is a placeholder name. */
+export function runtimeConfigKeys(env: Record<string, string>): string[] {
+  return [
+    ...new Set(Object.values(env).filter((v) => RUNTIME_KEY.test(v))),
+  ].sort();
+}
+
+// Open-items 458 (Operon repo): runtime configuration is read from
+// window.__OPERON_RUNTIME_CONFIG__, which env.sh writes into index.html (no-cache) at
+// container start. It used to be fixed-width slots env.sh rewrote inside the hashed .js
+// chunks, which changed a chunk's bytes under an unchanged URL; a CDN max-age then served
+// old configuration under a new identity. The `?? name` fallback is the same
+// "never substituted" placeholder value the client already checks for (vite preview,
+// or no env.sh run). The loaded version identity lives in the sibling slot.
 export function runtimeDefines(
   env: Record<string, string>,
 ): Record<string, string> {
-  // The loaded version identity is NOT a slot here: env.sh writes it into index.html
-  // (window.__OPERON_LOADED_VERSION__) so it never changes a hashed chunk's bytes.
   const definitions: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    if (/^(KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/.test(value)) {
+    if (RUNTIME_KEY.test(value)) {
+      const name = JSON.stringify(value);
       definitions[`import.meta.env.${key}`] =
-        `JSON.parse(${JSON.stringify(value.padEnd(RUNTIME_SLOT_SIZE))})`;
+        `(globalThis.__OPERON_RUNTIME_CONFIG__?.[${name}] ?? ${name})`;
     }
   }
   return definitions;
+}
+
+/** Writes the key list into index.html's runtime-config slot so env.sh publishes exactly
+    the keys the bundle reads, never every KANEO_* variable in the container. */
+export function runtimeConfigSlot(keys: string[]): Plugin {
+  const slot = '<script id="operon-runtime-config" data-keys="">';
+  return {
+    name: "operon-runtime-config-keys",
+    apply: "build",
+    transformIndexHtml(html) {
+      if (!html.includes(slot))
+        throw new Error("index.html has no runtime-config slot");
+      return html.replace(
+        slot,
+        `<script id="operon-runtime-config" data-keys="${keys.join(",")}">`,
+      );
+    },
+  };
 }
 
 export default defineConfig(({ mode, command }) => ({
@@ -44,6 +73,7 @@ export default defineConfig(({ mode, command }) => ({
   },
   base: "/",
   plugins: [
+    runtimeConfigSlot(runtimeConfigKeys(loadEnv(mode, import.meta.dirname))),
     tanstackRouter({
       autoCodeSplitting: true,
       // Keep co-located route tests out of the generated route tree.

@@ -59,6 +59,10 @@
     unchanged filename let a CDN serve the previous release's identity for hours, and the
     version check reloaded in a loop. `null` here means "no identity" (vite dev). -->
   <script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = null;</script>
+  <!-- Runtime-config slot (open-items 458): vite fills data-keys at build time with the
+    keys the bundle reads, and env.sh replaces the element with their values at container
+    start. The bundle reads window.__OPERON_RUNTIME_CONFIG__, never bytes in a chunk. -->
+  <script id="operon-runtime-config" data-keys="">window.__OPERON_RUNTIME_CONFIG__ = null;</script>
 
   <script>
     // Pre-paint theme resolution (Codex round-1 finding 12, manager ruling; mirrors

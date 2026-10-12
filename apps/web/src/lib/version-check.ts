@@ -242,10 +242,15 @@ export function resetDirtyEditorsForTests(): void {
 export const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 export const DRAIN_POLL_MS = 5000;
 export const MAX_RELOAD_ATTEMPTS_PER_VERSION = 2;
-/** Stage 1 finding 11: the episode-wide bound across every distinct target this session
-    has seen — mirrors `app/src/shell/useVersionCheck.ts`'s own constant of the same name
-    and value on the Operon side. */
+/** Stage 1 finding 11: the episode-wide bound across every distinct target — same name
+    and value as `app/src/shell/useVersionCheck.ts` on the Operon side. Open-items 458
+    counts it inside RELOAD_WINDOW_MS instead of over the whole session: a standalone PWA
+    keeps one sessionStorage for days, and a session-long total pinned it at "paused". */
 export const MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION = 4;
+export const RELOAD_WINDOW_MS = 10 * 60 * 1000;
+/** Per-target counts kept for the most recently attempted keys only, so the ledger
+    stays bounded while a two- or three-key flap still meets its own counts again. */
+export const LEDGER_MAX_KEYS = 4;
 export const RELOAD_ATTEMPTS_STORAGE_KEY =
   "operon.version-check.reload-attempts";
 
@@ -296,9 +301,9 @@ export function resetMutationAdmissionForTests(): void {
     between two flapping targets never hit the per-target cap. */
 interface StoredAttempts {
   perTarget: Record<string, number>;
-  /** The loaded key the counts were taken under (open-items 458). Absent in ledgers
-      written before it existed — treated as "a different document". */
-  loadedKey?: string;
+  /** Timestamps (ms) of automatic reloads, for the RELOAD_WINDOW_MS cap. Absent in
+      ledgers written before open-items 458 — read as none. */
+  recent: number[];
 }
 
 /** `null` means the ledger could not be read — the caller must treat that as "cannot
@@ -308,7 +313,7 @@ interface StoredAttempts {
 function readAttempts(): StoredAttempts | null {
   try {
     const raw = sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY);
-    if (!raw) return { perTarget: {} };
+    if (!raw) return { perTarget: {}, recent: [] };
     const parsed: unknown = JSON.parse(raw);
     if (
       typeof parsed === "object" &&
@@ -329,11 +334,13 @@ function readAttempts(): StoredAttempts | null {
           return null;
         clean[key] = value;
       }
-      const loadedKey = (parsed as StoredAttempts).loadedKey;
-      if (loadedKey !== undefined && typeof loadedKey !== "string") return null;
-      return loadedKey === undefined
-        ? { perTarget: clean }
-        : { perTarget: clean, loadedKey };
+      const recent: unknown = (parsed as { recent?: unknown }).recent ?? [];
+      if (
+        !Array.isArray(recent) ||
+        !recent.every((t) => typeof t === "number" && Number.isFinite(t))
+      )
+        return null;
+      return { perTarget: clean, recent };
     }
     return null;
   } catch {
@@ -352,27 +359,30 @@ function writeAttempts(entry: StoredAttempts): boolean {
   }
 }
 
-function totalAttempts(attempts: StoredAttempts): number {
-  return Object.values(attempts.perTarget).reduce((sum, n) => sum + n, 0);
+/**
+ * Open-items 458 (Codex round 1): counts are kept for every recently attempted key and
+ * are never reset just because the document's loaded key changed — an A→B→A flap must
+ * meet its own counts again. A key's count clears only when that key is loaded AND
+ * matches version.json (convergence, in `check`). The RELOAD_WINDOW_MS cap stops any
+ * flap the per-key counts miss.
+ */
+function recordAttempt(
+  attempts: StoredAttempts,
+  targetKey: string,
+  now: number,
+): StoredAttempts {
+  const perTarget = { ...attempts.perTarget };
+  const next = (perTarget[targetKey] ?? 0) + 1;
+  delete perTarget[targetKey]; // re-insert last: insertion order is recency
+  perTarget[targetKey] = next;
+  const keys = Object.keys(perTarget);
+  for (const key of keys.slice(0, Math.max(0, keys.length - LEDGER_MAX_KEYS)))
+    delete perTarget[key];
+  return { perTarget, recent: [...recentAttempts(attempts, now), now] };
 }
 
-/**
- * Open-items 458: the ledger resets when the document's loaded key changes. A document
- * that loaded a new identity has made progress, so counts from the previous document must
- * not leave it stuck at "automatic reload is paused" (the ledger survives reloads in a
- * standalone PWA). The count for the key just LEFT is kept: when two deployments flap
- * (document A, version.json B, then the reverse), going back to that key still hits
- * MAX_RELOAD_ATTEMPTS_PER_VERSION, so the reset can never make the reload loop unbounded.
- * An unreadable ledger is left alone; attemptReload already refuses on it.
- */
-function syncLedgerToLoadedKey(loadedKey: string): void {
-  const attempts = readAttempts();
-  if (attempts === null || attempts.loadedKey === loadedKey) return;
-  const left = attempts.loadedKey;
-  const kept: Record<string, number> = {};
-  if (left !== undefined && attempts.perTarget[left] !== undefined)
-    kept[left] = attempts.perTarget[left];
-  writeAttempts({ perTarget: kept, loadedKey });
+function recentAttempts(attempts: StoredAttempts, now: number): number[] {
+  return attempts.recent.filter((t) => t <= now && now - t < RELOAD_WINDOW_MS);
 }
 
 export const HARD_RELOAD_TIMEOUT_MS = 5000;
@@ -478,7 +488,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
             hasReloaded = true;
             clearDrainTimer();
             // A deliberate reload starts a fresh ledger: the user asked for it.
-            if (loadedKey !== null) writeAttempts({ perTarget: {}, loadedKey });
+            writeAttempts({ perTarget: {}, recent: [] });
             reloaderRef.current();
           },
         },
@@ -494,7 +504,6 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       if (hasReloaded || cancelled) return;
       if (isProtected()) return; // still protected — the drain poller will retry
 
-      if (loadedKey !== null) syncLedgerToLoadedKey(loadedKey);
       const attempts = readAttempts();
       if (attempts === null) {
         // Finding 11: the ledger is unreadable — cannot prove this is bounded, refuse.
@@ -502,19 +511,18 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         return;
       }
 
+      const now = Date.now();
       const alreadyTried = attempts.perTarget[targetKey] ?? 0;
       if (
         alreadyTried >= MAX_RELOAD_ATTEMPTS_PER_VERSION ||
-        totalAttempts(attempts) >= MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION
+        recentAttempts(attempts, now).length >=
+          MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION
       ) {
         requireManualRecovery();
         return;
       }
 
-      const wrote = writeAttempts({
-        ...attempts,
-        perTarget: { ...attempts.perTarget, [targetKey]: alreadyTried + 1 },
-      });
+      const wrote = writeAttempts(recordAttempt(attempts, targetKey, now));
       if (!wrote) {
         // Finding 11: could not persist the bumped count — refuse rather than reload blind.
         requireManualRecovery();
@@ -543,7 +551,15 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
 
       const targetKey = versionKey(latest);
       if (targetKey === loadedKey) {
-        writeAttempts({ perTarget: {}, loadedKey });
+        // Converged: clear only this key's count (open-items 458, Codex round 1). Other
+        // keys keep theirs so a flap back to them is still bounded; a corrupt ledger is
+        // replaced since there is nothing to protect while versions match.
+        const attempts = readAttempts();
+        if (attempts === null) writeAttempts({ perTarget: {}, recent: [] });
+        else if (attempts.perTarget[targetKey] !== undefined) {
+          const { [targetKey]: _cleared, ...perTarget } = attempts.perTarget;
+          writeAttempts({ perTarget, recent: attempts.recent });
+        }
         toast.dismiss("version-update");
         // Finding 12: "withdrawn updates" — the server reverted to the version this
         // document already has. Cancel any previously deferred reload rather than leave

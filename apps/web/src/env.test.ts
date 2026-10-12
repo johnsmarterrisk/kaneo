@@ -1,19 +1,26 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { SourceMap } from "node:module";
 import { resolve } from "node:path";
 import { Script } from "node:vm";
-import { build } from "vite";
+import { build, loadEnv } from "vite";
 import { describe, expect, it } from "vitest";
-import config, { runtimeDefines } from "../vite.config";
+import config, {
+  runtimeConfigKeys,
+  runtimeConfigSlot,
+  runtimeDefines,
+} from "../vite.config";
 import { formatStamp } from "./lib/version-check";
 
 const ENV_SH = readFileSync(resolve(import.meta.dirname, "../env.sh"), "utf8");
-// The real source index.html: its loaded-version slot is what env.sh rewrites.
-const INDEX_HTML = readFileSync(
+// The real source index.html, with the key list vite's build writes into its
+// runtime-config slot (runtimeConfigSlot over .env.production's placeholder keys).
+const BUILT_INDEX_HTML = readFileSync(
   resolve(import.meta.dirname, "../index.html"),
   "utf8",
+).replace(
+  'data-keys=""',
+  `data-keys="${runtimeConfigKeys(loadEnv("production", resolve(import.meta.dirname, ".."))).join(",")}"`,
 );
 const ROOT = "/usr/share/nginx/html";
 const NGINX = "/etc/nginx/conf.d/default.conf";
@@ -28,7 +35,7 @@ const identityEnv = {
 function runEntrypoint(
   bundle: string,
   env: Record<string, string | undefined> = {},
-  html: string = INDEX_HTML,
+  html: string = BUILT_INDEX_HTML,
 ) {
   const harness = `
     const fs = require('node:fs');
@@ -79,71 +86,111 @@ function identity(files: Record<string, string>) {
   return JSON.parse(files[`${ROOT}/version.json`]);
 }
 
+const SLOTS =
+  /<script id="operon-(?:loaded-version|runtime-config)"[^>]*>[\s\S]*?<\/script>/g;
+
+/** Runs the two index.html slots env.sh wrote, the way the browser does, and returns
+    what they leave on `window`. */
+function pageGlobals(files: Record<string, string>) {
+  const window: {
+    __OPERON_LOADED_VERSION__?: unknown;
+    __OPERON_RUNTIME_CONFIG__?: Record<string, string> | null;
+  } = {};
+  for (const [element] of files[`${ROOT}/index.html`].matchAll(SLOTS)) {
+    const body = element
+      .replace(/^<script[^>]*>/, "")
+      .replace(/<\/script>$/, "");
+    new Script(body).runInNewContext({ window });
+  }
+  return window;
+}
+
 describe("runtime entrypoint", () => {
   it("writes the identity into index.html's slot, matching version.json (open-items 458)", () => {
     const files = runEntrypoint("");
-    const html = files[`${ROOT}/index.html`];
-    const script = html.match(
-      /<script id="operon-loaded-version">([\s\S]*?)<\/script>/,
+    expect(pageGlobals(files).__OPERON_LOADED_VERSION__).toEqual(
+      identity(files),
     );
-    const context: { window: { __OPERON_LOADED_VERSION__?: unknown } } = {
-      window: {},
-    };
-    new Script(script?.[1] ?? "").runInNewContext(context);
-    expect(context.window.__OPERON_LOADED_VERSION__).toEqual(identity(files));
     expect(identity(files).release).toBe("2026.09.22-4");
-    // Everything outside the slot is byte-for-byte the source document.
-    expect(html.replace(script?.[0] ?? "", "")).toBe(
-      INDEX_HTML.replace(
-        /<script id="operon-loaded-version">[\s\S]*?<\/script>/,
-        "",
-      ),
+    // Everything outside the two slots is byte-for-byte the built document.
+    expect(files[`${ROOT}/index.html`].replace(SLOTS, "")).toBe(
+      BUILT_INDEX_HTML.replace(SLOTS, ""),
     );
   });
 
-  it("is idempotent across container restarts and fails loud without the slot", () => {
-    const once = runEntrypoint("")[`${ROOT}/index.html`];
+  it("is idempotent across container restarts and fails loud without either slot", () => {
+    const once = runEntrypoint("", { KANEO_API_URL: "https://a.invalid/api" })[
+      `${ROOT}/index.html`
+    ];
     const twice = runEntrypoint("", {}, once)[`${ROOT}/index.html`];
     expect(twice.match(/operon-loaded-version/g)).toHaveLength(1);
-    expect(() => runEntrypoint("", {}, "<html><head></head></html>")).toThrow();
-  });
-
-  it("escapes quotes, backslashes, controls and Unicode without shifting any code", () => {
-    const bundle = `globalThis.apex=${definitions["import.meta.env.VITE_OPERON_APEX_URL"]};globalThis.done=true;`;
-    const apex = 'https://example.invalid/"quoted"\\path\n\u2028é';
-    const files = runEntrypoint(bundle, { OPERON_APEX_URL: apex });
-    const result = files[`${ROOT}/probe.js`];
-    const context: { apex?: string; done?: boolean } = {};
-    new Script(result).runInNewContext(context);
-    expect(context).toEqual({ apex, done: true });
-    expect(result.indexOf("globalThis.done")).toBe(
-      bundle.indexOf("globalThis.done"),
+    expect(twice.match(/operon-runtime-config/g)).toHaveLength(1);
+    expect(
+      pageGlobals({ [`${ROOT}/index.html`]: twice }).__OPERON_RUNTIME_CONFIG__,
+    ).toMatchObject({ KANEO_API_URL: "KANEO_API_URL" });
+    const withoutVersion = BUILT_INDEX_HTML.replace(
+      /<script id="operon-loaded-version">[\s\S]*?<\/script>/,
+      "",
     );
-    expect(result.length).toBe(bundle.length);
-    expect(result.split("\n")).toHaveLength(1);
+    const withoutConfig = BUILT_INDEX_HTML.replace(
+      /<script id="operon-runtime-config"[\s\S]*?<\/script>/,
+      "",
+    );
+    expect(() => runEntrypoint("", {}, withoutVersion)).toThrow();
+    expect(() => runEntrypoint("", {}, withoutConfig)).toThrow();
   });
 
-  it("preserves source-code placeholder comparisons and empties an unset optional key", () => {
-    const bundle = `globalThis.site=${definitions["import.meta.env.VITE_TURNSTILE_SITE_KEY"]};globalThis.comparison="OPERON_APEX_URL";`;
-    const files = runEntrypoint(bundle, {
-      OPERON_APEX_URL: "https://example.invalid",
+  it("writes runtime config into index.html, escaped, so no value can end the script", () => {
+    const apex =
+      'https://example.invalid/"quoted"\\path\n\u2028é</script><script>alert(1)</script>';
+    const files = runEntrypoint("", {
+      OPERON_APEX_URL: apex,
+      KANEO_API_URL: "https://api.example.invalid/api",
     });
-    const context = {};
-    new Script(files[`${ROOT}/probe.js`]).runInNewContext(context);
-    expect(context).toEqual({ site: "", comparison: "OPERON_APEX_URL" });
+    const html = files[`${ROOT}/index.html`];
+    expect(html).not.toContain("<script>alert(1)");
+    expect(html.match(/<\/script>/g)).toHaveLength(
+      BUILT_INDEX_HTML.match(/<\/script>/g)?.length ?? -1,
+    );
+    expect(pageGlobals(files).__OPERON_RUNTIME_CONFIG__).toMatchObject({
+      OPERON_APEX_URL: apex,
+      KANEO_API_URL: "https://api.example.invalid/api",
+    });
   });
 
-  it("fails before publishing an oversized value or malformed identity", () => {
-    expect(() =>
-      runEntrypoint(
-        `globalThis.apex=${definitions["import.meta.env.VITE_OPERON_APEX_URL"]};`,
-        {
-          OPERON_APEX_URL: "x".repeat(5000),
-        },
-      ),
-    ).toThrow();
+  it("publishes only the bundle's keys, keeps unset ones as their names, empties Turnstile", () => {
+    const files = runEntrypoint("", {
+      KANEO_CLIENT_URL: "",
+      KANEO_SECRET_NOT_READ_BY_THE_BUNDLE: "secret",
+    });
+    expect(pageGlobals(files).__OPERON_RUNTIME_CONFIG__).toEqual({
+      KANEO_API_URL: "KANEO_API_URL",
+      KANEO_CLIENT_URL: "KANEO_CLIENT_URL",
+      KANEO_SENTRY_DSN: "KANEO_SENTRY_DSN",
+      KANEO_TURNSTILE_SITE_KEY: "",
+      OPERON_APEX_URL: "OPERON_APEX_URL",
+    });
+    expect(files[`${ROOT}/index.html`]).not.toContain("secret");
+  });
+
+  it("never rewrites a .js chunk", () => {
+    const bundle = `globalThis.apex=${definitions["import.meta.env.VITE_OPERON_APEX_URL"]};`;
+    const files = runEntrypoint(bundle, {
+      OPERON_APEX_URL: "https://x.invalid",
+    });
+    expect(files[`${ROOT}/probe.js`]).toBe(bundle);
+  });
+
+  it("fails before publishing a malformed identity or key list", () => {
     expect(() =>
       runEntrypoint("", { VERSION_RELEASE: 'bad"release' }),
+    ).toThrow();
+    expect(() =>
+      runEntrypoint(
+        "",
+        {},
+        BUILT_INDEX_HTML.replace(/data-keys="[^"]*"/, 'data-keys="PATH"'),
+      ),
     ).toThrow();
   });
 
@@ -210,13 +257,15 @@ describe("runtime entrypoint", () => {
   });
 });
 
-it("keeps real Vite source-map positions valid after every runtime substitution", async () => {
+it("one built chunk, never rewritten, runs whichever config index.html carries (open-items 458)", async () => {
+  // The stale-cache case: a browser that kept the previous deployment's chunk bytes
+  // still runs the CURRENT configuration, because the chunk bytes never vary and the
+  // config arrives in the no-cache document.
   const source = [
     "globalThis.api = import.meta.env.VITE_API_URL;",
     "globalThis.apex = import.meta.env.VITE_OPERON_APEX_URL;",
     // biome-ignore lint/suspicious/noTemplateCurlyInString: input source for Vite
     "globalThis.callback = `${import.meta.env.VITE_CLIENT_URL}/auth/sign-in`;",
-    'throw new Error("mapping probe");',
   ].join("\n");
   const result = await build({
     configFile: false,
@@ -232,7 +281,6 @@ it("keeps real Vite source-map positions valid after every runtime substitution"
     ],
     build: {
       write: false,
-      sourcemap: "hidden",
       minify: true,
       lib: { entry: "runtime-proof", formats: ["es"] },
     },
@@ -240,34 +288,60 @@ it("keeps real Vite source-map positions valid after every runtime substitution"
   const output = Array.isArray(result) ? result[0] : result;
   if (!("output" in output)) throw new Error("Expected bundled output");
   const chunk = output.output.find((entry) => entry.type === "chunk");
-  if (!chunk?.map) throw new Error("Missing source map");
-  const replaced = runEntrypoint(chunk.code, {
-    KANEO_API_URL: "https://api.example.invalid/api",
-    KANEO_CLIENT_URL: "https://initiative.example.invalid",
-    OPERON_APEX_URL: "https://operon.example.invalid",
-  })[`${ROOT}/probe.js`];
-  expect(replaced).toHaveLength(chunk.code.length);
-  const context: { api?: string; apex?: string; callback?: string } = {};
-  let stack = "";
-  try {
-    new Script(replaced, { filename: "probe.js" }).runInNewContext(context);
-  } catch (error) {
-    stack = String((error as Error).stack);
-  }
-  const location = stack.match(/at probe\.js:(\d+):(\d+)/);
-  expect(location).not.toBeNull();
-  const map = new SourceMap(JSON.parse(chunk.map.toString()));
-  const original = map.findEntry(
-    Number(location?.[1]) - 1,
-    Number(location?.[2]) - 1,
-  );
-  expect("originalLine" in original && original.originalLine).toBe(3);
-  expect(context.callback).toBe(
-    "https://initiative.example.invalid/auth/sign-in",
-  );
-  expect(context.api).toBe("https://api.example.invalid/api");
-  expect(context.apex).toBe("https://operon.example.invalid");
+  if (!chunk) throw new Error("Missing chunk");
+
+  const run = (env: Record<string, string>) => {
+    const files = runEntrypoint(chunk.code, env);
+    expect(files[`${ROOT}/probe.js`]).toBe(chunk.code);
+    const context: Record<string, unknown> = {
+      __OPERON_RUNTIME_CONFIG__: pageGlobals(files).__OPERON_RUNTIME_CONFIG__,
+    };
+    new Script(chunk.code).runInNewContext(context);
+    return { context, hash: identity(files).config_hash };
+  };
+  const first = run({
+    KANEO_API_URL: "https://api.one.invalid/api",
+    KANEO_CLIENT_URL: "https://initiative.one.invalid",
+    OPERON_APEX_URL: "https://operon.one.invalid",
+  });
+  const second = run({
+    KANEO_API_URL: "https://api.two.invalid/api",
+    KANEO_CLIENT_URL: "https://initiative.two.invalid",
+    OPERON_APEX_URL: "https://operon.two.invalid",
+  });
+  expect(first.context).toMatchObject({
+    api: "https://api.one.invalid/api",
+    apex: "https://operon.one.invalid",
+    callback: "https://initiative.one.invalid/auth/sign-in",
+  });
+  expect(second.context).toMatchObject({
+    api: "https://api.two.invalid/api",
+    callback: "https://initiative.two.invalid/auth/sign-in",
+  });
+  // A config-only change still changes the version key.
+  expect(first.hash).not.toBe(second.hash);
+
+  // No env.sh run (vite preview): the placeholder names, as before.
+  const bare: Record<string, unknown> = {};
+  new Script(chunk.code).runInNewContext(bare);
+  expect(bare).toMatchObject({ api: "KANEO_API_URL", apex: "OPERON_APEX_URL" });
 }, 30_000);
+
+it("the build writes the bundle's key list into the runtime-config slot", () => {
+  const plugin = runtimeConfigSlot(["KANEO_API_URL", "OPERON_APEX_URL"]);
+  const transform = plugin.transformIndexHtml as (html: string) => string;
+  const source = readFileSync(
+    resolve(import.meta.dirname, "../index.html"),
+    "utf8",
+  );
+  expect(transform(source)).toContain(
+    '<script id="operon-runtime-config" data-keys="KANEO_API_URL,OPERON_APEX_URL">',
+  );
+  expect(() => transform("<html></html>")).toThrow();
+  expect(
+    runtimeConfigKeys({ A: "KANEO_X", B: "plain", C: "OPERON_APEX_URL" }),
+  ).toEqual(["KANEO_X", "OPERON_APEX_URL"]);
+});
 
 it("uses one immutable build ID in the emitted SDK constant and source-map uploader", async () => {
   const resolved =
