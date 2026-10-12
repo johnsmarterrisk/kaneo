@@ -382,7 +382,10 @@ function recordAttempt(
 }
 
 function recentAttempts(attempts: StoredAttempts, now: number): number[] {
-  return attempts.recent.filter((t) => t <= now && now - t < RELOAD_WINDOW_MS);
+  // sessionStorage survives document reloads, but a monotonic clock does not.
+  // Keep future timestamps when the wall clock moves backward so that a clock
+  // correction cannot reopen the automatic reload loop.
+  return attempts.recent.filter((t) => t > now || now - t < RELOAD_WINDOW_MS);
 }
 
 export const HARD_RELOAD_TIMEOUT_MS = 5000;

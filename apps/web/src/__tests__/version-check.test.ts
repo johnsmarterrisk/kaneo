@@ -834,6 +834,27 @@ describe("open-items 458: the reload converges and the copy is honest", () => {
     vi.restoreAllMocks();
   });
 
+  it("a backward wall-clock correction cannot clear the window cap", async () => {
+    const now = Date.now();
+    try {
+      vi.spyOn(Date, "now").mockReturnValue(now);
+      for (let i = 0; i < MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION; i += 1)
+        expect(
+          await loadDocument(VALID, { ...VALID, config_hash: `clock-${i}` }),
+        ).toBe(true);
+      vi.spyOn(Date, "now").mockReturnValue(now - RELOAD_WINDOW_MS);
+      expect(
+        await loadDocument(VALID, {
+          ...VALID,
+          config_hash: "after-clock-reset",
+        }),
+      ).toBe(false);
+      expect(lastToast()?.[0]).toBe("Couldn't update automatically.");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("the exhausted state shows the Reload copy, never the unsaved-edits copy", async () => {
     const reloader = vi.fn();
     sessionStorage.setItem(

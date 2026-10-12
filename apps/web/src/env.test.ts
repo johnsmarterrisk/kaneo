@@ -142,13 +142,15 @@ describe("runtime entrypoint", () => {
 
   it("writes runtime config into index.html, escaped, so no value can end the script", () => {
     const apex =
-      'https://example.invalid/"quoted"\\path\n\u2028é</script><script>alert(1)</script>';
+      'https://example.invalid/"quoted"\\path\n\u2028é</script><script>alert(1)</script><img src=x onerror=alert(2)>';
     const files = runEntrypoint("", {
       OPERON_APEX_URL: apex,
       KANEO_API_URL: "https://api.example.invalid/api",
     });
     const html = files[`${ROOT}/index.html`];
     expect(html).not.toContain("<script>alert(1)");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("\\u003c/script>");
     expect(html.match(/<\/script>/g)).toHaveLength(
       BUILT_INDEX_HTML.match(/<\/script>/g)?.length ?? -1,
     );
@@ -171,6 +173,31 @@ describe("runtime entrypoint", () => {
       OPERON_APEX_URL: "OPERON_APEX_URL",
     });
     expect(files[`${ROOT}/index.html`]).not.toContain("secret");
+  });
+
+  it("rejects a secret-shaped built key even when its value exists in the container", () => {
+    expect(
+      runtimeConfigKeys({
+        VITE_LEAK: "KANEO_SECRET_KEY",
+        VITE_API_URL: "KANEO_API_URL",
+      }),
+    ).toEqual(["KANEO_API_URL"]);
+    expect(
+      runtimeDefines({
+        VITE_LEAK: "KANEO_SECRET_KEY",
+        VITE_API_URL: "KANEO_API_URL",
+      }),
+    ).not.toHaveProperty("import.meta.env.VITE_LEAK");
+    expect(() =>
+      runEntrypoint(
+        "",
+        { KANEO_SECRET_KEY: "private-value" },
+        BUILT_INDEX_HTML.replace(
+          /data-keys="[^"]*"/,
+          'data-keys="KANEO_SECRET_KEY"',
+        ),
+      ),
+    ).toThrow("Invalid runtime-config key list");
   });
 
   it("never rewrites a .js chunk", () => {
@@ -339,8 +366,8 @@ it("the build writes the bundle's key list into the runtime-config slot", () => 
   );
   expect(() => transform("<html></html>")).toThrow();
   expect(
-    runtimeConfigKeys({ A: "KANEO_X", B: "plain", C: "OPERON_APEX_URL" }),
-  ).toEqual(["KANEO_X", "OPERON_APEX_URL"]);
+    runtimeConfigKeys({ A: "KANEO_API_URL", B: "plain", C: "OPERON_APEX_URL" }),
+  ).toEqual(["KANEO_API_URL", "OPERON_APEX_URL"]);
 });
 
 it("uses one immutable build ID in the emitted SDK constant and source-map uploader", async () => {

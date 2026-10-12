@@ -59,7 +59,13 @@ const CONFIG_SLOT = /<script id="operon-runtime-config" data-keys="([^"]*)">[\s\
 const configSlot = index.match(CONFIG_SLOT);
 if (!configSlot) throw new Error("index.html has no runtime-config slot");
 const configKeys = configSlot[1] ? configSlot[1].split(",") : [];
-if (!configKeys.every(key => /^(?:KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/.test(key))) {
+// Validate the built key list as well as the build: an unexpected placeholder
+// must never publish a server-side KANEO_* secret into the HTML document.
+const publicKeys = new Set([
+  "KANEO_API_URL", "KANEO_CLIENT_URL", "KANEO_SENTRY_DSN",
+  "KANEO_TURNSTILE_SITE_KEY", "OPERON_APEX_URL",
+]);
+if (!configKeys.every(key => publicKeys.has(key))) {
   throw new Error("Invalid runtime-config key list");
 }
 // Same values the old .js slots received: an unset or empty key keeps its own name (the

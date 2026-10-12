@@ -15,12 +15,20 @@ const sentryProject = process.env.SENTRY_PROJECT;
 // A build ID names the exact uploaded artifacts, independently of runtime deployment
 // labels. The SDK and uploader receive the same ID from this config evaluation.
 const sentryRelease = `initiative-${randomUUID().replaceAll("-", "")}`;
-const RUNTIME_KEY = /^(KANEO_[A-Z0-9_]+|OPERON_APEX_URL)$/;
+// Only these public browser settings may enter index.html. A VITE_* placeholder
+// naming a server secret must never turn that secret into runtime page data.
+const PUBLIC_RUNTIME_KEYS = new Set([
+  "KANEO_API_URL",
+  "KANEO_CLIENT_URL",
+  "KANEO_SENTRY_DSN",
+  "KANEO_TURNSTILE_SITE_KEY",
+  "OPERON_APEX_URL",
+]);
 
 /** The runtime keys this build reads: every `.env` value that is a placeholder name. */
 export function runtimeConfigKeys(env: Record<string, string>): string[] {
   return [
-    ...new Set(Object.values(env).filter((v) => RUNTIME_KEY.test(v))),
+    ...new Set(Object.values(env).filter((v) => PUBLIC_RUNTIME_KEYS.has(v))),
   ].sort();
 }
 
@@ -36,7 +44,7 @@ export function runtimeDefines(
 ): Record<string, string> {
   const definitions: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    if (RUNTIME_KEY.test(value)) {
+    if (PUBLIC_RUNTIME_KEYS.has(value)) {
       const name = JSON.stringify(value);
       definitions[`import.meta.env.${key}`] =
         `(globalThis.__OPERON_RUNTIME_CONFIG__?.[${name}] ?? ${name})`;
