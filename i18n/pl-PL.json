@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "Dostępna jest nowa wersja. Automatyczne odświeżanie jest wstrzymane. Odświeżenie teraz odrzuci niezapisane zmiany.",
 			"writeRefused": "Nowa wersja czeka. Odśwież przed wprowadzeniem kolejnej zmiany.",
-			"discardAndReload": "Odrzuć niezapisane zmiany i odśwież"
+			"discardAndReload": "Odrzuć niezapisane zmiany i odśwież",
+			"failed": "Nie udało się zaktualizować automatycznie.",
+			"reload": "Odśwież"
 		},
 		"appName": "Initiative",
 		"actions": {

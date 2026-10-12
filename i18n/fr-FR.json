@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "Une nouvelle version est disponible. Le rechargement automatique est suspendu. Recharger maintenant supprime les modifications non enregistrées.",
 			"writeRefused": "Une nouvelle version est en attente. Rechargez avant de faire une autre modification.",
-			"discardAndReload": "Abandonner les modifications et recharger"
+			"discardAndReload": "Abandonner les modifications et recharger",
+			"failed": "Mise à jour automatique impossible.",
+			"reload": "Recharger"
 		},
 		"appName": "Initiative",
 		"actions": {

@@ -2,9 +2,8 @@
 set -e
 
 # Node is already in the bundled image; the standalone web image installs it too.
-# Keep runtime values in fixed-width JS literal slots emitted by vite.config.ts.
-# Padding OUTSIDE the closing quote preserves every following source-map column,
-# without altering the value. Only these slots are substituted, never source text.
+# Runtime configuration and the deployment identity are written into index.html only.
+# No .js byte is ever rewritten (open-items 458, Operon repo): see the comment below.
 node --input-type=commonjs <<'KANEO_RUNTIME_NODE'
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
@@ -35,35 +34,50 @@ if (!/^(?:unknown|v[1-9]\d*\.(?:0|[1-9]\d*)|\d{4}\.\d{2}\.\d{2}-\d+)$/.test(iden
   throw new Error("Invalid deployment identity");
 }
 
-function substitute(source) {
-  return source.replace(/(["'`])((?:KANEO_[A-Z0-9_]+|OPERON_APEX_URL) +)\1/g, (slot, quote, paddedKey) => {
-    const key = paddedKey.trimEnd();
-    const value = key === "KANEO_LOADED_VERSION_JSON_PLACEHOLDER" ? JSON.stringify(identity)
-      : env[key] || (key === "KANEO_TURNSTILE_SITE_KEY" ? "" : key);
-    // ASCII escapes keep byte offsets, UTF-16 columns and line counts identical,
-    // including for quotes, backslashes, controls and non-ASCII configuration.
-    const literal = JSON.stringify(JSON.stringify(value)).replace(/[\u007f-\uffff]/g,
-      char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
-    if (literal.length > slot.length) throw new Error("Runtime configuration exceeds reserved slot");
-    return literal.padEnd(slot.length);
-  });
-}
-
 const writes = [];
-function visit(directory) {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const path = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) visit(path);
-    else if (entry.name.endsWith(".js")) {
-      const source = fs.readFileSync(path, "utf8");
-      const replaced = substitute(source);
-      if (replaced !== source) writes.push([path, replaced]);
-    }
-  }
-}
-visit(root);
 
-// Validate everything before publishing any changed bundle or manifest.
+// Runtime configuration and the loaded identity live in index.html, never in a hashed
+// .js chunk (open-items 458, Operon repo). index.html is served no-cache and is not
+// edge-cached, so a reload always sees the release and configuration it belongs to.
+// Rewriting a chunk changed its bytes under an unchanged hashed filename, and a CDN that
+// rewrote no-cache to max-age kept serving the previous bytes for hours: an old identity
+// made the version check reload forever, and old configuration ran under a new identity.
+// Each slot element is replaced whole, so a container restart rewrites it idempotently.
+// "<" is escaped so no value can close the script element early.
+const indexPath = `${root}/index.html`;
+const scriptJson = value => JSON.stringify(value).replaceAll("<", "\\u003c");
+let index = fs.readFileSync(indexPath, "utf8");
+
+const VERSION_SLOT = /<script id="operon-loaded-version">[\s\S]*?<\/script>/;
+if (!VERSION_SLOT.test(index)) throw new Error("index.html has no loaded-version slot");
+index = index.replace(VERSION_SLOT, () =>
+  `<script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = ${scriptJson(identity)};</script>`);
+
+// vite.config.ts lists the keys the bundle reads in data-keys at build time, so only
+// those reach the page — never every KANEO_* variable in the container's environment.
+const CONFIG_SLOT = /<script id="operon-runtime-config" data-keys="([^"]*)">[\s\S]*?<\/script>/;
+const configSlot = index.match(CONFIG_SLOT);
+if (!configSlot) throw new Error("index.html has no runtime-config slot");
+const configKeys = configSlot[1] ? configSlot[1].split(",") : [];
+// Validate the built key list as well as the build: an unexpected placeholder
+// must never publish a server-side KANEO_* secret into the HTML document.
+const publicKeys = new Set([
+  "KANEO_API_URL", "KANEO_CLIENT_URL", "KANEO_SENTRY_DSN",
+  "KANEO_TURNSTILE_SITE_KEY", "OPERON_APEX_URL",
+]);
+if (!configKeys.every(key => publicKeys.has(key))) {
+  throw new Error("Invalid runtime-config key list");
+}
+// Same values the old .js slots received: an unset or empty key keeps its own name (the
+// "never substituted" placeholder the client already checks for); Turnstile empties.
+const runtimeConfig = Object.fromEntries(configKeys.map(key =>
+  [key, env[key] || (key === "KANEO_TURNSTILE_SITE_KEY" ? "" : key)]));
+index = index.replace(CONFIG_SLOT, () =>
+  `<script id="operon-runtime-config" data-keys="${configSlot[1]}">` +
+  `window.__OPERON_RUNTIME_CONFIG__ = ${scriptJson(runtimeConfig)};</script>`);
+writes.push([indexPath, index]);
+
+// Validate everything before publishing index.html or the manifests.
 let prm = {};
 let authorization = {};
 if (env.KANEO_API_URL) {

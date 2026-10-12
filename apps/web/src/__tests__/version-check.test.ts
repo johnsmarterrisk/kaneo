@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runtimeDefines } from "../../vite.config";
 
 // Hoisted so `vi.mock` factories below (themselves hoisted above these imports at
 // execution time) can close over a MUTABLE mutation count each `useVersionCheck` test
@@ -19,9 +22,14 @@ import {
   formatStamp,
   formatTooltip,
   getLoadedVersion,
+  HARD_RELOAD_TIMEOUT_MS,
+  hardReload,
   isReloadScheduled,
+  LEDGER_MAX_KEYS,
   MAX_RELOAD_ATTEMPTS_PER_VERSION,
+  MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION,
   RELOAD_ATTEMPTS_STORAGE_KEY,
+  RELOAD_WINDOW_MS,
   registerDirtyEditor,
   resetDirtyEditorsForTests,
   resetLoadedVersionForTests,
@@ -66,10 +74,10 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   // Stage 1 finding 4: the document's OWN loaded version is now read from the
-  // container-start-embedded `__KANEO_LOADED_VERSION_JSON__` constant, not fetched —
+  // `window.__OPERON_LOADED_VERSION__` env.sh writes into index.html, not fetched —
   // stub it to `VALID` as the default baseline every test compares the fetched
   // "latest" against.
-  vi.stubGlobal("__KANEO_LOADED_VERSION_JSON__", JSON.stringify(VALID));
+  vi.stubGlobal("__OPERON_LOADED_VERSION__", VALID);
   resetLoadedVersionForTests();
   resetReloadScheduledForTests();
   resetDirtyEditorsForTests();
@@ -123,21 +131,37 @@ describe("fetchVersionJson", () => {
   });
 });
 
-describe("getLoadedVersion — Stage 1 finding 4: read from the embedded constant, never fetched", () => {
-  it("reads the embedded __KANEO_LOADED_VERSION_JSON__ constant without ever calling fetch", async () => {
+describe("getLoadedVersion — read from index.html's slot (open-items 458), never fetched", () => {
+  it("reads window.__OPERON_LOADED_VERSION__ without ever calling fetch", async () => {
     const [a, b] = await Promise.all([getLoadedVersion(), getLoadedVersion()]);
     expect(a).toEqual(VALID);
     expect(b).toEqual(VALID);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("an un-substituted placeholder (a dev build with no env.sh run) resolves to null, never throws", async () => {
-    vi.stubGlobal(
-      "__KANEO_LOADED_VERSION_JSON__",
-      "KANEO_LOADED_VERSION_JSON_PLACEHOLDER",
-    );
+  it("the un-filled slot (null — vite dev, no env.sh run) resolves to null, never throws", async () => {
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", null);
     resetLoadedVersionForTests();
     await expect(getLoadedVersion()).resolves.toBeNull();
+  });
+
+  it("a malformed slot value resolves to null", async () => {
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", { ...VALID, config_hash: 7 });
+    resetLoadedVersionForTests();
+    await expect(getLoadedVersion()).resolves.toBeNull();
+  });
+
+  it("index.html carries the slot env.sh fills, and vite defines no bundle slot for it", () => {
+    const html = readFileSync(
+      resolve(import.meta.dirname, "../../index.html"),
+      "utf8",
+    );
+    expect(html).toContain(
+      '<script id="operon-loaded-version">window.__OPERON_LOADED_VERSION__ = null;</script>',
+    );
+    expect(
+      Object.keys(runtimeDefines({ VITE_API_URL: "KANEO_API_URL" })),
+    ).toEqual(["import.meta.env.VITE_API_URL"]);
   });
 });
 
@@ -441,6 +465,7 @@ describe("useVersionCheck", () => {
     );
     expect(stored).toEqual({
       perTarget: { [targetKey("hash-2")]: 1 },
+      recent: [expect.any(Number)],
     });
   });
 
@@ -481,6 +506,7 @@ describe("useVersionCheck", () => {
             [targetKey("h3")]: 1,
             [targetKey("h4")]: 1,
           },
+          recent: [1, 2, 3, 4].map((n) => Date.now() - n * 1000),
         }),
       );
       fetchMock.mockResolvedValueOnce(
@@ -610,17 +636,20 @@ describe("round 2 reload safety", () => {
     },
   );
 
-  it("convergence resets the episode budget", async () => {
+  it("convergence clears only the loaded key's count (open-items 458)", async () => {
     sessionStorage.setItem(
       RELOAD_ATTEMPTS_STORAGE_KEY,
-      JSON.stringify({ perTarget: { old: 4 } }),
+      JSON.stringify({
+        perTarget: { [versionKey(VALID)]: 2, other: 1 },
+        recent: [5],
+      }),
     );
     fetchMock.mockResolvedValue(jsonResponse(VALID));
     renderHook(() => useVersionCheck());
     await act(async () => {});
     expect(
       JSON.parse(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null"),
-    ).toEqual({ perTarget: {} });
+    ).toEqual({ perTarget: { other: 1 }, recent: [5] });
   });
 
   it("going offline while the manifest resolves cannot trigger reload", async () => {
@@ -720,4 +749,226 @@ it("storage write failure exposes recovery without an unaccounted reload", async
   } finally {
     storageWrite.mockRestore();
   }
+});
+
+// ─── open-items 458: convergence, honest copy, cache-busting reload ────────────────
+
+describe("open-items 458: the reload converges and the copy is honest", () => {
+  const settle = async () => {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+  const lastToast = () => toastMock.info.mock.calls.at(-1);
+  const ledger = () =>
+    JSON.parse(sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY) ?? "null");
+
+  /** One real document load: fresh module state, the given loaded identity and
+      manifest, and whatever sessionStorage the previous load left behind. */
+  async function loadDocument(loaded: VersionInfo, latest: VersionInfo) {
+    cleanup();
+    resetMutationAdmissionForTests();
+    resetReloadScheduledForTests();
+    resetLoadedVersionForTests();
+    toastMock.info.mockReset();
+    vi.stubGlobal("__OPERON_LOADED_VERSION__", loaded);
+    fetchMock.mockResolvedValueOnce(jsonResponse(latest));
+    const reloader = vi.fn();
+    renderHook(() => useVersionCheck({ reloader }));
+    await settle();
+    return reloader.mock.calls.length > 0;
+  }
+
+  it("an A→B→A flap across consecutive document loads stays bounded", async () => {
+    const a = { ...VALID, config_hash: "a" };
+    const b = { ...VALID, config_hash: "b" };
+    let reloads = 0;
+    let loaded = a;
+    for (let i = 0; i < 12; i += 1) {
+      // Each load sees the OTHER deployment in version.json, and a reload lands on it.
+      const other = loaded === a ? b : a;
+      if (!(await loadDocument(loaded, other))) break;
+      reloads += 1;
+      loaded = other;
+    }
+    expect(reloads).toBe(2 * MAX_RELOAD_ATTEMPTS_PER_VERSION);
+    expect(lastToast()?.[0]).toBe("Couldn't update automatically.");
+  });
+
+  it("a stale document whose reloads never land stops at the per-target cap", async () => {
+    const target = { ...VALID, config_hash: "new" };
+    let reloads = 0;
+    for (let i = 0; i < 6; i += 1)
+      if (await loadDocument(VALID, target)) reloads += 1;
+    expect(reloads).toBe(MAX_RELOAD_ATTEMPTS_PER_VERSION);
+  });
+
+  it("an exhausted count clears once that key loads and matches version.json", async () => {
+    const target = { ...VALID, config_hash: "new" };
+    for (let i = 0; i < 3; i += 1) await loadDocument(VALID, target);
+    expect(ledger().perTarget[versionKey(target)]).toBe(
+      MAX_RELOAD_ATTEMPTS_PER_VERSION,
+    );
+    // The fixed document finally arrives: it matches, so its count clears.
+    expect(await loadDocument(target, target)).toBe(false);
+    expect(ledger().perTarget[versionKey(target)]).toBeUndefined();
+  });
+
+  it("the window cap stops a many-key flap, and lapses after RELOAD_WINDOW_MS", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    let reloads = 0;
+    for (let i = 0; i < 6; i += 1)
+      if (await loadDocument(VALID, { ...VALID, config_hash: `k${i}` }))
+        reloads += 1;
+    expect(reloads).toBe(MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION);
+    expect(Object.keys(ledger().perTarget).length).toBeLessThanOrEqual(
+      LEDGER_MAX_KEYS,
+    );
+    vi.spyOn(Date, "now").mockReturnValue(now + RELOAD_WINDOW_MS);
+    expect(await loadDocument(VALID, { ...VALID, config_hash: "later" })).toBe(
+      true,
+    );
+    vi.restoreAllMocks();
+  });
+
+  it("a backward wall-clock correction cannot clear the window cap", async () => {
+    const now = Date.now();
+    try {
+      vi.spyOn(Date, "now").mockReturnValue(now);
+      for (let i = 0; i < MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION; i += 1)
+        expect(
+          await loadDocument(VALID, { ...VALID, config_hash: `clock-${i}` }),
+        ).toBe(true);
+      vi.spyOn(Date, "now").mockReturnValue(now - RELOAD_WINDOW_MS);
+      expect(
+        await loadDocument(VALID, {
+          ...VALID,
+          config_hash: "after-clock-reset",
+        }),
+      ).toBe(false);
+      expect(lastToast()?.[0]).toBe("Couldn't update automatically.");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("the exhausted state shows the Reload copy, never the unsaved-edits copy", async () => {
+    const reloader = vi.fn();
+    sessionStorage.setItem(
+      RELOAD_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify({
+        perTarget: { [targetKey("hash-2")]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await settle();
+    const [message, options] = lastToast() ?? [];
+    expect(message).toBe("Couldn't update automatically.");
+    expect(options.action.label).toBe("Reload");
+    expect(JSON.stringify(lastToast())).not.toMatch(/unsaved/i);
+  });
+
+  it("the Reload button clears the ledger and performs the reload", async () => {
+    const reloader = vi.fn();
+    sessionStorage.setItem(
+      RELOAD_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify({
+        perTarget: { [targetKey("hash-2")]: MAX_RELOAD_ATTEMPTS_PER_VERSION },
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await settle();
+    act(() => lastToast()?.[1].action.onClick());
+    expect(reloader).toHaveBeenCalledTimes(1);
+    expect(ledger()).toEqual({ perTarget: {}, recent: [] });
+  });
+
+  it("the dirty path keeps the unsaved-edits copy, and its button also clears the ledger", async () => {
+    registerDirtyEditor(() => true);
+    const reloader = vi.fn();
+    sessionStorage.setItem(
+      RELOAD_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify({ perTarget: { stale: 1 } }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...VALID, config_hash: "hash-2" }),
+    );
+    renderHook(() => useVersionCheck({ reloader }));
+    await settle();
+    expect(reloader).not.toHaveBeenCalled();
+    const [message, options] = lastToast() ?? [];
+    expect(message).toBe(
+      "A new version is available. Automatic reload is paused. Reloading now discards unsaved edits.",
+    );
+    expect(options.action.label).toBe("Discard unsaved edits and reload");
+    act(() => options.action.onClick());
+    expect(reloader).toHaveBeenCalledTimes(1);
+    expect(ledger()).toEqual({ perTarget: {}, recent: [] });
+  });
+});
+
+describe("hardReload (open-items 458)", () => {
+  it("re-fetches the document and this document's same-origin /assets/*.js with cache: reload, then reloads", async () => {
+    const reload = vi.fn();
+    const origin = window.location.origin;
+    vi.stubGlobal("location", {
+      href: `${origin}/dashboard?x=1`,
+      origin,
+      reload,
+    });
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+      { name: `${origin}/assets/index-CRCX_rbg.js` },
+      { name: `${origin}/assets/index-abc.css` },
+      { name: `${origin}/api/task` },
+      { name: "https://cdn.example.invalid/assets/x.js" },
+    ] as unknown as PerformanceEntryList);
+    fetchMock.mockImplementation(async () => {
+      expect(reload).not.toHaveBeenCalled();
+      return jsonResponse({});
+    });
+    await hardReload();
+    expect(
+      fetchMock.mock.calls.map(([url, init]) => [url, init?.cache]),
+    ).toEqual([
+      [`${origin}/dashboard?x=1`, "reload"],
+      [`${origin}/assets/index-CRCX_rbg.js`, "reload"],
+    ]);
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.restoreAllMocks();
+  });
+
+  it("still reloads when a refresh fetch hangs (bounded) or fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const reload = vi.fn();
+      vi.stubGlobal("location", {
+        href: `${window.location.origin}/`,
+        origin: window.location.origin,
+        reload,
+      });
+      fetchMock.mockImplementation(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      );
+      const done = hardReload();
+      await vi.advanceTimersByTimeAsync(HARD_RELOAD_TIMEOUT_MS);
+      await done;
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

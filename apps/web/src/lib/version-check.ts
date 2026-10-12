@@ -3,11 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { i18n } from "@/lib/i18n";
 
-/** Vite emits a fixed-width runtime slot. env.sh fills it at container start;
-    JSON.parse in the define prevents constant folding into surrounding strings. */
-declare const __KANEO_LOADED_VERSION_JSON__: string;
-
-/** The loaded identity belongs to these bundle bytes. Only the target is fetched:
+/** The loaded identity belongs to this document: env.sh writes it into index.html as
+    `window.__OPERON_LOADED_VERSION__` (open-items 458, Operon repo). It must never live in
+    a hashed .js chunk — env.sh rewriting a chunk under an unchanged filename let a CDN
+    serve the previous release's identity for hours and the check reloaded in a loop. Only the target is fetched:
     fetching both from /version.json would make a cached document compare the newest
     manifest to itself and miss every update. Keep the config hash in the comparison
     because the same build can be deployed with different runtime URLs. */
@@ -85,32 +84,29 @@ export function resetInFlightVersionFetchForTests(): void {
 
 let cachedLoadedVersion: VersionInfo | null | undefined;
 
-/** Parses the build-time/container-start-embedded `__KANEO_LOADED_VERSION_JSON__`
-    constant. `undefined` (the define never ran — a non-Vite test environment), the raw,
-    never-substituted placeholder text (a dev build with no `env.sh` run, e.g. `vite dev`),
-    and a malformed/unparseable payload all become `null` — the same "cannot tell" contract
-    `fetchVersionJson()` uses for a network failure. */
-function parseEmbeddedVersion(): VersionInfo | null {
+/** Reads the identity env.sh wrote into index.html. Absent (a non-browser test
+    environment), `null` (vite dev, no env.sh run) and a malformed object all become
+    `null` — the same "cannot tell" contract `fetchVersionJson()` uses for a network
+    failure. */
+export function readEmbeddedVersion(): VersionInfo | null {
   try {
-    const raw =
-      typeof __KANEO_LOADED_VERSION_JSON__ === "string"
-        ? __KANEO_LOADED_VERSION_JSON__
-        : "";
-    if (!raw || raw === "KANEO_LOADED_VERSION_JSON_PLACEHOLDER") return null;
-    const body: unknown = JSON.parse(raw);
-    return isVersionInfo(body) ? body : null;
+    const embedded =
+      typeof window === "undefined"
+        ? undefined
+        : window.__OPERON_LOADED_VERSION__;
+    return isVersionInfo(embedded) ? embedded : null;
   } catch {
     return null;
   }
 }
 
-/** The version THIS document loaded with — read from the embedded constant exactly once
+/** The version THIS document loaded with — read from index.html's slot exactly once
     per document lifetime and cached. `resetLoadedVersionForTests()` is the only way to
     clear it; a real browser document never needs it (a reload is a fresh module graph and
-    a fresh embedded constant). */
+    a fresh index.html). */
 export function getLoadedVersion(): Promise<VersionInfo | null> {
   if (cachedLoadedVersion === undefined) {
-    cachedLoadedVersion = parseEmbeddedVersion();
+    cachedLoadedVersion = readEmbeddedVersion();
   }
   return Promise.resolve(cachedLoadedVersion);
 }
@@ -246,10 +242,15 @@ export function resetDirtyEditorsForTests(): void {
 export const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 export const DRAIN_POLL_MS = 5000;
 export const MAX_RELOAD_ATTEMPTS_PER_VERSION = 2;
-/** Stage 1 finding 11: the episode-wide bound across every distinct target this session
-    has seen — mirrors `app/src/shell/useVersionCheck.ts`'s own constant of the same name
-    and value on the Operon side. */
+/** Stage 1 finding 11: the episode-wide bound across every distinct target — same name
+    and value as `app/src/shell/useVersionCheck.ts` on the Operon side. Open-items 458
+    counts it inside RELOAD_WINDOW_MS instead of over the whole session: a standalone PWA
+    keeps one sessionStorage for days, and a session-long total pinned it at "paused". */
 export const MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION = 4;
+export const RELOAD_WINDOW_MS = 10 * 60 * 1000;
+/** Per-target counts kept for the most recently attempted keys only, so the ledger
+    stays bounded while a two- or three-key flap still meets its own counts again. */
+export const LEDGER_MAX_KEYS = 4;
 export const RELOAD_ATTEMPTS_STORAGE_KEY =
   "operon.version-check.reload-attempts";
 
@@ -300,6 +301,9 @@ export function resetMutationAdmissionForTests(): void {
     between two flapping targets never hit the per-target cap. */
 interface StoredAttempts {
   perTarget: Record<string, number>;
+  /** Timestamps (ms) of automatic reloads, for the RELOAD_WINDOW_MS cap. Absent in
+      ledgers written before open-items 458 — read as none. */
+  recent: number[];
 }
 
 /** `null` means the ledger could not be read — the caller must treat that as "cannot
@@ -309,7 +313,7 @@ interface StoredAttempts {
 function readAttempts(): StoredAttempts | null {
   try {
     const raw = sessionStorage.getItem(RELOAD_ATTEMPTS_STORAGE_KEY);
-    if (!raw) return { perTarget: {} };
+    if (!raw) return { perTarget: {}, recent: [] };
     const parsed: unknown = JSON.parse(raw);
     if (
       typeof parsed === "object" &&
@@ -330,7 +334,13 @@ function readAttempts(): StoredAttempts | null {
           return null;
         clean[key] = value;
       }
-      return { perTarget: clean };
+      const recent: unknown = (parsed as { recent?: unknown }).recent ?? [];
+      if (
+        !Array.isArray(recent) ||
+        !recent.every((t) => typeof t === "number" && Number.isFinite(t))
+      )
+        return null;
+      return { perTarget: clean, recent };
     }
     return null;
   } catch {
@@ -349,12 +359,76 @@ function writeAttempts(entry: StoredAttempts): boolean {
   }
 }
 
-function totalAttempts(attempts: StoredAttempts): number {
-  return Object.values(attempts.perTarget).reduce((sum, n) => sum + n, 0);
+/**
+ * Open-items 458 (Codex round 1): counts are kept for every recently attempted key and
+ * are never reset just because the document's loaded key changed — an A→B→A flap must
+ * meet its own counts again. A key's count clears only when that key is loaded AND
+ * matches version.json (convergence, in `check`). The RELOAD_WINDOW_MS cap stops any
+ * flap the per-key counts miss.
+ */
+function recordAttempt(
+  attempts: StoredAttempts,
+  targetKey: string,
+  now: number,
+): StoredAttempts {
+  const perTarget = { ...attempts.perTarget };
+  const next = (perTarget[targetKey] ?? 0) + 1;
+  delete perTarget[targetKey]; // re-insert last: insertion order is recency
+  perTarget[targetKey] = next;
+  const keys = Object.keys(perTarget);
+  for (const key of keys.slice(0, Math.max(0, keys.length - LEDGER_MAX_KEYS)))
+    delete perTarget[key];
+  return { perTarget, recent: [...recentAttempts(attempts, now), now] };
+}
+
+function recentAttempts(attempts: StoredAttempts, now: number): number[] {
+  // sessionStorage survives document reloads, but a monotonic clock does not.
+  // Keep future timestamps when the wall clock moves backward so that a clock
+  // correction cannot reopen the automatic reload loop.
+  return attempts.recent.filter((t) => t > now || now - t < RELOAD_WINDOW_MS);
+}
+
+export const HARD_RELOAD_TIMEOUT_MS = 5000;
+
+/**
+ * Open-items 458: re-fetch the document and every same-origin /assets/*.js this document
+ * loaded with `cache: "reload"`, then reload. `cache: "reload"` overwrites the browser's
+ * HTTP-cache entry for those exact URLs, which is the entry a stale CDN max-age pinned.
+ * A `?__v=` query on the document would not help: it changes the document URL only, and
+ * the module graph still imports the same /assets URLs from the stale cache entry. The
+ * refresh is bounded by HARD_RELOAD_TIMEOUT_MS and best-effort: the reload always runs.
+ */
+export async function hardReload(): Promise<void> {
+  const urls = new Set<string>([window.location.href]);
+  try {
+    for (const entry of performance.getEntriesByType("resource")) {
+      const url = new URL(entry.name, window.location.href);
+      if (
+        url.origin === window.location.origin &&
+        url.pathname.startsWith("/assets/") &&
+        url.pathname.endsWith(".js")
+      )
+        urls.add(url.href);
+    }
+  } catch {
+    // Resource timing unavailable — the document refresh alone still runs.
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HARD_RELOAD_TIMEOUT_MS);
+  try {
+    await Promise.allSettled(
+      [...urls].map((url) =>
+        fetch(url, { cache: "reload", signal: controller.signal }),
+      ),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  window.location.reload();
 }
 
 export type Reloader = () => void;
-const defaultReloader: Reloader = () => window.location.reload();
+const defaultReloader: Reloader = () => void hardReload();
 
 export interface UseVersionCheckOptions {
   /** Test seam only — production always uses `defaultReloader`. */
@@ -385,6 +459,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
     let drainTimer: ReturnType<typeof setInterval> | null = null;
     let hasReloaded = false;
     let notifiedForTargetKey: string | null = null;
+    let loadedKey: string | null = null;
 
     const isProtected = () =>
       mutationCountRef.current > 0 || inFlightWrites > 0 || hasDirtyEditor();
@@ -396,18 +471,27 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
       }
     }
 
-    function showRecovery() {
+    /** "dirty": unsaved work is protected, the copy says reloading discards it.
+        "failed" (open-items 458): nothing is dirty but automatic reload gave up — the
+        ledger is exhausted, unreadable or unwritable — so the copy must not claim edits. */
+    function showRecovery(kind: "dirty" | "failed") {
       reloadScheduled = true;
-      toast.info(i18n.t("common:versionUpdate.pending"), {
+      const copy =
+        kind === "dirty"
+          ? { message: "pending", label: "discardAndReload" }
+          : { message: "failed", label: "reload" };
+      toast.info(i18n.t(`common:versionUpdate.${copy.message}`), {
         id: "version-update",
         duration: Number.POSITIVE_INFINITY,
         dismissible: false,
         action: {
-          label: i18n.t("common:versionUpdate.discardAndReload"),
+          label: i18n.t(`common:versionUpdate.${copy.label}`),
           onClick: () => {
             if (cancelled || hasReloaded || navigator.onLine === false) return;
             hasReloaded = true;
             clearDrainTimer();
+            // A deliberate reload starts a fresh ledger: the user asked for it.
+            writeAttempts({ perTarget: {}, recent: [] });
             reloaderRef.current();
           },
         },
@@ -415,7 +499,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
     }
 
     function requireManualRecovery() {
-      showRecovery();
+      showRecovery("failed");
       clearDrainTimer();
     }
 
@@ -430,18 +514,18 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         return;
       }
 
+      const now = Date.now();
       const alreadyTried = attempts.perTarget[targetKey] ?? 0;
       if (
         alreadyTried >= MAX_RELOAD_ATTEMPTS_PER_VERSION ||
-        totalAttempts(attempts) >= MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION
+        recentAttempts(attempts, now).length >=
+          MAX_TOTAL_RELOAD_ATTEMPTS_PER_SESSION
       ) {
         requireManualRecovery();
         return;
       }
 
-      const wrote = writeAttempts({
-        perTarget: { ...attempts.perTarget, [targetKey]: alreadyTried + 1 },
-      });
+      const wrote = writeAttempts(recordAttempt(attempts, targetKey, now));
       if (!wrote) {
         // Finding 11: could not persist the bumped count — refuse rather than reload blind.
         requireManualRecovery();
@@ -462,14 +546,23 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
 
       const loaded = await getLoadedVersion();
       if (!loaded || cancelled) return;
+      loadedKey ??= versionKey(loaded);
 
       const latest = await fetchVersionJson();
       if (!latest || cancelled || hasReloaded || navigator.onLine === false)
         return;
 
       const targetKey = versionKey(latest);
-      if (targetKey === versionKey(loaded)) {
-        writeAttempts({ perTarget: {} });
+      if (targetKey === loadedKey) {
+        // Converged: clear only this key's count (open-items 458, Codex round 1). Other
+        // keys keep theirs so a flap back to them is still bounded; a corrupt ledger is
+        // replaced since there is nothing to protect while versions match.
+        const attempts = readAttempts();
+        if (attempts === null) writeAttempts({ perTarget: {}, recent: [] });
+        else if (attempts.perTarget[targetKey] !== undefined) {
+          const { [targetKey]: _cleared, ...perTarget } = attempts.perTarget;
+          writeAttempts({ perTarget, recent: attempts.recent });
+        }
         toast.dismiss("version-update");
         // Finding 12: "withdrawn updates" — the server reverted to the version this
         // document already has. Cancel any previously deferred reload rather than leave
@@ -484,7 +577,7 @@ export function useVersionCheck(options: UseVersionCheckOptions = {}): void {
         reloadScheduled = true;
         if (notifiedForTargetKey !== targetKey) {
           notifiedForTargetKey = targetKey;
-          showRecovery();
+          showRecovery("dirty");
         }
         if (drainTimer === null) {
           // Finding 12: re-run the FULL check (fresh fetch) on drain rather than blindly

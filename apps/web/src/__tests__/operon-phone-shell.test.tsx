@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import type * as React from "react";
 import { StrictMode } from "react";
@@ -170,6 +171,25 @@ describe("Layout — desktop/tablet unchanged", () => {
     expect(screen.getByTestId("sidebar-inset")).toBeTruthy();
     expect(screen.getByTestId("work-content")).toBeTruthy();
     expect(screen.queryByTestId("phone-navigate-marker")).toBeNull();
+  });
+
+  it("gives the toaster a wide width so the version toast does not wrap into a column (open-items 458)", async () => {
+    render(
+      <Layout>
+        <div />
+      </Layout>,
+    );
+    act(() => {
+      toast.info("A new version is available.");
+    });
+    const toaster = await waitFor(() => {
+      const element = document.querySelector<HTMLElement>(
+        "[data-sonner-toaster]",
+      );
+      if (!element) throw new Error("toaster not mounted");
+      return element;
+    });
+    expect(toaster.style.getPropertyValue("--width")).toBe("min(480px, 92vw)");
   });
 });
 

@@ -3,6 +3,14 @@
 
 declare const __APP_VERSION__: string;
 
+interface Window {
+  /** Written into index.html by env.sh at container start (open-items 458, Operon repo);
+      `null` in vite dev. Read through version-check's `getLoadedVersion()`. */
+  __OPERON_LOADED_VERSION__?: unknown;
+  /** Runtime configuration env.sh writes into index.html; vite.config.ts's defines read it. */
+  __OPERON_RUNTIME_CONFIG__?: Record<string, string> | null;
+}
+
 type ImportMetaEnv = {
   readonly KANEO_API_URL: string;
   readonly VITE_SENTRY_DSN?: string;

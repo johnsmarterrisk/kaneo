@@ -170,7 +170,14 @@ function Layout({ children, className }: LayoutProps) {
 
   return (
     <div className="flex w-full bg-background">
-      <Toaster position="top-center" />
+      {/* Open-items 458 (Operon repo): sonner's default 356px width wrapped the version
+          toast's text and its action button into a narrow column. Set through sonner's own
+          --width variable, not a per-toast width, so the top-center offset stays centred.
+          Below 600px sonner already goes full width. */}
+      <Toaster
+        position="top-center"
+        style={{ "--width": "min(480px, 92vw)" } as React.CSSProperties}
+      />
       <SidebarProvider
         defaultOpen={sidebarDefaultOpen}
         style={

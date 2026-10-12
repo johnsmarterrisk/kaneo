@@ -3,7 +3,9 @@
 		"versionUpdate": {
 			"pending": "È disponibile una nuova versione. Il ricaricamento automatico è sospeso. Ricaricare ora elimina le modifiche non salvate.",
 			"writeRefused": "Una nuova versione è in attesa. Ricarica prima di apportare altre modifiche.",
-			"discardAndReload": "Scarta le modifiche non salvate e ricarica"
+			"discardAndReload": "Scarta le modifiche non salvate e ricarica",
+			"failed": "Impossibile aggiornare automaticamente.",
+			"reload": "Ricarica"
 		},
 		"appName": "Initiative",
 		"actions": {

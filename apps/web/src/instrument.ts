@@ -192,7 +192,6 @@ export async function redactEvent(
 }
 
 declare const __KANEO_SENTRY_RELEASE__: string;
-declare const __KANEO_LOADED_VERSION_JSON__: string;
 
 export function releaseIdentity(): string {
   return typeof __KANEO_SENTRY_RELEASE__ === "string" &&
@@ -203,7 +202,13 @@ export function releaseIdentity(): string {
 
 function deploymentTags(): Record<string, string> {
   try {
-    const info = JSON.parse(__KANEO_LOADED_VERSION_JSON__);
+    // env.sh writes the identity into index.html, not into a bundle (open-items 458).
+    const info = (
+      typeof window === "undefined"
+        ? undefined
+        : window.__OPERON_LOADED_VERSION__
+    ) as Record<string, unknown> | null;
+    if (typeof info !== "object" || info === null) return {};
     const tags: Record<string, string> = {};
     if (
       typeof info.release === "string" &&
