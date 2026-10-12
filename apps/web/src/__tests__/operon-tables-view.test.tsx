@@ -22,8 +22,10 @@ import type { TableSummary } from "@/fetchers/operon-tables/get-tables-summary";
 /**
  * Operon fork check (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US2/US4,
  * RF-11): the table view groups in option order with counts and a "No <group>" section,
- * sorts by date under month headers with "No date" on top, sends its sort and chips to the
- * rows route, and searches on the server (a row the loaded pages do not hold is found).
+ * sorts by date under month headers with "No date" on top, sends its sort and column filters
+ * to the rows route, and searches on the server (a row the loaded pages do not hold is found).
+ * Tables filter bar (spec tables-filter-bar §8): the real ui/menu.tsx in jsdom — one
+ * multi-select menu per choice column, OR within and AND across, no Year anywhere.
  */
 const table = {
   projectId: "p1",
@@ -120,9 +122,9 @@ const fixture = [
 const getTableRows = vi.fn(
   async (_projectId: string, query: TableRowsQuery) => {
     let rows = fixture.filter((r) =>
-      Object.entries(query.filters).every(([id, option]) => {
+      Object.entries(query.filters).every(([id, options]) => {
         const column = table.columns.find((c) => c.id === id);
-        return column && r.values[column.name] === option;
+        return column && options.includes(r.values[column.name] as string);
       }),
     );
     if (query.sort === "date") {
@@ -226,6 +228,38 @@ function renderView() {
   return { onOpenRow };
 }
 
+/** The column-menu triggers, by their visible text, in document order. */
+function menuButtons() {
+  return screen
+    .queryAllByRole("button")
+    .filter((b) => b.getAttribute("aria-haspopup") === "menu")
+    .map((b) => b.textContent);
+}
+
+function menuButton(name: string | RegExp) {
+  return screen.getByRole("button", { name });
+}
+
+/** Opens a column menu and ticks the options in one opening (the menu stays open). */
+async function tick(menu: string | RegExp, ...options: string[]) {
+  fireEvent.click(menuButton(menu));
+  for (const option of options) {
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: option }),
+    );
+  }
+}
+
+function lastQuery() {
+  return getTableRows.mock.calls.at(-1)?.[1];
+}
+
+function expectNoYear() {
+  expect(screen.queryByText(/Year/)).toBeNull();
+  expect(screen.queryByRole("group", { name: "Year" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Year/ })).toBeNull();
+}
+
 function sectionTitles() {
   return screen
     .getAllByTestId("table-section")
@@ -254,7 +288,7 @@ describe("Table view", () => {
 
     expect(getTableRows).toHaveBeenLastCalledWith(
       "p1",
-      { sort: "created", filters: {}, year: null },
+      { sort: "created", filters: {} },
       null,
     );
   });
@@ -273,12 +307,12 @@ describe("Table view", () => {
     ).not.toContain("bg-row-alt");
   });
 
-  it("sorts by date: No date on top, months newest first, the topic becomes a chip", async () => {
+  it("sorts by date: No date on top, months newest first, the topic becomes a menu", async () => {
     renderView();
     await waitFor(() =>
       expect(screen.getAllByTestId("table-row")).toHaveLength(4),
     );
-    expect(screen.queryByRole("group", { name: "Topic" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Topic" })).toBeNull();
     fireEvent.click(screen.getByText("Sort by date"));
     await waitFor(() =>
       expect(sectionTitles()).toEqual([
@@ -289,47 +323,223 @@ describe("Table view", () => {
     );
     expect(getTableRows).toHaveBeenLastCalledWith(
       "p1",
-      { sort: "date", filters: {}, year: null },
+      { sort: "date", filters: {} },
       null,
     );
-    const topicChips = screen.getByRole("group", { name: "Topic" });
-    fireEvent.click(within(topicChips).getByText("Cyber"));
+    expect(menuButtons()).toEqual(["Status", "Topic", "Channel"]);
+    expectNoYear();
+    await tick("Topic", "Cyber");
     await waitFor(() =>
       expect(getTableRows).toHaveBeenLastCalledWith(
         "p1",
-        { sort: "date", filters: { topic: "Cyber" }, year: null },
+        { sort: "date", filters: { topic: ["Cyber"] } },
         null,
       ),
     );
   });
 
-  it("narrows by the Status, Year and Channel chips through the rows request", async () => {
+  it("narrows by the Status and Channel menus through the rows request", async () => {
     renderView();
     await waitFor(() =>
       expect(screen.getAllByTestId("table-row")).toHaveLength(4),
     );
-    const groups = screen
-      .getAllByRole("group")
-      .map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Status", "Channel", "Year"]);
-    fireEvent.click(
-      within(screen.getByRole("group", { name: "Channel" })).getByText(
-        "LinkedIn",
-      ),
-    );
+    expect(menuButtons()).toEqual(["Status", "Channel"]);
+    expectNoYear();
+    await tick("Channel", "LinkedIn");
     await waitFor(() =>
       expect(screen.getAllByTestId("table-row")).toHaveLength(2),
     );
     expect(screen.queryByText("Cyber one")).toBeNull();
-    fireEvent.click(
-      within(screen.getByRole("group", { name: "Year" })).getByText("2026"),
+    expect(getTableRows).toHaveBeenLastCalledWith(
+      "p1",
+      { sort: "created", filters: { channel: ["LinkedIn"] } },
+      null,
+    );
+  });
+
+  it("ticks several options in one opening: OR within a column", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    await tick("Channel", "LinkedIn", "Site");
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "created",
+        filters: { channel: ["LinkedIn", "Site"] },
+      }),
     );
     await waitFor(() =>
-      expect(getTableRows).toHaveBeenLastCalledWith(
-        "p1",
-        { sort: "created", filters: { channel: "LinkedIn" }, year: 2026 },
-        null,
+      expect(
+        screen.getAllByTestId("table-row").map((r) => r.textContent),
+      ).toHaveLength(3),
+    );
+    for (const title of ["Fleet one", "Cyber one", "Cyber two"]) {
+      expect(screen.getByText(title)).toBeTruthy();
+    }
+    expect(screen.queryByText("Loose one")).toBeNull();
+  });
+
+  it("ANDs across columns", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    fireEvent.click(screen.getByText("Sort by date"));
+    await tick("Channel", "LinkedIn");
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await tick("Topic", "Cyber");
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "date",
+        filters: { channel: ["LinkedIn"], topic: ["Cyber"] },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(1),
+    );
+    expect(screen.getByText("Cyber two")).toBeTruthy();
+  });
+
+  it("labels the button with the chosen values in option order, +n past two", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    await tick("Status", "Published", "Idea");
+    expect(menuButtons()[0]).toBe("Status: Idea, Published");
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "In progress" }),
+    );
+    expect(menuButtons()[0]).toBe("Status: Idea, In progress +1");
+    expect(
+      screen.getByRole("button", {
+        name: "Status: Idea, In progress +1 (selected: Idea, In progress, Published)",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("clears one column from its menu's first item", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    await tick("Channel", "LinkedIn");
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("menuitemcheckbox")).toBeNull(),
+    );
+    fireEvent.click(menuButton("Channel: LinkedIn"));
+    const menu = await screen.findByRole("menu");
+    const items = Array.from(
+      menu.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemcheckbox"]',
       ),
+    );
+    expect(items[0].textContent).toBe("Clear");
+    expect(items[0].getAttribute("role")).toBe("menuitem");
+    fireEvent.click(items[0]);
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({ sort: "created", filters: {} }),
+    );
+    expect(menuButtons()).toEqual(["Status", "Channel"]);
+    await waitFor(() =>
+      expect(screen.queryByRole("menuitemcheckbox")).toBeNull(),
+    );
+    fireEvent.click(menuButton("Channel"));
+    await screen.findAllByRole("menuitemcheckbox");
+    expect(screen.queryByRole("menuitem", { name: "Clear" })).toBeNull();
+  });
+
+  it("offers Clear filters only while a choice is active, and it clears every column", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    await tick("Status", "Idea");
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("menuitemcheckbox")).toBeNull(),
+    );
+    await tick("Channel", "Site");
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "created",
+        filters: { status: ["Idea"], channel: ["Site"] },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({ sort: "created", filters: {} }),
+    );
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    expect(menuButtons()).toEqual(["Status", "Channel"]);
+  });
+
+  it("works from the keyboard: opens, ticks, Escape returns focus, a visible focus ring", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    const trigger = menuButton("Channel");
+    expect(trigger.className).toContain("focus-visible:ring-2");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const linkedIn = await screen.findByRole("menuitemcheckbox", {
+      name: "LinkedIn",
+    });
+    fireEvent.keyDown(linkedIn, { key: "Enter" });
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "created",
+        filters: { channel: ["LinkedIn"] },
+      }),
+    );
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(menuButton("Channel: LinkedIn")),
+    );
+  });
+
+  it("keeps a hidden group-column choice in state but does not send it while grouped", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    fireEvent.click(screen.getByText("Sort by date"));
+    await tick("Topic", "Cyber");
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "date",
+        filters: { topic: ["Cyber"] },
+      }),
+    );
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    fireEvent.click(screen.getByText("Group by topic"));
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({ sort: "created", filters: {} }),
+    );
+    fireEvent.click(screen.getByText("Sort by date"));
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "date",
+        filters: { topic: ["Cyber"] },
+      }),
     );
   });
 
@@ -434,8 +644,8 @@ describe("Tables section", () => {
 
 /**
  * Tables task 15 (spec 7.11, US8; journey 8): the same list at 375px — "By topic | By
- * date", one chip row (status, years, the first other choice column), two-line rows, no
- * column header, nothing wider than the screen. The layout's bar carries the name and "+".
+ * date", the column menus folded behind "Filters · n" (tables-filter-bar §7.2), two-line
+ * rows, no column header, nothing wider than the screen. The layout's bar carries the name and "+".
  */
 describe("Table view on a phone (375px)", () => {
   const desktopWidth = window.innerWidth;
@@ -454,7 +664,7 @@ describe("Table view on a phone (375px)", () => {
     });
   }
 
-  it("reads By topic | By date, keeps one chip row and drops the desktop header row", async () => {
+  it("reads By topic | By date, folds the filters and drops the desktop header row", async () => {
     atPhoneWidth();
     renderView();
     await waitFor(() =>
@@ -467,22 +677,61 @@ describe("Table view on a phone (375px)", () => {
     expect(screen.queryByTestId("table-header")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add entry" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Columns/ })).toBeNull();
-    // One chip row: Status options, the years, then Channel (the first other choice).
-    const chips = screen.getByTestId("chip-row-inline");
-    expect(
-      within(chips)
-        .getAllByRole("button")
-        .map((b) => b.textContent),
-    ).toEqual([
-      "Idea",
-      "In progress",
-      "Published",
-      "2026",
-      "LinkedIn",
-      "Newsletter",
-      "Site",
-    ]);
+    // The column menus fold behind "Filters", folded on mount.
+    expect(screen.queryByTestId("chip-row-inline")).toBeNull();
+    const filters = screen.getByRole("button", { name: "Filters" });
+    expect(filters.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Status" })).toBeNull();
+    expect(screen.queryByTestId("filters-panel")).toBeNull();
     expect(screen.getByPlaceholderText("Search risk tips")).toBeTruthy();
+  });
+
+  it("opens the Filters panel, counts ticked options live and keeps Clear filters last", async () => {
+    atPhoneWidth();
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Filters" })
+        .hasAttribute("aria-controls"),
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const panel = screen.getByTestId("filters-panel");
+    expect(
+      screen
+        .getByRole("button", { name: "Filters" })
+        .getAttribute("aria-controls"),
+    ).toBe(panel.id);
+    expect(
+      screen
+        .getByRole("button", { name: "Filters" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(menuButtons()).toEqual(["Status", "Channel"]);
+    expectNoYear();
+    await tick("Status", "Idea", "Published");
+    // The menu is still open and the count already reads 2.
+    expect(screen.getByRole("menuitemcheckbox", { name: "Idea" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Filters · 2" })).toBeTruthy();
+    const clear = within(panel).getByRole("button", { name: "Clear filters" });
+    // Clear filters is the panel's last element, in its own full-width child.
+    const wrapper = clear.parentElement as HTMLElement;
+    expect(wrapper.className).toContain("w-full");
+    expect(wrapper.parentElement?.lastElementChild).toBe(wrapper);
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("menuitemcheckbox")).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filters · 2" }));
+    expect(screen.queryByTestId("filters-panel")).toBeNull();
+    expect(screen.getByRole("button", { name: "Filters · 2" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Filters · 2" }));
+    expect(screen.getByTestId("filters-panel")).toBeTruthy();
+    expectNoYear();
   });
 
   it("draws two-line rows and never scrolls sideways", async () => {
@@ -510,5 +759,19 @@ describe("Table view on a phone (375px)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "By date" }));
     await waitFor(() => expect(sectionTitles()[0]).toBe("No date"));
+  });
+});
+
+describe("tableRowsSearch", () => {
+  it("sends one filter per ticked option and no year", async () => {
+    const { tableRowsSearch } = await vi.importActual<
+      typeof import("@/fetchers/operon-tables/get-table-rows")
+    >("@/fetchers/operon-tables/get-table-rows");
+    const search = tableRowsSearch({
+      sort: "date",
+      filters: { status: ["Idea", "Published"] },
+    });
+    expect(search).toContain("filter=status%3AIdea&filter=status%3APublished");
+    expect(search).not.toContain("year");
   });
 });
