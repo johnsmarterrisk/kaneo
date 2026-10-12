@@ -77,9 +77,17 @@ describe("OperonPhoneNavigate — iPhone pass 1, defect 2 (stamp placement)", ()
 
     const row = screen.getByTestId("phone-navigate-version-row");
     expect(row.contains(stamps[0])).toBe(true);
-    // Tables task 15: the home-indicator inset moved to the bottom tab bar below the
-    // screen (`operon-bottom-tabs.tsx`), so the stamp row no longer stacks a second one.
-    expect(row.className).not.toContain("env(safe-area-inset-bottom)");
+    // The stamp row carries the home-indicator inset (the bottom tab bar that briefly owned
+    // it was removed, John 2026-10-12): exactly the restored token, never doubled.
+    const tokens = row.className.split(" ");
+    expect(tokens).toContain("pt-1");
+    expect(tokens).toContain(
+      "pb-[calc(0.25rem_+_env(safe-area-inset-bottom))]",
+    );
+    expect(
+      tokens.filter((t) => t.includes("safe-area-inset-bottom")),
+    ).toHaveLength(1);
+    expect(tokens).not.toContain("pb-1");
 
     // "Below the account row" as DOM order: the stamp row is the footer's immediately
     // following sibling.

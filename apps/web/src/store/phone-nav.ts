@@ -27,7 +27,6 @@ const PROJECT_ROUTE =
   /^\/dashboard\/workspace\/([^/]+)\/project\/([^/]+)(?:\/.*)?$/;
 const TABLE_ROUTE =
   /^\/dashboard\/workspace\/([^/]+)\/project\/[^/]+\/table\/?$/;
-const TABLES_PAGE = /^\/dashboard\/workspace\/[^/]+\/tables\/?$/;
 
 /**
  * The workspace ROOT is the list — Navigate. Anything deeper (a project, a board, a task)
@@ -76,27 +75,4 @@ export function phoneBackTarget(
   // Unknown and non-workspace routes stay in the app; /dashboard resolves the
   // active workspace (or onboarding) through the router.
   return { to: "/dashboard" };
-}
-
-/**
- * Operon fork addition (Tables task 15, spec 7.11; docs/fork-discipline.md rows 2 and 18):
- * the phone bottom tab bar's addressing. The bar is shared in shape with Operon's
- * `app/src/shell/BottomTabBar.tsx`: "Telegraph" · "Initiative" · "Tables" · "More".
- */
-export type BottomTab = "telegraph" | "initiative" | "tables" | "more";
-
-/**
- * The Tables page and a table's own screen mark "Tables"; every other Initiative screen
- * marks "Initiative" (Tables follow-up 2026-10-11: the page replaced the `#tables` anchor).
- */
-export function bottomTabForPath(pathname: string): BottomTab {
-  return TABLE_ROUTE.test(pathname) || TABLES_PAGE.test(pathname)
-    ? "tables"
-    : "initiative";
-}
-
-/** The workspace the current address is inside, or null outside the workspace tree. */
-export function workspaceIdForPath(pathname: string): string | null {
-  const match = WORKSPACE_ANY.exec(pathname);
-  return match && match[1] !== "create" ? match[1] : null;
 }

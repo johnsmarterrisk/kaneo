@@ -92,11 +92,9 @@ function OperonPhoneNavigate() {
             safe area — see `operon-switcher.tsx`'s own doc comment on
             `OperonVersionStamp`. `OperonRailFooter` itself carries no bottom inset (its
             desktop use has none to carry), so the inset lives on this wrapper instead. */}
-        {/* Tables task 15: the home-indicator inset moved to the bottom tab bar below this
-            screen (`operon-bottom-tabs.tsx`); two stacked would leave a blank band. */}
         <div
           data-testid="phone-navigate-version-row"
-          className="px-3 pt-1 pb-1"
+          className="px-3 pt-1 pb-[calc(0.25rem_+_env(safe-area-inset-bottom))]"
         >
           <OperonVersionStamp />
         </div>

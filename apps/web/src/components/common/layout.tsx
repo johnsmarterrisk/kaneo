@@ -3,7 +3,6 @@ import type React from "react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
-import OperonBottomTabs from "@/components/common/operon-bottom-tabs";
 import OperonPhoneNavigate from "@/components/common/operon-phone-navigate";
 import { DemoAlert } from "@/components/demo-alert";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -190,24 +189,18 @@ function Layout({ children, className }: LayoutProps) {
           // suppresses it; `ui/sidebar.tsx` itself is untouched (fork-discipline.md's
           // own note on why explains the `cn()`/`twMerge` reasoning that makes this
           // possible without editing the shared primitive).
-          // Tables task 15 (R-I): a column — the screen above, the bottom tab bar below
-          // both screens (the same bar Operon's shell draws), so it never remounts with
-          // either and always takes the home-indicator inset.
           <div
             data-testid="phone-shell"
-            className="flex h-[100dvh] w-full flex-col overflow-hidden"
+            className="flex h-[100dvh] w-full overflow-hidden"
           >
-            <div className="flex min-h-0 w-full flex-1 overflow-hidden">
-              {isPhoneNavOpen ? (
-                <OperonPhoneNavigate />
-              ) : (
-                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                  {isDemoMode && <DemoAlert />}
-                  {children}
-                </div>
-              )}
-            </div>
-            <OperonBottomTabs />
+            {isPhoneNavOpen ? (
+              <OperonPhoneNavigate />
+            ) : (
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                {isDemoMode && <DemoAlert />}
+                {children}
+              </div>
+            )}
           </div>
         ) : (
           <>

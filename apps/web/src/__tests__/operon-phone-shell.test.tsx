@@ -173,6 +173,36 @@ describe("Layout — desktop/tablet unchanged", () => {
   });
 });
 
+describe("Layout — no bottom tab bar at any width (John, 2026-10-12)", () => {
+  // The shell-wide bottom tab bar (Tables task 15) was removed on John's ruling; phone
+  // navigation is the Navigate screen and each screen's own header again. This guards
+  // against the bar (or a "More" tab) coming back on either side of the 768px boundary.
+  for (const width of [375, 767, 768, 1280]) {
+    for (const pathname of [
+      "/dashboard/workspace/w1",
+      "/dashboard/workspace/w1/project/p1/board",
+    ]) {
+      it(`renders no bottom tab bar at ${width}px on ${pathname}`, () => {
+        setViewportWidth(width);
+        router.pathname = pathname;
+        render(
+          <Layout>
+            <div data-testid="work-content">Work</div>
+          </Layout>,
+        );
+        expect(screen.queryByTestId("operon-bottom-tabs")).toBeNull();
+        expect(screen.queryByRole("link", { name: "More" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "More" })).toBeNull();
+        // The screen itself rendered, so the absence is not an empty tree.
+        expect(
+          screen.queryByTestId("phone-navigate-marker") ??
+            screen.queryByTestId("work-content"),
+        ).toBeTruthy();
+      });
+    }
+  }
+});
+
 function PhoneBack() {
   const { goBack } = usePhoneNav();
   return (
