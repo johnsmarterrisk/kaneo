@@ -2,7 +2,7 @@ import { getApiUrl } from "@/fetchers/get-api-url";
 
 /**
  * Operon fork addition (Tables task 8, docs/fork-discipline.md row 18, spec 7.8 / 7.9): one
- * page of a table's rows. The server applies the sort and the chip filters before it cuts
+ * page of a table's rows. The server applies the sort and the column filters before it cuts
  * the page, so a matching row created long ago is still reached.
  */
 export type TableRow = {
@@ -25,9 +25,8 @@ export type TableRow = {
 
 export type TableRowsQuery = {
   sort: "created" | "date";
-  /** Choice column id → the one selected option. */
-  filters: Record<string, string>;
-  year: number | null;
+  /** Choice column id → the selected options in option order (OR within, AND across; the server applies them). */
+  filters: Record<string, string[]>;
 };
 
 export type TableRowsPage = {
@@ -45,10 +44,10 @@ export function tableRowsSearch(
 ): string {
   const params = new URLSearchParams();
   params.set("sort", query.sort);
-  for (const [fieldId, option] of Object.entries(query.filters)) {
-    params.append("filter", `${fieldId}:${option}`);
+  for (const [fieldId, options] of Object.entries(query.filters)) {
+    for (const option of options)
+      params.append("filter", `${fieldId}:${option}`);
   }
-  if (query.year !== null) params.set("year", String(query.year));
   params.set("limit", "200");
   if (cursor) params.set("cursor", cursor);
   return params.toString();

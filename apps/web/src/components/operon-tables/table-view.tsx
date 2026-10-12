@@ -1,5 +1,5 @@
 import { Plus, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSyncedIsMobile } from "@/components/common/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,8 @@ import useTableRows, {
   TABLE_VIEW_ROW_CAP,
 } from "@/hooks/queries/operon-tables/use-table-rows";
 import { cn } from "@/lib/cn";
-import ChipRows, { type ChipRow } from "./chip-rows";
 import { ColumnWidthsContext, useColumnWidths } from "./column-widths";
+import FilterMenus, { type FilterMenu } from "./filter-menus";
 import Gallery from "./gallery";
 import GroupSection, { ColumnHeader, type ShownColumn } from "./group-section";
 import { monthBuckets, VISIBLE_MONTHS } from "./month-section";
@@ -24,7 +24,7 @@ import TableSearchResults from "./table-search";
  * Operon fork addition (Tables task 8, docs/fork-discipline.md row 18, spec 7.10 US2/US4):
  * the table view. Grouped by the group column (Topic in the template) in option order with
  * a final "No <group>" section, or sorted by the date column under month headers with the
- * undated rows on top. Sort and chips go to the rows route, which applies them before it
+ * undated rows on top. Sort and column filters go to the rows route, which applies them before it
  * pages; at most 2,000 matching rows load. Search runs on the server (RF-11). English copy,
  * as the fork's other Operon surfaces; navy theme classes like the fork's list view.
  */
@@ -90,8 +90,8 @@ function TableViewBody({
       : mode === "date" && !dateColumn
         ? "group"
         : mode;
-  const [chips, setChips] = useState<Record<string, string>>({});
-  const [year, setYear] = useState<number | null>(null);
+  // Column id → the ticked options in option order; an empty list is never stored.
+  const [chips, setChips] = useState<Record<string, string[]>>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showOlder, setShowOlder] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -101,16 +101,18 @@ function TableViewBody({
   const gallery = hasImage && layout === "gallery";
   const query = useDebounced(searchText, 300);
   // Task 15 (spec 7.11, US8): below 768px the same list, phone-shaped — the layout's bar
-  // carries the name and "+", the mode toggle reads "By topic | By date", one chip row,
-  // two-line rows, no horizontal scroll.
+  // carries the name and "+", the mode toggle reads "By topic | By date", the column menus
+  // fold behind a "Filters · n" button (tables-filter-bar §7.2), two-line rows, no
+  // horizontal scroll.
   const phone = useSyncedIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // Spec §16: per-table column widths, remembered in this browser only.
   const columnWidths = useColumnWidths(table.projectId);
 
   const dropdowns = table.columns.filter((c) => c.kind === "dropdown");
-  // Chip rows: Status first, then the other choice columns; the group column only when
+  // Column menus: Status first, then the other choice columns; the group column only when
   // sorted by date (when grouped, its sections already split the list).
-  const chipColumns = [
+  const filterColumns = [
     ...(status ? [status] : []),
     ...dropdowns.filter(
       (c) =>
@@ -118,15 +120,16 @@ function TableViewBody({
         !(effectiveMode === "group" && c.id === group?.id),
     ),
   ];
+  // A choice on a hidden menu (the group column while grouped) stays in state but is not
+  // sent; it returns with Sort by date.
   const activeFilters = Object.fromEntries(
     Object.entries(chips).filter(([id]) =>
-      chipColumns.some((c) => c.id === id),
+      filterColumns.some((c) => c.id === id),
     ),
   );
   const rowsQuery: TableRowsQuery = {
     sort: effectiveMode === "date" ? "date" : "created",
     filters: activeFilters,
-    year: dateColumn ? year : null,
   };
   const { rows, total, entries, isError } = useTableRows(
     table.projectId,
@@ -137,44 +140,30 @@ function TableViewBody({
     if (entries !== null) setAllEntries(entries);
   }, [entries]);
 
-  const years = useMemo(() => {
-    const seen = new Set<number>();
-    if (year !== null) seen.add(year);
-    if (dateColumn) {
-      for (const row of rows) {
-        const value = row.values[dateColumn.name];
-        if (typeof value === "string" && /^\d{4}-/.test(value)) {
-          seen.add(Number(value.slice(0, 4)));
-        }
-      }
-    }
-    return [...seen].sort((a, b) => b - a);
-  }, [rows, dateColumn, year]);
-
-  const columnChipRows: ChipRow[] = chipColumns.map((c) => ({
+  const menus: FilterMenu[] = filterColumns.map((c) => ({
     key: c.id,
     label: c.name,
     options: c.options ?? [],
-    selected: activeFilters[c.id] ?? null,
+    selected: activeFilters[c.id] ?? [],
   }));
-  const yearChipRows: ChipRow[] =
-    dateColumn && years.length > 0
-      ? [
-          {
-            key: "__year",
-            label: "Year",
-            options: years.map(String),
-            selected: year === null ? null : String(year),
-          },
-        ]
-      : [];
-  // Phone: ONE chip row — the status options, the years, then the first other choice
-  // column's options (spec 7.11); desktop keeps one labelled row per column.
-  const statusChipRows = status ? columnChipRows.slice(0, 1) : [];
-  const otherChipRows = status ? columnChipRows.slice(1) : columnChipRows;
-  const chipRows: ChipRow[] = phone
-    ? [...statusChipRows, ...yearChipRows, ...otherChipRows.slice(0, 1)]
-    : [...columnChipRows, ...yearChipRows];
+  const activeCount = Object.values(activeFilters).reduce(
+    (n, selected) => n + selected.length,
+    0,
+  );
+  const filterMenus = (
+    <FilterMenus
+      menus={menus}
+      onChange={(key, selected) =>
+        setChips((prev) => {
+          const next = { ...prev };
+          if (selected.length === 0) delete next[key];
+          else next[key] = selected;
+          return next;
+        })
+      }
+      onClearAll={() => setChips({})}
+    />
+  );
 
   // Columns: Title, the group column when sorted, Status, the date column, other choices.
   const shown: ShownColumn[] = [
@@ -369,23 +358,29 @@ function TableViewBody({
               {phone ? "By date" : "Sort by date"}
             </button>
           </div>
+          {phone && menus.length > 0 && (
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto"
+              aria-expanded={filtersOpen}
+              aria-controls="table-filters-panel"
+              onClick={() => setFiltersOpen((open) => !open)}
+            >
+              {activeCount > 0 ? `Filters · ${activeCount}` : "Filters"}
+            </Button>
+          )}
+          {!phone && filterMenus}
         </div>
-        <ChipRows
-          rows={chipRows}
-          inline={phone}
-          onSelect={(key, option) => {
-            if (key === "__year") {
-              setYear(option === null ? null : Number(option));
-              return;
-            }
-            setChips((prev) => {
-              const next = { ...prev };
-              if (option === null) delete next[key];
-              else next[key] = option;
-              return next;
-            });
-          }}
-        />
+        {phone && filtersOpen && menus.length > 0 && (
+          <div
+            id="table-filters-panel"
+            data-testid="filters-panel"
+            className="rounded-md border border-border p-2"
+          >
+            {filterMenus}
+          </div>
+        )}
         {total !== null && total > TABLE_VIEW_ROW_CAP && !query && (
           <p className="text-xs text-muted-foreground">
             Showing the first 2,000 entries
