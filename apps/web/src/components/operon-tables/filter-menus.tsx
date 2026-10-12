@@ -60,7 +60,7 @@ export default function FilterMenus({
                   type="button"
                   aria-label={name}
                   className={cn(
-                    "inline-flex h-7 max-w-64 items-center gap-1.5 rounded-md border border-input bg-secondary px-2.5 text-card-foreground text-xs font-medium outline-none ring-0 [@media(hover:hover)]:hover:bg-accent/60",
+                    "inline-flex h-7 max-w-64 items-center gap-1.5 rounded-md border border-input bg-secondary px-2.5 text-card-foreground text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card [@media(hover:hover)]:hover:bg-accent/60",
                     menu.selected.length > 0 && "border-primary",
                   )}
                 />

@@ -364,7 +364,9 @@ function TableViewBody({
               size="xs"
               className="ml-auto"
               aria-expanded={filtersOpen}
-              aria-controls="table-filters-panel"
+              // Only while the panel is mounted: a closed panel is unmounted, and
+              // aria-controls must not point at a missing id.
+              aria-controls={filtersOpen ? "table-filters-panel" : undefined}
               onClick={() => setFiltersOpen((open) => !open)}
             >
               {activeCount > 0 ? `Filters · ${activeCount}` : "Filters"}

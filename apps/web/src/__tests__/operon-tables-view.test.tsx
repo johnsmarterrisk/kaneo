@@ -486,6 +486,34 @@ describe("Table view", () => {
     expect(menuButtons()).toEqual(["Status", "Channel"]);
   });
 
+  it("works from the keyboard: opens, ticks, Escape returns focus, a visible focus ring", async () => {
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("table-row")).toHaveLength(4),
+    );
+    const trigger = menuButton("Channel");
+    expect(trigger.className).toContain("focus-visible:ring-2");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const linkedIn = await screen.findByRole("menuitemcheckbox", {
+      name: "LinkedIn",
+    });
+    fireEvent.keyDown(linkedIn, { key: "Enter" });
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        sort: "created",
+        filters: { channel: ["LinkedIn"] },
+      }),
+    );
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(menuButton("Channel: LinkedIn")),
+    );
+  });
+
   it("keeps a hidden group-column choice in state but does not send it while grouped", async () => {
     renderView();
     await waitFor(() =>
@@ -664,8 +692,18 @@ describe("Table view on a phone (375px)", () => {
     await waitFor(() =>
       expect(screen.getAllByTestId("table-row")).toHaveLength(4),
     );
+    expect(
+      screen
+        .getByRole("button", { name: "Filters" })
+        .hasAttribute("aria-controls"),
+    ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     const panel = screen.getByTestId("filters-panel");
+    expect(
+      screen
+        .getByRole("button", { name: "Filters" })
+        .getAttribute("aria-controls"),
+    ).toBe(panel.id);
     expect(
       screen
         .getByRole("button", { name: "Filters" })
