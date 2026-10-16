@@ -306,6 +306,88 @@ operonAccount.patch("/account-id", async (c) => {
 });
 
 /**
+ * Operon fork route — set the name of the Initiative user linked to an Operon `sub`
+ * (Operon open-items 371).
+ *
+ * A person's Initiative name is refreshed from their claims at each sign-in; an AGENT never
+ * signs in to Initiative, so after an Operon admin renames one, Initiative kept the old name
+ * on every card and assignee list. Operon's admin rename calls this after its own profile
+ * publish. The shape is `/account-id`'s: the Operon service key only (a session or any
+ * other key is 403), the user found by its `custom`-provider account (the Operon `sub`, a
+ * lowercase hex pubkey), 404 when no such account exists, 403 when that user is outside
+ * the service key's workspace. Only `user.name` is written.
+ */
+const MAX_NAME_LENGTH = 256;
+
+operonAccount.patch("/name", async (c) => {
+  const contextKey = c.get("apiKey") as ContextApiKey;
+  if (!contextKey?.id) {
+    throw new HTTPException(403, {
+      message: "This route requires an API key, not a user session",
+    });
+  }
+
+  const holderId = await resolveOperonServiceKeyHolder(contextKey.id);
+  if (!holderId) {
+    throw new HTTPException(403, {
+      message: "This route requires the Operon service key",
+    });
+  }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    sub?: unknown;
+    name?: unknown;
+  } | null;
+  const sub = body?.sub;
+  const rawName = body?.name;
+  if (typeof sub !== "string" || !PUBKEY.test(sub)) {
+    throw new HTTPException(400, {
+      message: "sub must be a 64-character lowercase hex pubkey",
+    });
+  }
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (name === "" || name.length > MAX_NAME_LENGTH) {
+    throw new HTTPException(400, {
+      message: `name must be 1 to ${MAX_NAME_LENGTH} characters`,
+    });
+  }
+
+  const [account] = await db
+    .select({ userId: accountTable.userId })
+    .from(accountTable)
+    .where(
+      and(
+        eq(accountTable.providerId, OPERON_PROVIDER_ID),
+        eq(accountTable.accountId, sub),
+      ),
+    )
+    .limit(1);
+  if (!account) {
+    // 404 rather than a cheerful 200: Operon reports a rename Initiative never took as failed.
+    throw new HTTPException(404, {
+      message: "No Initiative user is linked to that sub",
+    });
+  }
+
+  if (!(await sharesWorkspace(holderId, account.userId))) {
+    throw new HTTPException(403, {
+      message: "That user is not in the service key's workspace",
+    });
+  }
+
+  const updated = await db
+    .update(userTable)
+    .set({ name, updatedAt: new Date() })
+    .where(eq(userTable.id, account.userId))
+    .returning({ id: userTable.id });
+
+  console.info(
+    `[operon] operon.user_renamed: kaneo user ${account.userId} key ${contextKey.id}`,
+  );
+  return c.json({ updated: updated.length, kaneoUserId: account.userId }, 200);
+});
+
+/**
  * Operon fork route — pre-create a Kaneo user at PROVISION time (Operon spec R17,
  * decisions 110, 111, 116, 122).
  *
