@@ -52,6 +52,7 @@ import {
   assertOperonAgentAlive,
   classifyOperonRequestKeys,
 } from "./operon-agent-liveness";
+import operonCardClaims from "./operon-card-claims";
 import operonFieldLabels from "./operon-field-labels";
 import operonGroups from "./operon-groups";
 import operonMaintenanceState from "./operon-maintenance-state";
@@ -769,6 +770,8 @@ export function createApp() {
   api.route("/operon", operonFieldLabels);
   // Operon fork addition (Tables, fork-discipline row 18): the Tables routes.
   api.route("/operon", operonTables);
+  // Operon fork addition (agents-first-class Phase 3 D8, fork-discipline row 19): agent card claims.
+  api.route("/operon", operonCardClaims);
   // Upstream Kaneo PR #1542 (fork-discipline row 18): custom fields.
   const customFieldApi = api.route("/custom-field", customField);
   const userApi = api.route("/user", user);

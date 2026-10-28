@@ -841,6 +841,60 @@ export function registerMcpTools(
       ),
   );
 
+  // Operon fork addition (agents-first-class Phase 3 D8, docs/fork-discipline.md row 19).
+  registerTool(
+    "card_claim",
+    {
+      description:
+        'Claim a card (Operon agents): assigns it to you and comments "On it" in one step. Returns {generation, leaseUntil}; pass generation as claimGeneration on every change to the card. Refused when another agent holds it or a person is assigned. A retry with the same requestId returns the same claim.',
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+        requestId: z
+          .string()
+          .regex(/^[A-Za-z0-9_:.-]{1,128}$/)
+          .optional()
+          .describe("Idempotency id for retries of this claim"),
+      }),
+    },
+    async (args) =>
+      run(() =>
+        client.json(
+          `/api/operon/card-claims/${encodeURIComponent(args.taskId)}`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              requestId: args.requestId ?? crypto.randomUUID(),
+            }),
+          },
+        ),
+      ),
+  );
+
+  registerTool(
+    "card_release",
+    {
+      description:
+        "Release your claim on a card (Operon agents); pass done=true when the work is finished.",
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+        claimGeneration: z.number().int().min(1),
+        done: z.boolean().optional(),
+      }),
+    },
+    async (args) =>
+      run(() =>
+        client.json(
+          `/api/operon/card-claims/${encodeURIComponent(args.taskId)}?done=${args.done === true}`,
+          {
+            method: "DELETE",
+            headers: {
+              "X-Operon-Card-Generation": String(args.claimGeneration),
+            },
+          },
+        ),
+      ),
+  );
+
   registerTool(
     "update_task_due_date",
     {

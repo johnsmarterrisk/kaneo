@@ -3,6 +3,10 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import {
+  lockTaskThenClaim,
+  revokeIfReassigned,
+} from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import {
@@ -65,31 +69,37 @@ async function updateTask(
     ),
   });
 
-  const [updatedTask] = await db
-    .update(taskTable)
-    .set({
-      title,
-      status,
-      columnId: column?.id ?? null,
-      startDate: startDate || null,
-      dueDate: dueDate || null,
-      projectId,
-      description,
-      priority,
-      position,
-      userId: normalizedUserId ?? null,
-      // Operon fork (social agent S9): see ../../operon-social-revision. Only the covered
-      // fields count, so a reorder or priority change through this route adds 0.
-      socialRevision: nextSocialRevision({
+  // Operon fork (row 19, Phase 3 D8): the update and the revoke of an agent's active claim when
+  // the assignee moves away from it are one transaction (task row, then claim row).
+  const [updatedTask] = await db.transaction(async (tx) => {
+    const { claim } = await lockTaskThenClaim(tx, id);
+    await revokeIfReassigned(tx, claim, normalizedUserId ?? null);
+    return tx
+      .update(taskTable)
+      .set({
         title,
         status,
+        columnId: column?.id ?? null,
+        startDate: startDate || null,
         dueDate: dueDate || null,
         projectId,
         description,
-      }),
-    })
-    .where(eq(taskTable.id, id))
-    .returning();
+        priority,
+        position,
+        userId: normalizedUserId ?? null,
+        // Operon fork (social agent S9): see ../../operon-social-revision. Only the covered
+        // fields count, so a reorder or priority change through this route adds 0.
+        socialRevision: nextSocialRevision({
+          title,
+          status,
+          dueDate: dueDate || null,
+          projectId,
+          description,
+        }),
+      })
+      .where(eq(taskTable.id, id))
+      .returning();
+  });
 
   if (!updatedTask) {
     throw new HTTPException(500, {

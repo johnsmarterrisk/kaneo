@@ -1482,3 +1482,39 @@ export const operonTableRequestTable = pgTable("operon_table_request", {
   taskId: text("task_id").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
+
+// Operon fork addition (agents-first-class Phase 3 D8, docs/fork-discipline.md row 19): an
+// agent's claim on one card. One row per task; the claim, the assignee and the agent's "On it"
+// comment are written in ONE transaction (operon-card-claims/index.ts), and every guarded
+// agent-key change to the card checks this row under the task row's lock. `generation` counts
+// claims; `request_id` makes a retried claim return the same generation.
+export const agentCardClaimsTable = pgTable(
+  "agent_card_claims",
+  {
+    taskId: text("task_id")
+      .primaryKey()
+      .references(() => taskTable.id, { onDelete: "cascade" }),
+    claimer: text("claimer")
+      .notNull()
+      .references(() => userTable.id, { onDelete: "cascade" }),
+    generation: integer("generation").notNull(),
+    state: text("state").notNull(),
+    requestId: text("request_id").notNull(),
+    leaseUntil: timestamp("lease_until", {
+      mode: "date",
+      withTimezone: true,
+    }).notNull(),
+    claimedAt: timestamp("claimed_at", { mode: "date", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "agent_card_claims_state",
+      sql`${table.state} IN ('active', 'released', 'revoked', 'done')`,
+    ),
+  ],
+);

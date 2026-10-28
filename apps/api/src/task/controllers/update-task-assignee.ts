@@ -4,6 +4,10 @@ import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import {
+  lockTaskThenClaim,
+  revokeIfReassigned,
+} from "../../operon-card-claims";
+import {
   assertAssignableUser,
   getProjectWorkspaceId,
 } from "../../utils/assert-assignable-user";
@@ -39,11 +43,18 @@ async function updateTaskAssignee({
     );
   }
 
-  const [updatedTask] = await db
-    .update(taskTable)
-    .set({ userId: nextAssigneeId })
-    .where(eq(taskTable.id, id))
-    .returning();
+  // Operon fork (docs/fork-discipline.md row 19, Phase 3 D8): the reassignment and the revoke of
+  // an agent's active claim on this card are one transaction, locking the task row then its
+  // claim row (the one lock order), so a person's reassignment always wins.
+  const [updatedTask] = await db.transaction(async (tx) => {
+    const { claim } = await lockTaskThenClaim(tx, id);
+    await revokeIfReassigned(tx, claim, nextAssigneeId);
+    return tx
+      .update(taskTable)
+      .set({ userId: nextAssigneeId })
+      .where(eq(taskTable.id, id))
+      .returning();
+  });
 
   if (!updatedTask) {
     throw new HTTPException(500, {
