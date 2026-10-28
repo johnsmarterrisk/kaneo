@@ -4,7 +4,11 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
-import { taskOfLabel, withCardClaim } from "../operon-card-claims";
+import {
+  refuseAgentRoute,
+  taskOfLabel,
+  withCardClaim,
+} from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import assignLabelToTask from "./controllers/assign-label-to-task";
@@ -219,6 +223,16 @@ const label = apiRouter()
   .openapi(createLabelRoute, async (c) => {
     const { name, color, workspaceId, taskId } = c.req.valid("json");
     const userId = c.get("userId");
+    // Operon fork (row 19): a task label is a card change, guarded by the agent's card claim; a
+    // workspace label (no taskId) changes no card.
+    if (taskId) {
+      return c.json(
+        await withCardClaim(c, taskId, (executor) =>
+          createLabel(name, color, taskId, workspaceId, userId, executor),
+        ),
+        200,
+      );
+    }
     return c.json(
       await createLabel(name, color, taskId, workspaceId, userId),
       200,
@@ -252,12 +266,36 @@ const label = apiRouter()
   .openapi(updateLabelRoute, async (c) => {
     const { id } = c.req.valid("param");
     const { name, color } = c.req.valid("json");
-    return c.json(await updateLabel(id, name, color), 200);
+    // Operon fork (row 19): a task label is guarded by the card claim; a workspace label cascades
+    // its name and color to every card's copy, so an agent key may not change it.
+    const taskId = await taskOfLabel(id);
+    if (!taskId) {
+      await refuseAgentRoute(c);
+      return c.json(await updateLabel(id, name, color), 200);
+    }
+    return c.json(
+      await withCardClaim(c, taskId, (executor) =>
+        updateLabel(id, name, color, executor),
+      ),
+      200,
+    );
   })
   .openapi(deleteLabelRoute, async (c) => {
     const { id } = c.req.valid("param");
     const userId = c.get("userId");
-    return c.json(await deleteLabel(id, userId), 200);
+    // Operon fork (row 19): deleting a workspace label deletes every card's copy (a cascade across
+    // cards): agent keys are refused; a task label is guarded by the card claim.
+    const taskId = await taskOfLabel(id);
+    if (!taskId) {
+      await refuseAgentRoute(c);
+      return c.json(await deleteLabel(id, userId), 200);
+    }
+    return c.json(
+      await withCardClaim(c, taskId, (executor) =>
+        deleteLabel(id, userId, executor),
+      ),
+      200,
+    );
   });
 
 export default label;

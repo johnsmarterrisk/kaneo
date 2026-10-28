@@ -425,7 +425,7 @@ export async function taskOfTimeEntry(entryId: string) {
  */
 export const CARD_ROUTE_CLASSES: Record<
   string,
-  "guarded" | "refused" | "unguarded" | "unchanged"
+  "guarded" | "refused" | "unguarded" | "unchanged" | "label"
 > = {
   "PUT /api/task/:id": "guarded",
   "PUT /api/task/move/:id": "guarded",
@@ -455,9 +455,12 @@ export const CARD_ROUTE_CLASSES: Record<
   "POST /api/task/import/:projectId": "refused",
   "POST /api/activity/create": "refused",
   "POST /api/task/:projectId": "unguarded",
-  "POST /api/label": "unchanged",
-  "PUT /api/label/:id": "unchanged",
-  "DELETE /api/label/:id": "unchanged",
+  // "label": a task label (one card's) is guarded by that card's claim; a workspace label's update
+  // or delete cascades to every card's copy and is refused for agent keys; creating a workspace
+  // label changes no card and stays unguarded.
+  "POST /api/label": "label",
+  "PUT /api/label/:id": "label",
+  "DELETE /api/label/:id": "label",
   "POST /api/custom-field": "unchanged",
   "PUT /api/custom-field/reorder/:projectId": "unchanged",
   "DELETE /api/custom-field/:id": "unchanged",

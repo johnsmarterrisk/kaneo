@@ -562,6 +562,96 @@ describe("guarded card writes for agent keys (agents-first-class Phase 3 D8, D10
     expect(created.status).toBe(200);
   });
 
+  it("labels: a task label's create, update and delete are guarded by the card claim; a workspace label's update and delete (cascades across cards) are 403 for agent keys; a person is unchanged", async () => {
+    const a = await newAgent("Scout");
+    const c = await claimedCard(a);
+    const create = {
+      name: "Agent label",
+      color: "#111111",
+      workspaceId: holder.workspace.id,
+      taskId: c.task.id,
+    };
+    const noHeader = await req(a.key, "POST", "/api/label", create);
+    expect([
+      noHeader.status,
+      ((await noHeader.json()) as { error?: string }).error,
+    ]).toEqual([409, "claim_required"]);
+    const created = await req(a.key, "POST", "/api/label", create, 1);
+    expect(created.status).toBe(200);
+    const taskLabel = (await created.json()) as { id: string };
+    expect(
+      (
+        await req(a.key, "PUT", `/api/label/${taskLabel.id}`, {
+          name: "Renamed",
+          color: "#222222",
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await req(
+          a.key,
+          "PUT",
+          `/api/label/${taskLabel.id}`,
+          { name: "Renamed", color: "#222222" },
+          1,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await req(a.key, "DELETE", `/api/label/${taskLabel.id}`)).status,
+    ).toBe(409);
+    expect(
+      (await req(a.key, "DELETE", `/api/label/${taskLabel.id}`, undefined, 1))
+        .status,
+    ).toBe(200);
+    // A workspace label with a copy on the card: an agent may neither rename nor delete it.
+    await db.insert(schema.labelTable).values({
+      name: c.label.name,
+      color: c.label.color,
+      workspaceId: holder.workspace.id,
+      taskId: c.task.id,
+    });
+    const rename = await req(
+      a.key,
+      "PUT",
+      `/api/label/${c.label.id}`,
+      { name: "Everywhere", color: "#333333" },
+      1,
+    );
+    expect([
+      rename.status,
+      ((await rename.json()) as { error?: string }).error,
+    ]).toEqual([403, "agent_route_not_allowed"]);
+    const del = await req(
+      a.key,
+      "DELETE",
+      `/api/label/${c.label.id}`,
+      undefined,
+      1,
+    );
+    expect(del.status).toBe(403);
+    const copies = await db
+      .select()
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.name, c.label.name));
+    expect(copies.length).toBe(2);
+    // A workspace label may still be created (it changes no card); a person may delete one.
+    expect(
+      (
+        await req(a.key, "POST", "/api/label", {
+          name: `WS ${randomUUID()}`,
+          color: "#444444",
+          workspaceId: holder.workspace.id,
+        })
+      ).status,
+    ).toBe(200);
+    const person = await humanBearer(holder.user.id);
+    expect(
+      (await req(person, "DELETE", `/api/label/${c.label.id}`)).status,
+    ).toBe(200);
+  });
+
   it("a person's requests are unchanged: no header needed, the claim is ignored (and revoked on reassignment)", async () => {
     const a = await newAgent("Scout");
     const c = await claimedCard(a);

@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { labelTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { syncLabelToGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { syncLabelToGitHub } from "../../plugins/github/utils/sync-label-to-github";
 
@@ -12,9 +13,10 @@ async function createLabel(
   taskId: string | undefined,
   workspaceId: string,
   userId: string,
+  executor: CardExecutor = db,
 ) {
   if (taskId) {
-    const [task] = await db
+    const [task] = await executor
       .select({
         id: taskTable.id,
         projectId: taskTable.projectId,
@@ -37,7 +39,7 @@ async function createLabel(
       });
     }
 
-    const [inserted] = await db
+    const [inserted] = await executor
       .insert(labelTable)
       .values({ name, color, taskId, workspaceId: task.workspaceId })
       .onConflictDoNothing({
@@ -47,7 +49,7 @@ async function createLabel(
 
     const label =
       inserted ??
-      (await db.query.labelTable.findFirst({
+      (await executor.query.labelTable.findFirst({
         where: and(eq(labelTable.taskId, taskId), eq(labelTable.name, name)),
       }));
 
@@ -73,7 +75,7 @@ async function createLabel(
     return label;
   }
 
-  const [inserted] = await db
+  const [inserted] = await executor
     .insert(labelTable)
     .values({ name, color, taskId: null, workspaceId })
     .onConflictDoNothing({
@@ -84,7 +86,7 @@ async function createLabel(
 
   const label =
     inserted ??
-    (await db.query.labelTable.findFirst({
+    (await executor.query.labelTable.findFirst({
       where: and(
         eq(labelTable.workspaceId, workspaceId),
         eq(labelTable.name, name),

@@ -2,9 +2,15 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { labelTable } from "../../database/schema";
+import type { CardExecutor } from "../../operon-card-claims";
 
-async function updateLabel(id: string, name: string, color: string) {
-  return db.transaction(async (tx) => {
+async function updateLabel(
+  id: string,
+  name: string,
+  color: string,
+  executor: CardExecutor = db,
+) {
+  return executor.transaction(async (tx) => {
     const label = await tx.query.labelTable.findFirst({
       where: (label, { eq }) => eq(label.id, id),
     });
