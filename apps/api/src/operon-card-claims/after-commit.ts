@@ -30,3 +30,11 @@ export async function collectDeferred<T>(
     },
   };
 }
+
+/**
+ * A side effect that leaves the database (a label provider sync): queued until the guarded card
+ * transaction commits, dropped if it rolls back; run at once outside one (upstream behaviour).
+ */
+export function afterCardCommit(fn: () => unknown): void {
+  if (!deferIfInCardTransaction(fn)) void fn();
+}

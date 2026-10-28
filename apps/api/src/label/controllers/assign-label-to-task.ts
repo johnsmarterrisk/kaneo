@@ -9,6 +9,7 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import type { CardExecutor } from "../../operon-card-claims";
+import { afterCardCommit } from "../../operon-card-claims/after-commit";
 import {
   removeLabelFromGitea,
   syncLabelToGitea,
@@ -147,25 +148,37 @@ async function assignLabelToTask(
       };
     });
 
+  // Operon fork (row 19): provider sync runs after the guarded card transaction commits, on the
+  // committed rows only; a rolled-back attach syncs nothing.
   if (previousTaskId) {
-    removeLabelFromGitHub(previousTaskId, previousName).catch((error) => {
-      console.error("Failed to remove label from GitHub:", error);
-    });
-    removeLabelFromGitea(previousTaskId, previousName).catch((error) => {
-      console.error("Failed to remove label from Gitea:", error);
-    });
+    afterCardCommit(() =>
+      removeLabelFromGitHub(previousTaskId, previousName).catch((error) => {
+        console.error("Failed to remove label from GitHub:", error);
+      }),
+    );
+    afterCardCommit(() =>
+      removeLabelFromGitea(previousTaskId, previousName).catch((error) => {
+        console.error("Failed to remove label from Gitea:", error);
+      }),
+    );
   }
 
   if (!inserted) {
     return taskLabel;
   }
 
-  syncLabelToGitHub(taskId, taskLabel.name, taskLabel.color).catch((error) => {
-    console.error("Failed to sync label to GitHub:", error);
-  });
-  syncLabelToGitea(taskId, taskLabel.name, taskLabel.color).catch((error) => {
-    console.error("Failed to sync label to Gitea:", error);
-  });
+  afterCardCommit(() =>
+    syncLabelToGitHub(taskId, taskLabel.name, taskLabel.color).catch(
+      (error) => {
+        console.error("Failed to sync label to GitHub:", error);
+      },
+    ),
+  );
+  afterCardCommit(() =>
+    syncLabelToGitea(taskId, taskLabel.name, taskLabel.color).catch((error) => {
+      console.error("Failed to sync label to Gitea:", error);
+    }),
+  );
 
   await publishEvent("task.label_assigned", {
     label: taskLabel,

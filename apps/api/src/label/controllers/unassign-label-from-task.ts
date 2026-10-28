@@ -4,6 +4,7 @@ import db from "../../database";
 import { labelTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import type { CardExecutor } from "../../operon-card-claims";
+import { afterCardCommit } from "../../operon-card-claims/after-commit";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 
 async function unassignLabelFromTask(
@@ -56,10 +57,11 @@ async function unassignLabelFromTask(
   }
 
   if (deletedLabel.taskId) {
-    removeLabelFromGitHub(deletedLabel.taskId, deletedLabel.name).catch(
-      (error) => {
+    const { taskId: removedFrom, name: removedName } = deletedLabel;
+    afterCardCommit(() =>
+      removeLabelFromGitHub(removedFrom, removedName).catch((error) => {
         console.error("Failed to remove label from GitHub:", error);
-      },
+      }),
     );
   }
 

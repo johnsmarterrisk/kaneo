@@ -246,6 +246,10 @@ const label = apiRouter()
     const { id } = c.req.valid("param");
     const { taskId } = c.req.valid("json");
     const userId = c.get("userId");
+    // Operon fork (row 19): attaching moves a task label off the card it is on; an agent key may
+    // attach only a workspace label or one already on the card it holds a claim on.
+    const from = await taskOfLabel(id);
+    if (from && from !== taskId) await refuseAgentRoute(c);
     return c.json(
       await withCardClaim(c, taskId, (executor) =>
         assignLabelToTask(id, taskId, userId, executor),

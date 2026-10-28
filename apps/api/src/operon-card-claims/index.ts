@@ -444,7 +444,8 @@ export const CARD_ROUTE_CLASSES: Record<
   "POST /api/activity/comment": "guarded",
   "PUT /api/activity/comment": "guarded",
   "DELETE /api/activity/comment": "guarded",
-  "PUT /api/label/:id/task": "guarded",
+  // Guarded; a task label from ANOTHER card (attaching moves it off that card) is refused.
+  "PUT /api/label/:id/task": "label",
   "DELETE /api/label/:id/task": "guarded",
   "POST /api/task-relation": "guarded",
   "DELETE /api/task-relation/:id": "guarded",

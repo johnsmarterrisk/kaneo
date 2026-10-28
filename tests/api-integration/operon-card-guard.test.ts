@@ -3,7 +3,27 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Label provider sync (GitHub / Gitea), recorded instead of run: a guarded label change syncs only
+// after its card transaction commits (row 19, T-p3-r2).
+const providerSync = vi.hoisted(() => [] as string[]);
+vi.mock("../../apps/api/src/plugins/github/utils/sync-label-to-github", () => ({
+  syncLabelToGitHub: async (taskId: string, name: string) => {
+    providerSync.push(`github+ ${taskId} ${name}`);
+  },
+  removeLabelFromGitHub: async (taskId: string, name: string) => {
+    providerSync.push(`github- ${taskId} ${name}`);
+  },
+}));
+vi.mock("../../apps/api/src/plugins/gitea/utils/sync-label-to-gitea", () => ({
+  syncLabelToGitea: async (taskId: string, name: string) => {
+    providerSync.push(`gitea+ ${taskId} ${name}`);
+  },
+  removeLabelFromGitea: async (taskId: string, name: string) => {
+    providerSync.push(`gitea- ${taskId} ${name}`);
+  },
+}));
 
 /**
  * Operon fork checks — guarded card writes (Operon agents-first-class Phase 3 D8, D10, R13;
@@ -650,6 +670,85 @@ describe("guarded card writes for agent keys (agents-first-class Phase 3 D8, D10
     expect(
       (await req(person, "DELETE", `/api/label/${c.label.id}`)).status,
     ).toBe(200);
+  });
+
+  it("attaching: a task label from another card is 403 for an agent key (it would move off that card); a guarded attach that rolls back syncs no provider", async () => {
+    const a = await newAgent("Scout");
+    const c = await claimedCard(a);
+    const [foreign] = await db
+      .insert(schema.labelTable)
+      .values({
+        name: "Foreign",
+        color: "#555555",
+        workspaceId: holder.workspace.id,
+        taskId: c.other.id,
+      })
+      .returning();
+    const moved = await req(
+      a.key,
+      "PUT",
+      `/api/label/${foreign.id}/task`,
+      { taskId: c.task.id },
+      1,
+    );
+    expect([
+      moved.status,
+      ((await moved.json()) as { error?: string }).error,
+    ]).toEqual([403, "agent_route_not_allowed"]);
+    const [still] = await db
+      .select()
+      .from(schema.labelTable)
+      .where(eq(schema.labelTable.id, foreign.id));
+    expect(still?.taskId).toBe(c.other.id);
+    // A fault at COMMIT (a deferred trigger on the new task label): the attach rolls back after the
+    // controller ran, so nothing may reach a provider.
+    const [faulty] = await db
+      .insert(schema.labelTable)
+      .values({
+        name: "Faulty",
+        color: "#666666",
+        workspaceId: holder.workspace.id,
+      })
+      .returning();
+    const fn = `operon_label_fault_${randomUUID().replace(/-/g, "")}`;
+    await db.execute(
+      sql.raw(`CREATE OR REPLACE FUNCTION ${fn}() RETURNS trigger AS $$ BEGIN IF NEW.name = 'Faulty' AND NEW.task_id IS NOT NULL THEN RAISE EXCEPTION 'label fault'; END IF; RETURN NEW; END $$ LANGUAGE plpgsql;
+      CREATE CONSTRAINT TRIGGER ${fn} AFTER INSERT ON label DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ${fn}();`),
+    );
+    providerSync.length = 0;
+    let failed: Response;
+    try {
+      failed = await req(
+        a.key,
+        "PUT",
+        `/api/label/${faulty.id}/task`,
+        { taskId: c.task.id },
+        1,
+      );
+    } finally {
+      await db.execute(
+        sql.raw(
+          `DROP TRIGGER IF EXISTS ${fn} ON label; DROP FUNCTION IF EXISTS ${fn}();`,
+        ),
+      );
+    }
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(providerSync).toEqual([]);
+    // The same attach without the fault commits, and only then syncs.
+    const ok = await req(
+      a.key,
+      "PUT",
+      `/api/label/${faulty.id}/task`,
+      { taskId: c.task.id },
+      1,
+    );
+    expect(ok.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(providerSync.sort()).toEqual([
+      `gitea+ ${c.task.id} Faulty`,
+      `github+ ${c.task.id} Faulty`,
+    ]);
   });
 
   it("a person's requests are unchanged: no header needed, the claim is ignored (and revoked on reassignment)", async () => {
