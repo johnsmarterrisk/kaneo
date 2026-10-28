@@ -311,7 +311,13 @@ export function createApp() {
       return refuse();
     }
     for (const agent of agents) {
-      const alive = await assertOperonAgentAlive(agent.key.userId, agent.key.id)
+      // Phase 4 D7: one of the two exact reads above, as its fixed class.
+      const [method, route] = read.split(" ") as [string, string];
+      const alive = await assertOperonAgentAlive(
+        agent.key.userId,
+        agent.key.id,
+        { method, route },
+      )
         .then(() => true)
         .catch(() => false);
       if (!alive) return refuse();

@@ -648,6 +648,14 @@ export const activityTable = pgTable(
   (table) => [
     index("activity_task_id_idx").on(table.taskId),
     index("activity_userId_idx").on(table.userId),
+    // Operon agents-first-class Phase 4 D7: the per-user 90-day keyset read
+    // (`GET /api/internal/operon/agent-activity`) pages by (created_at, id) newest first;
+    // the user-only index cannot serve that order.
+    index("activity_user_created_id_idx").on(
+      table.userId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
     unique("activity_task_external_source_external_url_unique").on(
       table.taskId,
       table.externalSource,

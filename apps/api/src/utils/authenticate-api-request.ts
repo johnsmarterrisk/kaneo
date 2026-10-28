@@ -5,6 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { auth } from "../auth";
 import {
   assertOperonAgentAlive,
+  honoRequestClass,
   operonKeyKind,
 } from "../operon-agent-liveness";
 import { verifyApiKey } from "./verify-api-key";
@@ -78,6 +79,7 @@ type VerifiedKey = Awaited<ReturnType<typeof verifyApiKey>>;
  * disabled key gets. Returns whether an agent key was presented.
  */
 async function checkOperonAgentKeys(
+  c: Context,
   ...results: VerifiedKey[]
 ): Promise<boolean> {
   let agent = false;
@@ -85,7 +87,12 @@ async function checkOperonAgentKeys(
     if (!result?.valid || operonKeyKind(result.key.metadata) !== "agent") {
       continue;
     }
-    await assertOperonAgentAlive(result.key.userId, result.key.id);
+    // Phase 4 D7: the request's class (matched route template, task id) for Operon's Activity row.
+    await assertOperonAgentAlive(
+      result.key.userId,
+      result.key.id,
+      honoRequestClass(c),
+    );
     agent = true;
   }
   return agent;
@@ -109,7 +116,7 @@ export async function authenticateApiRequest(
     if (!apiKeyResult?.valid || !apiKeyResult.key) {
       throw new HTTPException(401, { message: "Unauthorized" });
     }
-    const operonAgent = await checkOperonAgentKeys(apiKeyResult);
+    const operonAgent = await checkOperonAgentKeys(c, apiKeyResult);
     const key = apiKeyResult.key;
     c.set("userId", key.userId);
     c.set("userEmail", "");
@@ -129,7 +136,11 @@ export async function authenticateApiRequest(
     const apiKeyResult = await verifyApiKey(token);
     // D20: an `x-api-key` beside a Bearer is otherwise ignored, but must still pass.
     const besideResult = apiKeyHeader ? await verifyApiKey(apiKeyHeader) : null;
-    const operonAgent = await checkOperonAgentKeys(apiKeyResult, besideResult);
+    const operonAgent = await checkOperonAgentKeys(
+      c,
+      apiKeyResult,
+      besideResult,
+    );
     if (apiKeyResult?.valid && apiKeyResult.key) {
       const key = apiKeyResult.key;
       c.set("userId", key.userId);
@@ -183,7 +194,7 @@ export async function resolveAssetBearerOrCookie(c: Context): Promise<{
   const apiKeyHeader = c.req.header("x-api-key")?.trim();
   if (!token && apiKeyHeader) {
     const apiKeyResult = await verifyApiKey(apiKeyHeader);
-    await checkOperonAgentKeys(apiKeyResult);
+    await checkOperonAgentKeys(c, apiKeyResult);
     if (apiKeyResult?.valid && apiKeyResult.key) {
       return {
         userId: apiKeyResult.key.userId,
@@ -196,6 +207,7 @@ export async function resolveAssetBearerOrCookie(c: Context): Promise<{
   if (token) {
     const apiKeyResult = await verifyApiKey(token);
     await checkOperonAgentKeys(
+      c,
       apiKeyResult,
       apiKeyHeader ? await verifyApiKey(apiKeyHeader) : null,
     );

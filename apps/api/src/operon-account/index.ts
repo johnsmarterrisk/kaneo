@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -1161,6 +1161,96 @@ operonAccount.post("/agent-key/revoke", async (c) => {
     );
   }
   return c.json({ kaneoUserId, revoked: revoked.length }, 200);
+});
+
+// ── Operon agents-first-class Phase 4 D7: an agent's own Initiative activity ──────────────
+//
+// `GET /api/internal/operon/agent-activity?userId&before&limit` — the service key only (as
+// `/user`). The activity rows written BY one Kaneo user (an Operon agent's), the last 90 days,
+// newest first by (created_at, id), `limit` 1–100. Never `content` or `event_data`: `type` is a
+// free string on the activity-create API, so it is answered only as one of a fixed list (anything
+// else is `other`). `before` is the previous page's `next` (the row's exact timestamp and id).
+const AGENT_ACTIVITY_TYPES = new Set([
+  "created",
+  "comment",
+  "status_changed",
+  "priority_changed",
+  "assignee_changed",
+  "unassigned",
+  "due_date_changed",
+  "title_changed",
+  "description_changed",
+  "moved",
+  "task_mention",
+  "label_assigned",
+  "label_unassigned",
+  "external_link_created",
+]);
+const KANEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const ACTIVITY_CURSOR =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6})~([A-Za-z0-9_-]{1,64})$/;
+
+operonAccount.get("/agent-activity", async (c) => {
+  const contextKey = c.get("apiKey") as ContextApiKey;
+  if (!contextKey?.id) {
+    throw new HTTPException(403, {
+      message: "This route requires an API key, not a user session",
+    });
+  }
+  const holderId = await resolveOperonServiceKeyHolder(contextKey.id);
+  if (!holderId) {
+    throw new HTTPException(403, {
+      message: "This route requires the Operon service key",
+    });
+  }
+  const userId = c.req.query("userId");
+  if (!userId || !KANEO_ID.test(userId)) {
+    throw new HTTPException(400, { message: "userId must be a user id" });
+  }
+  const limitRaw = c.req.query("limit");
+  const limit = limitRaw === undefined ? 50 : Number(limitRaw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new HTTPException(400, { message: "limit must be 1 to 100" });
+  }
+  const beforeRaw = c.req.query("before");
+  let before: { at: string; id: string } | null = null;
+  if (beforeRaw !== undefined) {
+    const m = ACTIVITY_CURSOR.exec(beforeRaw);
+    if (!m || Number.isNaN(Date.parse(`${m[1]}Z`))) {
+      throw new HTTPException(400, { message: "before must be a cursor" });
+    }
+    before = { at: m[1] as string, id: m[2] as string };
+  }
+  // The (user_id, created_at DESC, id DESC) index serves this keyset read; NULLS LAST matches it.
+  const rows = await db.execute(sql`
+    SELECT a.id, a.type, a.task_id, t.project_id, p.workspace_id,
+           to_char(a.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US') AS at
+      FROM activity a
+      JOIN task t ON t.id = a.task_id
+      JOIN project p ON p.id = t.project_id
+     WHERE a.user_id = ${userId}
+       AND a.created_at > (now() AT TIME ZONE 'UTC') - interval '90 days'
+       ${before ? sql`AND (a.created_at, a.id) < (${before.at}::timestamp, ${before.id})` : sql``}
+     ORDER BY a.created_at DESC NULLS LAST, a.id DESC NULLS LAST
+     LIMIT ${limit}
+  `);
+  const items = (rows.rows as Record<string, string>[]).map((r) => ({
+    id: r.id,
+    type: AGENT_ACTIVITY_TYPES.has(r.type as string) ? r.type : "other",
+    at: `${r.at}Z`,
+    taskId: r.task_id,
+    projectId: r.project_id,
+    workspaceId: r.workspace_id,
+  }));
+  const last = rows.rows.at(-1) as Record<string, string> | undefined;
+  console.info(`[operon] operon.agent_activity_read: count ${items.length}`);
+  return c.json(
+    {
+      items,
+      next: items.length === limit && last ? `${last.at}~${last.id}` : null,
+    },
+    200,
+  );
 });
 
 export default operonAccount;
