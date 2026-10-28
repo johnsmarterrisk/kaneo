@@ -5,6 +5,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { taskOfComment, withCardClaim } from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createComment from "./controllers/create-comment";
@@ -128,17 +129,32 @@ const comment = apiRouter()
         ? { userName: externalUserName, source: externalSource }
         : undefined;
     return c.json(
-      await createComment(taskId, c.get("userId"), content, external),
+      await withCardClaim(c, taskId, (executor) =>
+        createComment(taskId, c.get("userId"), content, external, executor),
+      ),
       200,
     );
   })
   .openapi(updateTaskCommentRoute, async (c) => {
     const { id } = c.req.valid("param");
     const { content } = c.req.valid("json");
-    return c.json(await updateComment(c.get("userId"), id, content), 200);
+    return c.json(
+      await withCardClaim(c, await taskOfComment(id), (executor) =>
+        updateComment(c.get("userId"), id, content, executor),
+      ),
+      200,
+    );
   })
   .openapi(deleteTaskCommentRoute, async (c) =>
-    c.json(await deleteComment(c.get("userId"), c.req.valid("param").id), 200),
+    c.json(
+      await withCardClaim(
+        c,
+        await taskOfComment(c.req.valid("param").id),
+        (executor) =>
+          deleteComment(c.get("userId"), c.req.valid("param").id, executor),
+      ),
+      200,
+    ),
   );
 
 export default comment;

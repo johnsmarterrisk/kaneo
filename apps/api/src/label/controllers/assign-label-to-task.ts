@@ -8,6 +8,7 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import {
   removeLabelFromGitea,
   syncLabelToGitea,
@@ -19,8 +20,13 @@ import {
 
 type LabelRow = typeof labelTableType.$inferSelect;
 
-async function assignLabelToTask(id: string, taskId: string, userId: string) {
-  const label = await db.query.labelTable.findFirst({
+async function assignLabelToTask(
+  id: string,
+  taskId: string,
+  userId: string,
+  executor: CardExecutor = db,
+) {
+  const label = await executor.query.labelTable.findFirst({
     where: (label, { eq }) => eq(label.id, id),
   });
 
@@ -30,7 +36,7 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
@@ -64,7 +70,7 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
     previousName: string;
   };
   const { taskLabel, inserted, previousTaskId, previousName } =
-    await db.transaction<InsertionResult>(async (tx) => {
+    await executor.transaction<InsertionResult>(async (tx) => {
       const currentLabel = await tx.query.labelTable.findFirst({
         where: (label, { eq }) => eq(label.id, id),
       });

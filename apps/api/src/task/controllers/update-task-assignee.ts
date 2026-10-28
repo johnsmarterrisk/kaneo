@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import {
   lockTaskThenClaim,
   revokeIfReassigned,
@@ -12,16 +13,19 @@ import {
   getProjectWorkspaceId,
 } from "../../utils/assert-assignable-user";
 
-async function updateTaskAssignee({
-  id,
-  userId,
-  currentUserId,
-}: {
-  id: string;
-  userId: string | null;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskAssignee(
+  {
+    id,
+    userId,
+    currentUserId,
+  }: {
+    id: string;
+    userId: string | null;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -46,7 +50,7 @@ async function updateTaskAssignee({
   // Operon fork (docs/fork-discipline.md row 19, Phase 3 D8): the reassignment and the revoke of
   // an agent's active claim on this card are one transaction, locking the task row then its
   // claim row (the one lock order), so a person's reassignment always wins.
-  const [updatedTask] = await db.transaction(async (tx) => {
+  const [updatedTask] = await executor.transaction(async (tx) => {
     const { claim } = await lockTaskThenClaim(tx, id);
     await revokeIfReassigned(tx, claim, nextAssigneeId);
     return tx
@@ -64,7 +68,7 @@ async function updateTaskAssignee({
 
   const newAssigneeName = nextAssigneeId
     ? (
-        await db
+        await executor
           .select({ name: userTable.name })
           .from(userTable)
           .where(eq(userTable.id, nextAssigneeId))

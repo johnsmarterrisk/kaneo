@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { EventEmitter } from "node:events";
+import { deferIfInCardTransaction } from "../operon-card-claims/after-commit";
 
 const EVENTS = new EventEmitter();
 EVENTS.setMaxListeners(100);
@@ -30,6 +31,10 @@ export async function publishEvent(
     data: enhancedData || data,
     timestamp: new Date().toISOString(),
   };
+
+  // Operon fork (docs/fork-discipline.md row 19): inside an agent's guarded card transaction the
+  // event waits for the commit, so a rolled-back change announces nothing.
+  if (deferIfInCardTransaction(() => EVENTS.emit(eventType, payload))) return;
 
   try {
     EVENTS.emit(eventType, payload);

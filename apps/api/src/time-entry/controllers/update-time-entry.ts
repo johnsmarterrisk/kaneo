@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { timeEntryTable } from "../../database/schema";
+import type { CardExecutor } from "../../operon-card-claims";
 import { resolveDuration } from "../duration";
 
 type UpdateTimeEntryParams = {
@@ -11,10 +12,13 @@ type UpdateTimeEntryParams = {
   description?: string;
 };
 
-async function updateTimeEntry(params: UpdateTimeEntryParams) {
+async function updateTimeEntry(
+  params: UpdateTimeEntryParams,
+  executor: CardExecutor = db,
+) {
   const { timeEntryId, startTime, endTime, description } = params;
 
-  const [existingTimeEntry] = await db
+  const [existingTimeEntry] = await executor
     .select()
     .from(timeEntryTable)
     .where(eq(timeEntryTable.id, timeEntryId));
@@ -29,7 +33,7 @@ async function updateTimeEntry(params: UpdateTimeEntryParams) {
 
   const duration = resolveDuration(startTime, effectiveEndTime ?? undefined);
 
-  const [updatedTimeEntry] = await db
+  const [updatedTimeEntry] = await executor
     .update(timeEntryTable)
     .set({
       startTime,

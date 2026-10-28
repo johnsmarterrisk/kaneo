@@ -3,17 +3,21 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 
-async function updateTaskPriority({
-  id,
-  priority,
-  currentUserId,
-}: {
-  id: string;
-  priority: string;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskPriority(
+  {
+    id,
+    priority,
+    currentUserId,
+  }: {
+    id: string;
+    priority: string;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -23,7 +27,7 @@ async function updateTaskPriority({
     });
   }
 
-  const [updatedTask] = await db
+  const [updatedTask] = await executor
     .update(taskTable)
     .set({ priority })
     .where(eq(taskTable.id, id))

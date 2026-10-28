@@ -3,10 +3,15 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { labelTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 
-async function unassignLabelFromTask(id: string, userId: string) {
-  const label = await db.query.labelTable.findFirst({
+async function unassignLabelFromTask(
+  id: string,
+  userId: string,
+  executor: CardExecutor = db,
+) {
+  const label = await executor.query.labelTable.findFirst({
     where: (label, { eq }) => eq(label.id, id),
   });
 
@@ -22,7 +27,7 @@ async function unassignLabelFromTask(id: string, userId: string) {
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
@@ -39,7 +44,7 @@ async function unassignLabelFromTask(id: string, userId: string) {
     });
   }
 
-  const [deletedLabel] = await db
+  const [deletedLabel] = await executor
     .delete(labelTable)
     .where(eq(labelTable.id, id))
     .returning();

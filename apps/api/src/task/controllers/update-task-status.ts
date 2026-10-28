@@ -3,19 +3,23 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
-async function updateTaskStatus({
-  id,
-  status,
-  currentUserId,
-}: {
-  id: string;
-  status: string;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskStatus(
+  {
+    id,
+    status,
+    currentUserId,
+  }: {
+    id: string;
+    status: string;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -27,14 +31,14 @@ async function updateTaskStatus({
 
   await assertValidTaskStatus(status, existingTask.projectId);
 
-  const column = await db.query.columnTable.findFirst({
+  const column = await executor.query.columnTable.findFirst({
     where: and(
       eq(columnTable.projectId, existingTask.projectId),
       eq(columnTable.slug, status),
     ),
   });
 
-  const [updatedTask] = await db
+  const [updatedTask] = await executor
     .update(taskTable)
     .set({
       status,

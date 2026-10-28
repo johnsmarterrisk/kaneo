@@ -16,6 +16,7 @@ import {
   jsonResponse,
   z,
 } from "../openapi";
+import { refuseAgentRoute, withCardClaim } from "../operon-card-claims";
 import {
   assertTaskImageKeyMatchesContext,
   createTaskImageUploadUrl,
@@ -623,6 +624,8 @@ const task = apiRouter<
       });
     }
 
+    // Operon fork (row 19): an agent key may not change many cards in one call.
+    await refuseAgentRoute(c);
     const result = await bulkUpdateTasks({
       taskIds,
       operation,
@@ -715,12 +718,12 @@ const task = apiRouter<
     const { destinationProjectId, destinationStatus } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const result = await moveTask({
-      taskId: id,
-      destinationProjectId,
-      destinationStatus,
-      currentUserId,
-    });
+    const result = await withCardClaim(c, id, (executor) =>
+      moveTask(
+        { taskId: id, destinationProjectId, destinationStatus, currentUserId },
+        executor,
+      ),
+    );
 
     return c.json(result, 200);
   })
@@ -751,18 +754,26 @@ const task = apiRouter<
 
     validateDateRange(parsedStartDate, parsedDueDate);
 
-    const task = await updateTask(
+    // Operon fork (row 19): an agent key's update is guarded, and may only keep itself assigned.
+    const task = await withCardClaim(
+      c,
       id,
-      title,
-      status,
-      parsedStartDate,
-      parsedDueDate,
-      projectId,
-      description,
-      priority,
-      position,
-      userId,
-      currentUserId,
+      (executor) =>
+        updateTask(
+          id,
+          title,
+          status,
+          parsedStartDate,
+          parsedDueDate,
+          projectId,
+          description,
+          priority,
+          position,
+          userId,
+          currentUserId,
+          executor,
+        ),
+      { assignee: userId?.trim() || null },
     );
 
     return c.json(task, 200);
@@ -779,6 +790,7 @@ const task = apiRouter<
     const { tasks } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
+    await refuseAgentRoute(c);
     const result = await importTasks(projectId, tasks, currentUserId);
 
     return c.json(result, 200);
@@ -787,7 +799,12 @@ const task = apiRouter<
     const { id } = c.req.valid("param");
 
     const currentUserId = c.get("userId");
-    const task = await deleteTask(id, currentUserId);
+    const task = await withCardClaim(
+      c,
+      id,
+      (executor) => deleteTask(id, currentUserId, executor),
+      { deleting: true },
+    );
 
     return c.json(task, 200);
   })
@@ -796,7 +813,9 @@ const task = apiRouter<
     const { status } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskStatus({ id, status, currentUserId });
+    const task = await withCardClaim(c, id, (executor) =>
+      updateTaskStatus({ id, status, currentUserId }, executor),
+    );
 
     return c.json(task, 200);
   })
@@ -805,7 +824,9 @@ const task = apiRouter<
     const { priority } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskPriority({ id, priority, currentUserId });
+    const task = await withCardClaim(c, id, (executor) =>
+      updateTaskPriority({ id, priority, currentUserId }, executor),
+    );
 
     return c.json(task, 200);
   })
@@ -814,7 +835,12 @@ const task = apiRouter<
     const { userId } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskAssignee({ id, userId, currentUserId });
+    const task = await withCardClaim(
+      c,
+      id,
+      (executor) => updateTaskAssignee({ id, userId, currentUserId }, executor),
+      { assignee: userId?.trim() || null },
+    );
 
     return c.json(task, 200);
   })
@@ -823,11 +849,10 @@ const task = apiRouter<
     const { dueDate = null } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskDueDate({
-      id,
-      dueDate: dueDate ? validateAndParseDate(dueDate, "dueDate") : null,
-      currentUserId,
-    });
+    const parsedDue = dueDate ? validateAndParseDate(dueDate, "dueDate") : null;
+    const task = await withCardClaim(c, id, (executor) =>
+      updateTaskDueDate({ id, dueDate: parsedDue, currentUserId }, executor),
+    );
 
     return c.json(task, 200);
   })
@@ -836,13 +861,17 @@ const task = apiRouter<
     const { title } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskTitle({ id, title, currentUserId });
+    const task = await withCardClaim(c, id, (executor) =>
+      updateTaskTitle({ id, title, currentUserId }, executor),
+    );
 
     return c.json(task, 200);
   })
   .openapi(createTaskImageUploadRoute, async (c) => {
     const { id } = c.req.valid("param");
     const { filename, contentType, size, surface } = c.req.valid("json");
+    // Operon fork (row 19): an agent key needs its claim on the card (the lease is renewed).
+    await withCardClaim(c, id, async () => undefined);
 
     try {
       validateTaskAssetUploadInput(contentType, size);
@@ -943,47 +972,50 @@ const task = apiRouter<
       });
     }
 
-    const [existingAsset] = await db
-      .select({ id: assetTable.id })
-      .from(assetTable)
-      .where(eq(assetTable.objectKey, normalizedKey))
-      .limit(1);
+    // Operon fork (row 19): an agent key's asset record is written under its card claim.
+    const [asset] = await withCardClaim(c, id, async (executor) => {
+      const [existingAsset] = await executor
+        .select({ id: assetTable.id })
+        .from(assetTable)
+        .where(eq(assetTable.objectKey, normalizedKey))
+        .limit(1);
 
-    const [asset] = existingAsset
-      ? await db
-          .update(assetTable)
-          .set({
-            workspaceId: taskContext.workspaceId,
-            projectId: taskContext.projectId,
-            taskId: taskContext.taskId,
-            filename,
-            mimeType: contentType,
-            size,
-            kind: isImageContentType(contentType) ? "image" : "attachment",
-            surface,
-            createdBy: userId || null,
-          })
-          .where(eq(assetTable.id, existingAsset.id))
-          .returning({
-            id: assetTable.id,
-          })
-      : await db
-          .insert(assetTable)
-          .values({
-            workspaceId: taskContext.workspaceId,
-            projectId: taskContext.projectId,
-            taskId: taskContext.taskId,
-            objectKey: normalizedKey,
-            filename,
-            mimeType: contentType,
-            size,
-            kind: isImageContentType(contentType) ? "image" : "attachment",
-            surface,
-            createdBy: userId || null,
-          })
-          .returning({
-            id: assetTable.id,
-          });
+      return existingAsset
+        ? await executor
+            .update(assetTable)
+            .set({
+              workspaceId: taskContext.workspaceId,
+              projectId: taskContext.projectId,
+              taskId: taskContext.taskId,
+              filename,
+              mimeType: contentType,
+              size,
+              kind: isImageContentType(contentType) ? "image" : "attachment",
+              surface,
+              createdBy: userId || null,
+            })
+            .where(eq(assetTable.id, existingAsset.id))
+            .returning({
+              id: assetTable.id,
+            })
+        : await executor
+            .insert(assetTable)
+            .values({
+              workspaceId: taskContext.workspaceId,
+              projectId: taskContext.projectId,
+              taskId: taskContext.taskId,
+              objectKey: normalizedKey,
+              filename,
+              mimeType: contentType,
+              size,
+              kind: isImageContentType(contentType) ? "image" : "attachment",
+              surface,
+              createdBy: userId || null,
+            })
+            .returning({
+              id: assetTable.id,
+            });
+    });
 
     if (!asset) {
       throw new HTTPException(500, {
@@ -1007,11 +1039,9 @@ const task = apiRouter<
     const { description } = c.req.valid("json");
     const currentUserId = c.get("userId");
 
-    const task = await updateTaskDescription({
-      id,
-      description,
-      currentUserId,
-    });
+    const task = await withCardClaim(c, id, (executor) =>
+      updateTaskDescription({ id, description, currentUserId }, executor),
+    );
 
     return c.json(task, 200);
   });

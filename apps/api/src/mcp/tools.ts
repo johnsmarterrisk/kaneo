@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 
 type McpToolResult = {
@@ -39,6 +40,29 @@ export function toMcpToolRegistrar(server: ShapeToolServer): McpToolRegistrar {
   };
 }
 
+// Operon fork addition (agents-first-class Phase 3 D8, docs/fork-discipline.md row 19): the
+// card-changing tools take an optional `claimGeneration`, sent as `X-Operon-Card-Generation` on
+// every REST call the tool makes (an agent key's change to a claimed card needs it; a person's
+// session ignores it).
+const CARD_GUARDED_TOOLS = new Set([
+  "update_task",
+  "move_task",
+  "update_task_status",
+  "update_task_assignee",
+  "update_task_due_date",
+  "delete_task",
+  "create_task_comment",
+  "update_task_comment",
+  "delete_task_comment",
+  "attach_label_to_task",
+  "detach_label_from_task",
+  "create_task_relation",
+  "delete_task_relation",
+  "create_time_entry",
+  "update_time_entry",
+]);
+const cardGeneration = new AsyncLocalStorage<number | undefined>();
+
 class ApiClient {
   constructor(
     private baseUrl: string,
@@ -48,6 +72,10 @@ class ApiClient {
   async json<T = unknown>(path: string, init?: RequestInit): Promise<T> {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${this.token}`);
+    const generation = cardGeneration.getStore();
+    if (generation !== undefined && !headers.has("X-Operon-Card-Generation")) {
+      headers.set("X-Operon-Card-Generation", String(generation));
+    }
     if (init?.body != null && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -72,9 +100,15 @@ class ApiClient {
       const detail =
         typeof body === "object" && body !== null && "message" in body
           ? (body as { message: string }).message
-          : typeof body === "string" && body.length > 0
-            ? body.slice(0, 500)
-            : `HTTP ${res.status}`;
+          : // Operon fork (row 19): a card claim refusal is `{ error: code }`; keep the code.
+            typeof body === "object" &&
+              body !== null &&
+              "error" in body &&
+              typeof (body as { error: unknown }).error === "string"
+            ? (body as { error: string }).error
+            : typeof body === "string" && body.length > 0
+              ? body.slice(0, 500)
+              : `HTTP ${res.status}`;
       throw new Error(`${path}: ${detail}`);
     }
     return body as T;
@@ -222,13 +256,36 @@ export function registerMcpTools(
     config: { description: string; inputSchema: InputSchema },
     callback: (args: z.output<InputSchema>) => Promise<McpToolResult>,
   ) =>
-    server.registerTool(name, config, async (args) => {
-      const parsed = config.inputSchema.safeParse(args);
-      if (!parsed.success) {
-        return errorResult(z.prettifyError(parsed.error));
-      }
-      return callback(parsed.data);
-    });
+    server.registerTool(
+      name,
+      CARD_GUARDED_TOOLS.has(name)
+        ? {
+            ...config,
+            inputSchema: config.inputSchema.extend({
+              claimGeneration: z
+                .number()
+                .int()
+                .min(1)
+                .optional()
+                .describe("Your card_claim generation (Operon agents)"),
+            }),
+          }
+        : config,
+      async (args) => {
+        const parsed = config.inputSchema.safeParse(args);
+        if (!parsed.success) {
+          return errorResult(z.prettifyError(parsed.error));
+        }
+        const generation = (args as { claimGeneration?: unknown } | null)
+          ?.claimGeneration;
+        return cardGeneration.run(
+          typeof generation === "number" && Number.isInteger(generation)
+            ? generation
+            : undefined,
+          () => callback(parsed.data),
+        );
+      },
+    );
 
   registerTool(
     "whoami",

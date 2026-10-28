@@ -4,6 +4,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { withCardClaim } from "../operon-card-claims";
 import { requireTableAdminOnTable } from "../operon-tables/columns";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -276,7 +277,9 @@ const customField = apiRouter()
     const { taskId, fieldId, value } = c.req.valid("json");
 
     return c.json(
-      await setCustomFieldValue(taskId, fieldId, value, c.get("userId")),
+      await withCardClaim(c, taskId, (executor) =>
+        setCustomFieldValue(taskId, fieldId, value, c.get("userId"), executor),
+      ),
       200,
     );
   })

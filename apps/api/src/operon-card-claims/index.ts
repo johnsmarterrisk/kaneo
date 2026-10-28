@@ -6,14 +6,18 @@ import {
   activityTable,
   agentCardClaimsTable,
   apikeyTable,
+  labelTable,
   projectTable,
+  taskRelationTable,
   taskTable,
+  timeEntryTable,
   userTable,
   workspaceUserTable,
 } from "../database/schema";
 import { publishEvent } from "../events";
 import type { BaseVariables } from "../openapi";
 import { operonKeyKind } from "../operon-agent-liveness";
+import { collectDeferred } from "./after-commit";
 
 /**
  * Operon fork addition (agents-first-class Phase 3 D8, docs/fork-discipline.md row 19): an
@@ -46,6 +50,8 @@ type Executor = Pick<
   "select" | "insert" | "update" | "delete" | "execute"
 >;
 export type CardTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** What a guarded controller runs its reads and writes on: the request's transaction, or `db`. */
+export type CardExecutor = typeof db | CardTx;
 
 function log(line: Record<string, unknown>) {
   // Ids, generations and codes only (Operon logging rule): never a title, a comment or a key.
@@ -66,12 +72,19 @@ export async function operonAgentUser(c: Context): Promise<string | null> {
   return row && operonKeyKind(row.metadata) === "agent" ? apiKey.userId : null;
 }
 
+/** A bounded refusal, answered as `{ error: code }` with its status. */
 export class CardClaimError extends HTTPException {
   constructor(
     status: 403 | 404 | 409,
     readonly code: string,
   ) {
-    super(status, { message: code });
+    super(status, {
+      message: code,
+      res: new Response(JSON.stringify({ error: code }), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+    });
   }
 }
 
@@ -295,6 +308,160 @@ export async function releaseCard(
     return { state, generation };
   });
 }
+
+/**
+ * The guard (D8, R13): an agent key's change to an existing card runs in ONE transaction that
+ * locks the task row then its claim row and requires `X-Operon-Card-Generation`, an active claim
+ * by the caller at that generation with a live lease, and the caller as the task's assignee; the
+ * lease is renewed (Q9), then `run(tx)` performs the mutation on that transaction, and the
+ * assignee is RE-READ in it: a write that moved the card away from the caller rolls back (409
+ * `assignee_not_self`). An agent-key body that names another assignee is refused before `run`
+ * (handing a card back is `card_release`). For a delete, the locked precondition and the
+ * successful delete stand in for the impossible post-delete read; the claim row goes with the
+ * task by the foreign key. Events, notifications and asset cleanup queued during `run` happen only
+ * after commit (`after-commit.ts`). A person's request runs `run(db)` unchanged.
+ */
+export async function withCardClaim<T>(
+  c: Context,
+  taskId: string | null | undefined,
+  run: (executor: CardExecutor) => Promise<T>,
+  opts: { deleting?: boolean; assignee?: string | null } = {},
+): Promise<T> {
+  const agentId = await operonAgentUser(c);
+  if (!agentId) return run(db);
+  if (!taskId) throw new CardClaimError(404, "task_not_found");
+  const generation = Number(c.req.header(CARD_GENERATION_HEADER));
+  if (!Number.isSafeInteger(generation) || generation < 1)
+    throw refuse(taskId, 409, "claim_required");
+  if (opts.assignee !== undefined && opts.assignee !== agentId)
+    throw refuse(taskId, 409, "assignee_not_self");
+  const { result, flush } = await collectDeferred(() =>
+    db.transaction(async (tx) => {
+      const { task, claim } = await lockTaskThenClaim(tx, taskId);
+      if (!task) throw new CardClaimError(404, "task_not_found");
+      if (!claim) throw refuse(taskId, 409, "claim_required");
+      if (
+        claim.claimer !== agentId ||
+        claim.generation !== generation ||
+        claim.state !== "active" ||
+        !leaseLive(claim) ||
+        task.userId !== agentId
+      )
+        throw refuse(taskId, 409, "claim_lost");
+      await tx
+        .update(agentCardClaimsTable)
+        .set({
+          leaseUntil: new Date(Date.now() + LEASE_MS),
+          updatedAt: new Date(),
+        })
+        .where(eq(agentCardClaimsTable.taskId, taskId));
+      const out = await run(tx);
+      if (!opts.deleting) {
+        const [after] = await tx
+          .select({ userId: taskTable.userId })
+          .from(taskTable)
+          .where(eq(taskTable.id, taskId));
+        if (after?.userId !== agentId)
+          throw refuse(taskId, 409, "assignee_not_self");
+      }
+      return out;
+    }),
+  );
+  await flush();
+  return result;
+}
+
+function refuse(taskId: string, status: 409, code: string) {
+  log({ evt: "operon.card_claim_refused", task_id: taskId, reason: code });
+  return new CardClaimError(status, code);
+}
+
+/** Agent keys may not use the routes that change many cards or write a raw activity row (D10). */
+export async function refuseAgentRoute(c: Context) {
+  if (await operonAgentUser(c)) {
+    log({ evt: "operon.card_route_refused", path: c.req.path });
+    throw new CardClaimError(403, "agent_route_not_allowed");
+  }
+}
+
+/** The task a comment (an `activity` row of type comment) belongs to. */
+export async function taskOfComment(activityId: string) {
+  const [row] = await db
+    .select({ taskId: activityTable.taskId })
+    .from(activityTable)
+    .where(eq(activityTable.id, activityId))
+    .limit(1);
+  return row?.taskId ?? null;
+}
+export async function taskOfLabel(labelId: string) {
+  const [row] = await db
+    .select({ taskId: labelTable.taskId })
+    .from(labelTable)
+    .where(eq(labelTable.id, labelId))
+    .limit(1);
+  return row?.taskId ?? null;
+}
+export async function sourceOfRelation(relationId: string) {
+  const [row] = await db
+    .select({ taskId: taskRelationTable.sourceTaskId })
+    .from(taskRelationTable)
+    .where(eq(taskRelationTable.id, relationId))
+    .limit(1);
+  return row?.taskId ?? null;
+}
+export async function taskOfTimeEntry(entryId: string) {
+  const [row] = await db
+    .select({ taskId: timeEntryTable.taskId })
+    .from(timeEntryTable)
+    .where(eq(timeEntryTable.id, entryId))
+    .limit(1);
+  return row?.taskId ?? null;
+}
+
+/**
+ * D10's inventory: every non-GET route of the task-scoped modules and what an agent key gets.
+ * `tests/api-integration/operon-card-guard.test.ts` enumerates the app's registered routes and
+ * fails on any route under these prefixes that is missing here.
+ */
+export const CARD_ROUTE_CLASSES: Record<
+  string,
+  "guarded" | "refused" | "unguarded" | "unchanged"
+> = {
+  "PUT /api/task/:id": "guarded",
+  "PUT /api/task/move/:id": "guarded",
+  "PUT /api/task/status/:id": "guarded",
+  "PUT /api/task/priority/:id": "guarded",
+  "PUT /api/task/assignee/:id": "guarded",
+  "PUT /api/task/due-date/:id": "guarded",
+  "PUT /api/task/title/:id": "guarded",
+  "PUT /api/task/description/:id": "guarded",
+  "DELETE /api/task/:id": "guarded",
+  "PUT /api/task/image-upload/:id": "guarded",
+  "POST /api/task/image-upload/:id/finalize": "guarded",
+  "POST /api/comment/:taskId": "guarded",
+  "PUT /api/comment/:id": "guarded",
+  "DELETE /api/comment/:id": "guarded",
+  "POST /api/activity/comment": "guarded",
+  "PUT /api/activity/comment": "guarded",
+  "DELETE /api/activity/comment": "guarded",
+  "PUT /api/label/:id/task": "guarded",
+  "DELETE /api/label/:id/task": "guarded",
+  "POST /api/task-relation": "guarded",
+  "DELETE /api/task-relation/:id": "guarded",
+  "POST /api/time-entry": "guarded",
+  "PUT /api/time-entry/:id": "guarded",
+  "PUT /api/custom-field/value": "guarded",
+  "PATCH /api/task/bulk": "refused",
+  "POST /api/task/import/:projectId": "refused",
+  "POST /api/activity/create": "refused",
+  "POST /api/task/:projectId": "unguarded",
+  "POST /api/label": "unchanged",
+  "PUT /api/label/:id": "unchanged",
+  "DELETE /api/label/:id": "unchanged",
+  "POST /api/custom-field": "unchanged",
+  "PUT /api/custom-field/reorder/:projectId": "unchanged",
+  "DELETE /api/custom-field/:id": "unchanged",
+};
 
 function refusal(c: Context, err: unknown, taskId: string) {
   if (err instanceof CardClaimError) {

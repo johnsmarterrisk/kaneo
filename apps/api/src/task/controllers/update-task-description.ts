@@ -4,6 +4,7 @@ import db from "../../database";
 import { projectTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
+import type { CardExecutor } from "../../operon-card-claims";
 import {
   expandGroupMentionIds,
   OPERON_GROUP_ID_PREFIX,
@@ -12,16 +13,19 @@ import { nextSocialRevision } from "../../operon-social-revision";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
-async function updateTaskDescription({
-  id,
-  description,
-  currentUserId,
-}: {
-  id: string;
-  description: string;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskDescription(
+  {
+    id,
+    description,
+    currentUserId,
+  }: {
+    id: string;
+    description: string;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -31,7 +35,7 @@ async function updateTaskDescription({
     });
   }
 
-  const [updatedTask] = await db
+  const [updatedTask] = await executor
     .update(taskTable)
     // Operon fork (social agent S9): see ../../operon-social-revision.
     .set({ description, socialRevision: nextSocialRevision({ description }) })
@@ -68,7 +72,7 @@ async function updateTaskDescription({
   );
   let newlyMentioned = newRawIds;
   if (newRawIds.some((id) => id.startsWith(OPERON_GROUP_ID_PREFIX))) {
-    const [project] = await db
+    const [project] = await executor
       .select({ workspaceId: projectTable.workspaceId })
       .from(projectTable)
       .where(eq(projectTable.id, updatedTask.projectId));
@@ -82,7 +86,7 @@ async function updateTaskDescription({
   );
 
   if (newlyMentioned.length > 0) {
-    const [editor] = await db
+    const [editor] = await executor
       .select({ name: userTable.name })
       .from(userTable)
       .where(eq(userTable.id, currentUserId));

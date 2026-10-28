@@ -4,24 +4,28 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, timeEntryTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { resolveDuration } from "../duration";
 
-async function createTimeEntry({
-  taskId,
-  userId,
-  description,
-  startTime,
-  endTime,
-}: {
-  taskId: string;
-  userId: string;
-  description?: string;
-  startTime: Date;
-  endTime?: Date;
-}) {
+async function createTimeEntry(
+  {
+    taskId,
+    userId,
+    description,
+    startTime,
+    endTime,
+  }: {
+    taskId: string;
+    userId: string;
+    description?: string;
+    startTime: Date;
+    endTime?: Date;
+  },
+  executor: CardExecutor = db,
+) {
   const duration = resolveDuration(startTime, endTime);
 
-  const [createdTimeEntry] = await db
+  const [createdTimeEntry] = await executor
     .insert(timeEntryTable)
     .values({
       id: createId(),
@@ -40,7 +44,7 @@ async function createTimeEntry({
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({ userId: taskTable.userId, title: taskTable.title })
     .from(taskTable)
     .where(eq(taskTable.id, taskId));

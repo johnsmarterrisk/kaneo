@@ -7,6 +7,7 @@ import {
   customFieldValueTable,
   taskTable,
 } from "../../database/schema";
+import type { CardExecutor } from "../../operon-card-claims";
 import { checkStashImage } from "../../operon-tables/stash-image";
 import { validateCustomFieldValue } from "../../task/validate-task-fields";
 
@@ -27,8 +28,9 @@ async function setCustomFieldValue(
   value: string,
   // Operon fork addition (Tables, row 18): the writer, for the Stash image check.
   userId?: string,
+  executor: CardExecutor = db,
 ) {
-  const [task] = await db
+  const [task] = await executor
     .select({
       projectId: taskTable.projectId,
     })
@@ -42,7 +44,7 @@ async function setCustomFieldValue(
     });
   }
 
-  const [field] = await db
+  const [field] = await executor
     .select()
     .from(customFieldDefinitionTable)
     .where(eq(customFieldDefinitionTable.id, fieldId))
@@ -149,7 +151,7 @@ async function setCustomFieldValue(
     }
   }
 
-  const [result] = await db
+  const [result] = await executor
     .insert(customFieldValueTable)
     .values({
       taskId,

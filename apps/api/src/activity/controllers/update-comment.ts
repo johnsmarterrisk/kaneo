@@ -3,10 +3,16 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 
-async function updateComment(userId: string, id: string, content: string) {
-  const [existing] = await db
+async function updateComment(
+  userId: string,
+  id: string,
+  content: string,
+  executor: CardExecutor = db,
+) {
+  const [existing] = await executor
     .select({
       id: activityTable.id,
       content: activityTable.content,
@@ -28,7 +34,7 @@ async function updateComment(userId: string, id: string, content: string) {
     });
   }
 
-  const [updated] = await db
+  const [updated] = await executor
     .update(activityTable)
     .set({ content })
     .where(
@@ -46,7 +52,7 @@ async function updateComment(userId: string, id: string, content: string) {
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({ projectId: taskTable.projectId })
     .from(taskTable)
     .where(eq(taskTable.id, updated.taskId))

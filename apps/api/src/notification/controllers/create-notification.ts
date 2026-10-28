@@ -3,6 +3,7 @@ import db from "../../database";
 import { notificationTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deliverNotification } from "../../notification-preferences/delivery";
+import { deferIfInCardTransaction } from "../../operon-card-claims/after-commit";
 
 async function createNotification({
   userId,
@@ -21,6 +22,22 @@ async function createNotification({
   resourceId?: string;
   resourceType?: string;
 }) {
+  // Operon fork (row 19): inside an agent's guarded card transaction the notification waits for
+  // the commit, so a rolled-back change notifies no one.
+  if (
+    deferIfInCardTransaction(() =>
+      createNotification({
+        userId,
+        title,
+        content,
+        type,
+        eventData,
+        resourceId,
+        resourceType,
+      }),
+    )
+  )
+    return undefined;
   const preferenceKey =
     type === "task_assignee_changed" || type === "task_created"
       ? "taskAssignmentEnabled"

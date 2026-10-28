@@ -4,6 +4,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { taskOfLabel, withCardClaim } from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import assignLabelToTask from "./controllers/assign-label-to-task";
@@ -231,12 +232,22 @@ const label = apiRouter()
     const { id } = c.req.valid("param");
     const { taskId } = c.req.valid("json");
     const userId = c.get("userId");
-    return c.json(await assignLabelToTask(id, taskId, userId), 200);
+    return c.json(
+      await withCardClaim(c, taskId, (executor) =>
+        assignLabelToTask(id, taskId, userId, executor),
+      ),
+      200,
+    );
   })
   .openapi(detachLabelFromTaskRoute, async (c) => {
     const { id } = c.req.valid("param");
     const userId = c.get("userId");
-    return c.json(await unassignLabelFromTask(id, userId), 200);
+    return c.json(
+      await withCardClaim(c, await taskOfLabel(id), (executor) =>
+        unassignLabelFromTask(id, userId, executor),
+      ),
+      200,
+    );
   })
   .openapi(updateLabelRoute, async (c) => {
     const { id } = c.req.valid("param");

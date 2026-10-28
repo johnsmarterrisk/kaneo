@@ -3,10 +3,15 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 
-async function deleteComment(userId: string, id: string) {
-  const [existing] = await db
+async function deleteComment(
+  userId: string,
+  id: string,
+  executor: CardExecutor = db,
+) {
+  const [existing] = await executor
     .select({
       id: activityTable.id,
       content: activityTable.content,
@@ -28,7 +33,7 @@ async function deleteComment(userId: string, id: string) {
     });
   }
 
-  const [deletedComment] = await db
+  const [deletedComment] = await executor
     .delete(activityTable)
     .where(
       and(
@@ -45,7 +50,7 @@ async function deleteComment(userId: string, id: string) {
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({ projectId: taskTable.projectId })
     .from(taskTable)
     .where(eq(taskTable.id, deletedComment.taskId))

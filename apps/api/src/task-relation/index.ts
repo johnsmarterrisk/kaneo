@@ -10,6 +10,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { sourceOfRelation, withCardClaim } from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
@@ -173,19 +174,34 @@ const taskRelation = apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(createTaskRelationRoute, async (c) => {
     const { sourceTaskId, targetTaskId, relationType } = c.req.valid("json");
     return c.json(
-      await createTaskRelation({
-        sourceTaskId,
-        targetTaskId,
-        relationType,
-        userId: c.get("userId"),
-        workspaceId: c.get("workspaceId"),
-      }),
+      // Operon fork (row 19): an agent key needs its claim on the source card.
+      await withCardClaim(c, sourceTaskId, (executor) =>
+        createTaskRelation(
+          {
+            sourceTaskId,
+            targetTaskId,
+            relationType,
+            userId: c.get("userId"),
+            workspaceId: c.get("workspaceId"),
+          },
+          executor,
+        ),
+      ),
       200,
     );
   })
   .openapi(deleteTaskRelationRoute, async (c) =>
     c.json(
-      await deleteTaskRelation(c.req.valid("param").id, c.get("userId")),
+      await withCardClaim(
+        c,
+        await sourceOfRelation(c.req.valid("param").id),
+        (executor) =>
+          deleteTaskRelation(
+            c.req.valid("param").id,
+            c.get("userId"),
+            executor,
+          ),
+      ),
       200,
     ),
   );
