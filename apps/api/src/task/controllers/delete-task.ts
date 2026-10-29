@@ -3,13 +3,18 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskRelationTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { deleteS3Keys, getTaskAssetKeys } from "../../storage/cleanup-assets";
 import getTask from "./get-task";
 
-async function deleteTask(taskId: string, currentUserId: string) {
+async function deleteTask(
+  taskId: string,
+  currentUserId: string,
+  executor: CardExecutor = db,
+) {
   const task = await getTask(taskId);
 
-  const relations = await db
+  const relations = await executor
     .select()
     .from(taskRelationTable)
     .where(
@@ -22,7 +27,7 @@ async function deleteTask(taskId: string, currentUserId: string) {
 
   const assetKeys = await getTaskAssetKeys(taskId);
 
-  const [deletedTask] = await db
+  const [deletedTask] = await executor
     .delete(taskTable)
     .where(eq(taskTable.id, taskId))
     .returning()

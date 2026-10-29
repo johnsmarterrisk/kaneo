@@ -9,6 +9,7 @@ import {
 } from "../../database/schema";
 import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
+import type { CardExecutor } from "../../operon-card-claims";
 import { expandGroupMentionIds } from "../../operon-groups";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
@@ -17,8 +18,9 @@ async function createComment(
   userId: string,
   content: string,
   external?: { userName: string; source: string },
+  executor: CardExecutor = db,
 ) {
-  const [activity] = await db
+  const [activity] = await executor
     .insert(activityTable)
     .values({
       taskId,
@@ -40,12 +42,12 @@ async function createComment(
     });
   }
 
-  const [user] = await db
+  const [user] = await executor
     .select({ name: userTable.name })
     .from(userTable)
     .where(eq(userTable.id, userId));
 
-  const [task] = await db
+  const [task] = await executor
     .select({
       assigneeId: taskTable.userId,
       projectId: taskTable.projectId,

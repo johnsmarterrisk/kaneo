@@ -8,6 +8,8 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
+import { afterCardCommit } from "../../operon-card-claims/after-commit";
 import {
   removeLabelFromGitea,
   syncLabelToGitea,
@@ -19,8 +21,13 @@ import {
 
 type LabelRow = typeof labelTableType.$inferSelect;
 
-async function assignLabelToTask(id: string, taskId: string, userId: string) {
-  const label = await db.query.labelTable.findFirst({
+async function assignLabelToTask(
+  id: string,
+  taskId: string,
+  userId: string,
+  executor: CardExecutor = db,
+) {
+  const label = await executor.query.labelTable.findFirst({
     where: (label, { eq }) => eq(label.id, id),
   });
 
@@ -30,7 +37,7 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
     });
   }
 
-  const [task] = await db
+  const [task] = await executor
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
@@ -64,7 +71,7 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
     previousName: string;
   };
   const { taskLabel, inserted, previousTaskId, previousName } =
-    await db.transaction<InsertionResult>(async (tx) => {
+    await executor.transaction<InsertionResult>(async (tx) => {
       const currentLabel = await tx.query.labelTable.findFirst({
         where: (label, { eq }) => eq(label.id, id),
       });
@@ -141,25 +148,37 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
       };
     });
 
+  // Operon fork (row 19): provider sync runs after the guarded card transaction commits, on the
+  // committed rows only; a rolled-back attach syncs nothing.
   if (previousTaskId) {
-    removeLabelFromGitHub(previousTaskId, previousName).catch((error) => {
-      console.error("Failed to remove label from GitHub:", error);
-    });
-    removeLabelFromGitea(previousTaskId, previousName).catch((error) => {
-      console.error("Failed to remove label from Gitea:", error);
-    });
+    afterCardCommit(() =>
+      removeLabelFromGitHub(previousTaskId, previousName).catch((error) => {
+        console.error("Failed to remove label from GitHub:", error);
+      }),
+    );
+    afterCardCommit(() =>
+      removeLabelFromGitea(previousTaskId, previousName).catch((error) => {
+        console.error("Failed to remove label from Gitea:", error);
+      }),
+    );
   }
 
   if (!inserted) {
     return taskLabel;
   }
 
-  syncLabelToGitHub(taskId, taskLabel.name, taskLabel.color).catch((error) => {
-    console.error("Failed to sync label to GitHub:", error);
-  });
-  syncLabelToGitea(taskId, taskLabel.name, taskLabel.color).catch((error) => {
-    console.error("Failed to sync label to Gitea:", error);
-  });
+  afterCardCommit(() =>
+    syncLabelToGitHub(taskId, taskLabel.name, taskLabel.color).catch(
+      (error) => {
+        console.error("Failed to sync label to GitHub:", error);
+      },
+    ),
+  );
+  afterCardCommit(() =>
+    syncLabelToGitea(taskId, taskLabel.name, taskLabel.color).catch((error) => {
+      console.error("Failed to sync label to Gitea:", error);
+    }),
+  );
 
   await publishEvent("task.label_assigned", {
     label: taskLabel,

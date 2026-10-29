@@ -73,9 +73,15 @@ async function validateBearerToken(
   // Any other key, and a dead agent key, keeps the 401 and challenge below.
   const operonKey = await classifyOperonKey(token);
   if (operonKey?.kind === "agent") {
+    // Phase 4 D7: the MCP entry is its own fixed class; the REST calls its tools make are checked
+    // (and classed) again on their own requests.
     const alive = await assertOperonAgentAlive(
       operonKey.key.userId,
       operonKey.key.id,
+      {
+        method: /^[A-Z]{3,7}$/.test(req.method) ? req.method : "OTHER",
+        route: "/api/mcp",
+      },
     )
       .then(() => true)
       .catch(() => false);

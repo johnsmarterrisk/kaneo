@@ -8,6 +8,7 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 import { claimTaskNumber } from "./claim-task-numbers";
 
@@ -80,18 +81,21 @@ async function getNextTaskPosition(
   return (maxPositionResult?.maxPosition ?? 0) + 1;
 }
 
-async function moveTask({
-  taskId,
-  destinationProjectId,
-  destinationStatus,
-  currentUserId,
-}: {
-  taskId: string;
-  destinationProjectId: string;
-  destinationStatus?: string;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function moveTask(
+  {
+    taskId,
+    destinationProjectId,
+    destinationStatus,
+    currentUserId,
+  }: {
+    taskId: string;
+    destinationProjectId: string;
+    destinationStatus?: string;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, taskId),
   });
 
@@ -108,10 +112,10 @@ async function moveTask({
   }
 
   const [sourceProject, destinationProject] = await Promise.all([
-    db.query.projectTable.findFirst({
+    executor.query.projectTable.findFirst({
       where: eq(projectTable.id, existingTask.projectId),
     }),
-    db.query.projectTable.findFirst({
+    executor.query.projectTable.findFirst({
       where: eq(projectTable.id, destinationProjectId),
     }),
   ]);
@@ -134,7 +138,7 @@ async function moveTask({
     destinationStatus,
   );
 
-  const movedTask = await db.transaction(async (tx) => {
+  const movedTask = await executor.transaction(async (tx) => {
     const [nextTaskNumber, nextPosition] = await Promise.all([
       claimTaskNumber(destinationProjectId, tx),
       getNextTaskPosition(

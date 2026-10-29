@@ -7,27 +7,31 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 
-async function createTaskRelation({
-  sourceTaskId,
-  targetTaskId,
-  relationType,
-  userId,
-  workspaceId,
-}: {
-  sourceTaskId: string;
-  targetTaskId: string;
-  relationType: string;
-  userId: string;
-  workspaceId: string;
-}) {
+async function createTaskRelation(
+  {
+    sourceTaskId,
+    targetTaskId,
+    relationType,
+    userId,
+    workspaceId,
+  }: {
+    sourceTaskId: string;
+    targetTaskId: string;
+    relationType: string;
+    userId: string;
+    workspaceId: string;
+  },
+  executor: CardExecutor = db,
+) {
   if (sourceTaskId === targetTaskId) {
     throw new HTTPException(400, {
       message: "Cannot create a relation between a task and itself",
     });
   }
 
-  const [sourceTask] = await db
+  const [sourceTask] = await executor
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
@@ -47,7 +51,7 @@ async function createTaskRelation({
     throw new HTTPException(404, { message: "Source task not found" });
   }
 
-  const [targetTask] = await db
+  const [targetTask] = await executor
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
@@ -67,7 +71,7 @@ async function createTaskRelation({
     throw new HTTPException(404, { message: "Target task not found" });
   }
 
-  const existing = await db
+  const existing = await executor
     .select({ id: taskRelationTable.id })
     .from(taskRelationTable)
     .where(
@@ -93,7 +97,7 @@ async function createTaskRelation({
     });
   }
 
-  const [relation] = await db
+  const [relation] = await executor
     .insert(taskRelationTable)
     .values({
       sourceTaskId,

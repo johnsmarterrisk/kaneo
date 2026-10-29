@@ -10,6 +10,10 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import {
+  lockTaskThenClaim,
+  revokeIfReassigned,
+} from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 import { removeLabelFromGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
@@ -227,10 +231,19 @@ async function bulkUpdateTasks({
           )[0]?.name
         : undefined;
 
-      const result = await db
-        .update(taskTable)
-        .set({ userId: assigneeId })
-        .where(inArray(taskTable.id, foundIds));
+      // Operon fork (row 19, Phase 3 D8): each card's task row then claim row is locked (ids in
+      // order, so two bulk edits cannot deadlock), an agent's active claim is revoked when the
+      // new assignee is not its claimer, and the update commits with the revokes.
+      const result = await db.transaction(async (tx) => {
+        for (const taskId of [...foundIds].sort()) {
+          const { claim } = await lockTaskThenClaim(tx, taskId);
+          await revokeIfReassigned(tx, claim, assigneeId);
+        }
+        return tx
+          .update(taskTable)
+          .set({ userId: assigneeId })
+          .where(inArray(taskTable.id, foundIds));
+      });
 
       updatedCount = result.rowCount ?? foundIds.length;
 

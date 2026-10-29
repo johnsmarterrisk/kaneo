@@ -3,18 +3,22 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 
-async function updateTaskTitle({
-  id,
-  title,
-  currentUserId,
-}: {
-  id: string;
-  title: string;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskTitle(
+  {
+    id,
+    title,
+    currentUserId,
+  }: {
+    id: string;
+    title: string;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -29,7 +33,7 @@ async function updateTaskTitle({
   // Audit history is not best-effort. Commit the title and its immutable
   // history row atomically; event subscribers remain notifications/integrations
   // only and cannot make the audit trail disappear.
-  const updatedTask = await db.transaction(async (tx) => {
+  const updatedTask = await executor.transaction(async (tx) => {
     const [task] = await tx
       .update(taskTable)
       // Operon fork (social agent S9): see ../../operon-social-revision.

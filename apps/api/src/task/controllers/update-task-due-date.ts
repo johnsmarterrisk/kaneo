@@ -3,18 +3,22 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskReminderSentTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
 import { nextSocialRevision } from "../../operon-social-revision";
 
-async function updateTaskDueDate({
-  id,
-  dueDate,
-  currentUserId,
-}: {
-  id: string;
-  dueDate: Date | null;
-  currentUserId: string;
-}) {
-  const existingTask = await db.query.taskTable.findFirst({
+async function updateTaskDueDate(
+  {
+    id,
+    dueDate,
+    currentUserId,
+  }: {
+    id: string;
+    dueDate: Date | null;
+    currentUserId: string;
+  },
+  executor: CardExecutor = db,
+) {
+  const existingTask = await executor.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
   });
 
@@ -25,11 +29,11 @@ async function updateTaskDueDate({
   }
 
   // Clear sent reminders so new due date triggers fresh notifications
-  await db
+  await executor
     .delete(taskReminderSentTable)
     .where(eq(taskReminderSentTable.taskId, id));
 
-  const [updatedTask] = await db
+  const [updatedTask] = await executor
     .update(taskTable)
     // Operon fork (social agent S9): see ../../operon-social-revision.
     .set({

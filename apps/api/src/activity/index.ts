@@ -5,6 +5,11 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import {
+  refuseAgentRoute,
+  taskOfComment,
+  withCardClaim,
+} from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createActivity from "./controllers/create-activity";
@@ -145,24 +150,50 @@ const activity = apiRouter()
   .openapi(createActivityRoute, async (c) => {
     const { taskId, message, type, eventData } = c.req.valid("json");
     return c.json(
-      await createActivity(taskId, type, c.get("userId"), message, eventData),
+      await (async () => {
+        // Operon fork (row 19): an agent key may not write a raw activity row.
+        await refuseAgentRoute(c);
+        return createActivity(
+          taskId,
+          type,
+          c.get("userId"),
+          message,
+          eventData,
+        );
+      })(),
       200,
     );
   })
   .openapi(createCommentRoute, async (c) => {
     const { taskId, comment } = c.req.valid("json");
-    return c.json(await createComment(taskId, c.get("userId"), comment), 200);
+    return c.json(
+      await withCardClaim(c, taskId, (executor) =>
+        createComment(taskId, c.get("userId"), comment, undefined, executor),
+      ),
+      200,
+    );
   })
   .openapi(updateCommentRoute, async (c) => {
     const { activityId, comment } = c.req.valid("json");
     return c.json(
-      await updateComment(c.get("userId"), activityId, comment),
+      await withCardClaim(c, await taskOfComment(activityId), (executor) =>
+        updateComment(c.get("userId"), activityId, comment, executor),
+      ),
       200,
     );
   })
   .openapi(deleteCommentRoute, async (c) =>
     c.json(
-      await deleteComment(c.get("userId"), c.req.valid("json").activityId),
+      await withCardClaim(
+        c,
+        await taskOfComment(c.req.valid("json").activityId),
+        (executor) =>
+          deleteComment(
+            c.get("userId"),
+            c.req.valid("json").activityId,
+            executor,
+          ),
+      ),
       200,
     ),
   );

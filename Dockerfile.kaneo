@@ -83,7 +83,7 @@ RUN pnpm run build
 
 FROM registry.digitalocean.com/smarterrisk/operon-base-node24:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runtime
 
-RUN apk add --no-cache nginx=~1.30.4 && \
+RUN apk add --no-cache nginx=~1.30.6 && \
   addgroup -g 1001 appuser && \
   adduser -u 1001 -G appuser -D appuser && \
   mkdir -p /app /app/apps/api/data /var/cache/nginx /var/run/nginx /var/log/nginx /var/lib/nginx/logs /var/lib/nginx/tmp /usr/share/nginx/html /docker-entrypoint.d && \

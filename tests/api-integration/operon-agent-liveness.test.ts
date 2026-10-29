@@ -389,7 +389,7 @@ describe("a live agent passes every path", () => {
     expect(received.length).toBeGreaterThanOrEqual(probes().length);
   });
 
-  it("signs a body of exactly {kaneoUserId, timestamp} with the shared secret", async () => {
+  it("signs a body of exactly {kaneoUserId, timestamp, request} with the shared secret", async () => {
     const { key } = await mintAgentKey();
     await app.request(`/api/project?workspaceId=${holder.workspace.id}`, {
       headers: { authorization: `Bearer ${key}` },
@@ -401,11 +401,89 @@ describe("a live agent passes every path", () => {
         .digest("hex"),
     );
     const body = JSON.parse(request?.raw ?? "{}");
-    expect(Object.keys(body)).toEqual(["kaneoUserId", "timestamp"]);
+    expect(Object.keys(body)).toEqual(["kaneoUserId", "timestamp", "request"]);
     expect(body.kaneoUserId).toBe(agentId);
     expect(Math.abs(Date.parse(body.timestamp) - Date.now())).toBeLessThan(
       10_000,
     );
+  });
+});
+
+describe("Phase 4 D7: every liveness body carries a request class, never a URL or query", () => {
+  it("REST, asset, both auth reads and both MCP transports send a fixed or matched route class", async () => {
+    const { key } = await mintAgentKey();
+    const classes: Record<string, unknown>[] = [];
+    for (const probe of probes()) {
+      received.length = 0;
+      await probe.send(key);
+      for (const r of received)
+        classes.push({ probe: probe.name, ...JSON.parse(r.raw).request });
+    }
+    const byProbe = (name: string) =>
+      classes
+        .filter((c) => c.probe === name)
+        .map(({ probe: _p, ...rest }) => rest);
+    for (const form of ["x-api-key", "Bearer"]) {
+      expect(byProbe(`REST ${form}`)).toEqual([
+        { method: "GET", route: "/api/project" },
+      ]);
+      expect(byProbe(`asset ${form}`)).toEqual([
+        { method: "GET", route: "/api/asset/:id" },
+      ]);
+      expect(byProbe(`get-session ${form}`)).toEqual([
+        { method: "GET", route: "/api/auth/get-session" },
+      ]);
+      expect(byProbe(`organization/list ${form}`)).toEqual([
+        { method: "GET", route: "/api/auth/organization/list" },
+      ]);
+    }
+    for (const name of ["MCP legacy initialize", "MCP modern tools/list"]) {
+      expect(byProbe(name).length).toBeGreaterThanOrEqual(1);
+      expect(byProbe(name)[0]).toEqual({ method: "POST", route: "/api/mcp" });
+    }
+    const text = JSON.stringify(classes);
+    expect(text).not.toContain("?");
+    expect(text).not.toContain(holder.workspace.id);
+    expect(text).not.toContain(assetId);
+  });
+
+  it("a task route names its task id only for a task the agent may read (T-p4-r2)", async () => {
+    const { key } = await mintAgentKey();
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({ projectId, title: "Readable card" })
+      .returning();
+    const sendFor = async (id: string) => {
+      received.length = 0;
+      await app.request(`/api/task/${id}?x=secret`, {
+        headers: { authorization: `Bearer ${key}` },
+      });
+      return JSON.parse(received[0]?.raw ?? "{}").request;
+    };
+    // Accessible: the id and its mark.
+    expect(await sendFor(task.id)).toEqual({
+      method: "GET",
+      route: "/api/task/:id",
+      taskId: task.id,
+      taskVerified: true,
+    });
+    // Unknown: the class only, no id.
+    expect(await sendFor("some-task-id")).toEqual({
+      method: "GET",
+      route: "/api/task/:id",
+    });
+    // Another workspace's task: the class only, no id.
+    const other = await createWorkspaceMember({ role: "owner" });
+    const { project: otherProject } = await createProjectFixture({
+      workspaceId: other.workspace.id,
+    });
+    const [hidden] = await db
+      .insert(schema.taskTable)
+      .values({ projectId: otherProject.id, title: "Hidden card" })
+      .returning();
+    const req = await sendFor(hidden.id);
+    expect(req).toEqual({ method: "GET", route: "/api/task/:id" });
+    expect(JSON.stringify(req)).not.toContain(hidden.id);
   });
 });
 

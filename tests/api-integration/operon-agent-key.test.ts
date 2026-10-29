@@ -587,7 +587,7 @@ describe("the hosted MCP endpoint admits an agent key (D13)", () => {
       ),
     );
     // 36 upstream and fork tools plus Tables task 12's five table tools (row 18).
-    expect(list.result.tools).toHaveLength(41);
+    expect(list.result.tools).toHaveLength(43);
 
     const whoami = await rpc(
       await mcp(

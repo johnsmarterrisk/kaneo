@@ -3,11 +3,17 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { labelTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
+import { afterCardCommit } from "../../operon-card-claims/after-commit";
 import { removeLabelFromGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 
-async function deleteLabel(id: string, userId: string) {
-  const label = await db.query.labelTable.findFirst({
+async function deleteLabel(
+  id: string,
+  userId: string,
+  executor: CardExecutor = db,
+) {
+  const label = await executor.query.labelTable.findFirst({
     where: (label, { eq }) => eq(label.id, id),
   });
 
@@ -19,7 +25,7 @@ async function deleteLabel(id: string, userId: string) {
 
   if (label.taskId) {
     // Task-level label: fetch task, delete with event + GitHub sync
-    const [task] = await db
+    const [task] = await executor
       .select({
         id: taskTable.id,
         projectId: taskTable.projectId,
@@ -36,7 +42,7 @@ async function deleteLabel(id: string, userId: string) {
       });
     }
 
-    const [deletedLabel] = await db
+    const [deletedLabel] = await executor
       .delete(labelTable)
       .where(eq(labelTable.id, id))
       .returning();
@@ -48,10 +54,11 @@ async function deleteLabel(id: string, userId: string) {
     }
 
     if (deletedLabel.taskId) {
-      removeLabelFromGitHub(deletedLabel.taskId, deletedLabel.name).catch(
-        (error) => {
+      const { taskId: removedFrom, name: removedName } = deletedLabel;
+      afterCardCommit(() =>
+        removeLabelFromGitHub(removedFrom, removedName).catch((error) => {
           console.error("Failed to remove label from GitHub:", error);
-        },
+        }),
       );
     }
 
@@ -68,7 +75,7 @@ async function deleteLabel(id: string, userId: string) {
   }
 
   // Workspace-level label: delete the label and cascade to all task-level copies
-  const [deletedLabel] = await db
+  const [deletedLabel] = await executor
     .delete(labelTable)
     .where(eq(labelTable.id, id))
     .returning();
@@ -86,7 +93,7 @@ async function deleteLabel(id: string, userId: string) {
 
   // Capture affected task-level labels before cascading so we have data
   // for events and provider sync
-  const affectedLabels = await db
+  const affectedLabels = await executor
     .select({
       label: labelTable,
       taskId: taskTable.id,
@@ -105,7 +112,7 @@ async function deleteLabel(id: string, userId: string) {
     );
 
   // Cascade: delete all task-level copies of this label so existing tasks lose it
-  await db
+  await executor
     .delete(labelTable)
     .where(
       and(

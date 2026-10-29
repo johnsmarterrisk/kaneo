@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { labelTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { CardExecutor } from "../../operon-card-claims";
+import { afterCardCommit } from "../../operon-card-claims/after-commit";
 import { syncLabelToGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { syncLabelToGitHub } from "../../plugins/github/utils/sync-label-to-github";
 
@@ -12,9 +14,10 @@ async function createLabel(
   taskId: string | undefined,
   workspaceId: string,
   userId: string,
+  executor: CardExecutor = db,
 ) {
   if (taskId) {
-    const [task] = await db
+    const [task] = await executor
       .select({
         id: taskTable.id,
         projectId: taskTable.projectId,
@@ -37,7 +40,7 @@ async function createLabel(
       });
     }
 
-    const [inserted] = await db
+    const [inserted] = await executor
       .insert(labelTable)
       .values({ name, color, taskId, workspaceId: task.workspaceId })
       .onConflictDoNothing({
@@ -47,7 +50,7 @@ async function createLabel(
 
     const label =
       inserted ??
-      (await db.query.labelTable.findFirst({
+      (await executor.query.labelTable.findFirst({
         where: and(eq(labelTable.taskId, taskId), eq(labelTable.name, name)),
       }));
 
@@ -56,12 +59,16 @@ async function createLabel(
     }
 
     if (inserted) {
-      syncLabelToGitHub(taskId, name, color).catch((error) => {
-        console.error("Failed to sync label to GitHub:", error);
-      });
-      syncLabelToGitea(taskId, name, color).catch((error) => {
-        console.error("Failed to sync label to Gitea:", error);
-      });
+      afterCardCommit(() =>
+        syncLabelToGitHub(taskId, name, color).catch((error) => {
+          console.error("Failed to sync label to GitHub:", error);
+        }),
+      );
+      afterCardCommit(() =>
+        syncLabelToGitea(taskId, name, color).catch((error) => {
+          console.error("Failed to sync label to Gitea:", error);
+        }),
+      );
 
       await publishEvent("task.label_created", {
         projectId: task.projectId,
@@ -73,7 +80,7 @@ async function createLabel(
     return label;
   }
 
-  const [inserted] = await db
+  const [inserted] = await executor
     .insert(labelTable)
     .values({ name, color, taskId: null, workspaceId })
     .onConflictDoNothing({
@@ -84,7 +91,7 @@ async function createLabel(
 
   const label =
     inserted ??
-    (await db.query.labelTable.findFirst({
+    (await executor.query.labelTable.findFirst({
       where: and(
         eq(labelTable.workspaceId, workspaceId),
         eq(labelTable.name, name),

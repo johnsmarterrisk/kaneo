@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 /**
@@ -71,9 +72,8 @@ const { auth, OPERON_SERVICE_KEY_PERMISSIONS } = await import(
   "../../apps/api/src/auth"
 );
 const { default: db } = await import("../../apps/api/src/database");
-const { taskTable, userTable, workspaceUserTable } = await import(
-  "../../apps/api/src/database/schema"
-);
+const { agentCardClaimsTable, taskTable, userTable, workspaceUserTable } =
+  await import("../../apps/api/src/database/schema");
 const { mockAuthenticatedSession } = await import("./helpers/auth");
 const { resetTestDatabase } = await import("./helpers/database");
 const { createProjectFixture, createWorkspaceMember } = await import(
@@ -190,7 +190,21 @@ describe("API integration: Tables image and link kinds (task 4)", () => {
   });
 
   it("maps each Stash refusal to 422 image_refused with its reason, for a session and an agent key", async () => {
-    const { task, image, agentKey } = await seed();
+    const { task, image, agentKey, agent } = await seed();
+    // Operon fork (row 19, agents-first-class Phase 3 D10): an agent key changes a card only
+    // under its claim, so the agent holds this card (generation 1) and sends that generation.
+    await db
+      .update(taskTable)
+      .set({ userId: agent.id })
+      .where(eq(taskTable.id, task.id));
+    await db.insert(agentCardClaimsTable).values({
+      taskId: task.id,
+      claimer: agent.id,
+      generation: 1,
+      state: "active",
+      requestId: "seed",
+      leaseUntil: new Date(Date.now() + 15 * 60_000),
+    });
     const reasons: Record<number, string> = {
       404: "not_found",
       410: "deleted",
@@ -198,7 +212,10 @@ describe("API integration: Tables image and link kinds (task 4)", () => {
       415: "not_image",
       403: "no_access",
     };
-    for (const headers of [{}, { "x-api-key": agentKey }]) {
+    for (const headers of [
+      {},
+      { "x-api-key": agentKey, "X-Operon-Card-Generation": "1" },
+    ]) {
       for (const [fileId, status] of Object.entries(REFUSED)) {
         if (status === 500) continue;
         const response = await setValue(task.id, image.id, fileId, headers);

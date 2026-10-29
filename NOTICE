@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only eighteen kinds of change are permitted, and every file this
+upstream built it. Only twenty kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -122,10 +122,17 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      including image (from Operon's file store) and link kinds, a row-write path that records value
      history and announces each change to Operon durably, list, card and gallery views, and the MCP
      table tools; a project that is not a table behaves exactly as upstream.
+ 19. Agent card claims — an Operon agent claims a card (the claim, the assignee and its "On it"
+     comment in one transaction), a person's reassignment revokes the claim, and an agent key's
+     changes to a claimed card are checked against its claim; people's requests are unchanged.
+ 20. Agent activity read — Operon reads the activity rows an Operon agent's user wrote (ids,
+     types from a fixed list, task/project/workspace ids; never their content) over the service
+     key, and each agent-key liveness check names the request's class (method and matched route
+     template, never its URL or query) so Operon can account for every agent request.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the eighteen kinds map onto, path by path, and §7 records which task
+touch list the twenty kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 

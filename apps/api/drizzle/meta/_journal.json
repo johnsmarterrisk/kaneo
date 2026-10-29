@@ -393,6 +393,20 @@
 			"when": 1791694461839,
 			"tag": "0055_operon_table_request",
 			"breakpoints": true
+		},
+		{
+			"idx": 56,
+			"version": "7",
+			"when": 1793198290948,
+			"tag": "0056_operon_agent_card_claims",
+			"breakpoints": true
+		},
+		{
+			"idx": 57,
+			"version": "7",
+			"when": 1793229006164,
+			"tag": "0057_operon_agent_activity_read",
+			"breakpoints": true
 		}
 	]
 }

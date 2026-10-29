@@ -4,6 +4,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../openapi";
+import { taskOfTimeEntry, withCardClaim } from "../operon-card-claims";
 import { requireWorkspacePermission } from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import createTimeEntry from "./controllers/create-time-entry";
@@ -119,13 +120,18 @@ const timeEntry = apiRouter()
   .openapi(createTimeEntryRoute, async (c) => {
     const { taskId, startTime, endTime, description } = c.req.valid("json");
     return c.json(
-      await createTimeEntry({
-        taskId,
-        userId: c.get("userId"),
-        startTime: new Date(startTime),
-        endTime: endTime ? new Date(endTime) : undefined,
-        description,
-      }),
+      await withCardClaim(c, taskId, (executor) =>
+        createTimeEntry(
+          {
+            taskId,
+            userId: c.get("userId"),
+            startTime: new Date(startTime),
+            endTime: endTime ? new Date(endTime) : undefined,
+            description,
+          },
+          executor,
+        ),
+      ),
       200,
     );
   })
@@ -133,12 +139,17 @@ const timeEntry = apiRouter()
     const { id } = c.req.valid("param");
     const { startTime, endTime, description } = c.req.valid("json");
     return c.json(
-      await updateTimeEntry({
-        timeEntryId: id,
-        startTime: new Date(startTime),
-        endTime: endTime ? new Date(endTime) : undefined,
-        description,
-      }),
+      await withCardClaim(c, await taskOfTimeEntry(id), (executor) =>
+        updateTimeEntry(
+          {
+            timeEntryId: id,
+            startTime: new Date(startTime),
+            endTime: endTime ? new Date(endTime) : undefined,
+            description,
+          },
+          executor,
+        ),
+      ),
       200,
     );
   });

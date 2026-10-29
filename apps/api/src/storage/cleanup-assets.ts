@@ -6,6 +6,7 @@ import {
   commentTable,
   taskTable,
 } from "../database/schema";
+import { deferIfInCardTransaction } from "../operon-card-claims/after-commit";
 import { deleteS3Object } from "./s3";
 
 const ASSET_URL_PATTERN = /\/api\/asset\/([a-z0-9]+)/gi;
@@ -92,6 +93,14 @@ export async function deleteOrphanedAssets(
   newContent: string | null | undefined,
   scope: AssetCleanupScope,
 ): Promise<void> {
+  // Operon fork (row 19): inside an agent's guarded card transaction the cleanup waits for the
+  // commit, so a rolled-back edit deletes no asset.
+  if (
+    deferIfInCardTransaction(() =>
+      deleteOrphanedAssets(oldContent, newContent, scope),
+    )
+  )
+    return;
   const oldIds = extractAssetIds(oldContent);
   const newIds = extractAssetIds(newContent);
 
@@ -146,6 +155,9 @@ export async function getTaskAssetKeys(taskId: string): Promise<string[]> {
 export async function deleteS3Keys(
   keys: string[],
 ): Promise<PromiseSettledResult<void>[]> {
+  // Operon fork (row 19): an agent's guarded card delete removes its stored objects only after
+  // the transaction commits.
+  if (deferIfInCardTransaction(() => deleteS3Keys(keys))) return [];
   const deleteResults = await Promise.allSettled(
     keys.map((key) => deleteS3Object(key)),
   );
