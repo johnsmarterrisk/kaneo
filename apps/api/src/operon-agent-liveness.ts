@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { matchedRoutes } from "hono/route";
 import { metadataHasOperonServiceMarker, operonS2SChannel } from "./auth";
 import db, { schema } from "./database";
+import { validateWorkspaceAccess } from "./utils/validate-workspace-access";
 import { apiKeyEnabledCondition, verifyApiKey } from "./utils/verify-api-key";
 
 // ── Which keys are Operon credentials (agent-initiative D7, D13, D20) ──────────────────
@@ -107,12 +108,49 @@ export type OperonRequestClass = {
   method: string;
   route: string;
   taskId?: string;
+  /**
+   * Codex code r2 (T-p4-r2): present, `true`, exactly when `taskId` is sent — the task exists and the
+   * calling agent key may read it under the fork's own workspace check (`workspaceAccess.fromTask`'s
+   * rule). Operon stores a task id only with this mark.
+   */
+  taskVerified?: true;
 };
 const ROUTE_TEMPLATE = /^\/[A-Za-z0-9/_:{}.-]{1,200}$/;
 const TASK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
+/**
+ * Codex code r2 (T-p4-r2): a task id from the URL is forwarded only when the task exists and the agent
+ * key may read it — the card read's rule (`workspaceAccess.fromTask`: the task's project's workspace,
+ * then `validateWorkspaceAccess` for this user and key). An unknown or inaccessible id forwards none,
+ * so a caller-chosen string (which could carry anything) never reaches Operon's Activity.
+ */
+async function accessibleTaskId(
+  taskId: string,
+  caller: { userId: string; keyId: string },
+): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ workspaceId: schema.projectTable.workspaceId })
+      .from(schema.taskTable)
+      .innerJoin(
+        schema.projectTable,
+        eq(schema.projectTable.id, schema.taskTable.projectId),
+      )
+      .where(eq(schema.taskTable.id, taskId))
+      .limit(1);
+    if (!row?.workspaceId) return false;
+    await validateWorkspaceAccess(caller.userId, row.workspaceId, caller.keyId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The request class of a Hono request: its matched route template (the last non-middleware route). */
-export function honoRequestClass(c: Context): OperonRequestClass {
+export async function honoRequestClass(
+  c: Context,
+  caller: { userId: string; keyId: string },
+): Promise<OperonRequestClass> {
   const method = /^[A-Z]{3,7}$/.test(c.req.method) ? c.req.method : "OTHER";
   let template: string | undefined;
   try {
@@ -129,7 +167,14 @@ export function honoRequestClass(c: Context): OperonRequestClass {
     const parts = template.split("/");
     const at = parts.findIndex((p) => p === ":id" || p === ":taskId");
     const value = at >= 0 ? c.req.path.split("/")[at] : undefined;
-    if (value && TASK_ID.test(value)) out.taskId = value;
+    if (
+      value &&
+      TASK_ID.test(value) &&
+      (await accessibleTaskId(value, caller))
+    ) {
+      out.taskId = value;
+      out.taskVerified = true;
+    }
   }
   return out;
 }

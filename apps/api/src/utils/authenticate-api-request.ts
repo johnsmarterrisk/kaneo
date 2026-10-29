@@ -91,7 +91,10 @@ async function checkOperonAgentKeys(
     await assertOperonAgentAlive(
       result.key.userId,
       result.key.id,
-      honoRequestClass(c),
+      await honoRequestClass(c, {
+        userId: result.key.userId,
+        keyId: result.key.id,
+      }),
     );
     agent = true;
   }

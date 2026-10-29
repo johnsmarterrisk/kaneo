@@ -447,18 +447,43 @@ describe("Phase 4 D7: every liveness body carries a request class, never a URL o
     expect(text).not.toContain(assetId);
   });
 
-  it("a task route names its task id from the matched :id param only", async () => {
+  it("a task route names its task id only for a task the agent may read (T-p4-r2)", async () => {
     const { key } = await mintAgentKey();
-    received.length = 0;
-    await app.request("/api/task/some-task-id?x=secret", {
-      headers: { authorization: `Bearer ${key}` },
-    });
-    const req = JSON.parse(received[0]?.raw ?? "{}").request;
-    expect(req).toEqual({
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({ projectId, title: "Readable card" })
+      .returning();
+    const sendFor = async (id: string) => {
+      received.length = 0;
+      await app.request(`/api/task/${id}?x=secret`, {
+        headers: { authorization: `Bearer ${key}` },
+      });
+      return JSON.parse(received[0]?.raw ?? "{}").request;
+    };
+    // Accessible: the id and its mark.
+    expect(await sendFor(task.id)).toEqual({
       method: "GET",
       route: "/api/task/:id",
-      taskId: "some-task-id",
+      taskId: task.id,
+      taskVerified: true,
     });
+    // Unknown: the class only, no id.
+    expect(await sendFor("some-task-id")).toEqual({
+      method: "GET",
+      route: "/api/task/:id",
+    });
+    // Another workspace's task: the class only, no id.
+    const other = await createWorkspaceMember({ role: "owner" });
+    const { project: otherProject } = await createProjectFixture({
+      workspaceId: other.workspace.id,
+    });
+    const [hidden] = await db
+      .insert(schema.taskTable)
+      .values({ projectId: otherProject.id, title: "Hidden card" })
+      .returning();
+    const req = await sendFor(hidden.id);
+    expect(req).toEqual({ method: "GET", route: "/api/task/:id" });
+    expect(JSON.stringify(req)).not.toContain(hidden.id);
   });
 });
 
