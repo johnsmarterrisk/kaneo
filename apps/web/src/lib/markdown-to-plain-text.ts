@@ -1,3 +1,4 @@
+import { decodeHTMLStrict } from "entities";
 import { lexer, type Token, type Tokens } from "marked";
 
 // A part of one rendered block. Code is kept byte-for-byte (scripts carry
@@ -13,29 +14,6 @@ const CITATION_TEXT = /^[A-Za-z0-9]{1,12}$/;
 // markers are already gone from rendered text, so `**…back.”** [CDC]` matches.
 const SENTENCE_END = /[.!?]["'”’»)]* ?$/;
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  nbsp: "\u00a0",
-};
-
-function decodeEntities(text: string): string {
-  return text.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-z]+);/g, (match, ref) => {
-    if (ref in NAMED_ENTITIES) return NAMED_ENTITIES[ref];
-    if (ref.startsWith("#x")) {
-      const code = Number.parseInt(ref.slice(2), 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-    }
-    if (ref.startsWith("#")) {
-      const code = Number.parseInt(ref.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-    }
-    return match;
-  });
-}
-
 // Custom editor nodes are stored as HTML. A mention keeps its visible
 // `@label`; every other tag is dropped, and text between tags stays (so the
 // invalid-embed span keeps its visible URL).
@@ -43,6 +21,16 @@ function htmlToText(html: string): string {
   return html
     .replace(/<kaneo-mention\b[^>]*\blabel="([^"]*)"[^>]*>/g, "@$1")
     .replace(/<\/?[A-Za-z][^>]*>/g, "");
+}
+
+// The mention serializer (`KaneoMention.renderMarkdown`) writes the label
+// unescaped, so a label holding `"` makes a malformed opening tag that marked
+// leaves inside a text token; the closing tag still lexes as html. Matched on
+// the serializer's exact shape, lazily up to the tag's own `">`.
+const MALFORMED_MENTION = /<kaneo-mention id="[^"]*" label="(.*?)">/g;
+
+function plainText(text: string): string {
+  return text.replace(MALFORMED_MENTION, "@$1");
 }
 
 function inlineText(tokens: Token[] | undefined): string {
@@ -54,7 +42,7 @@ function inlineText(tokens: Token[] | undefined): string {
         out +=
           "tokens" in token && token.tokens
             ? inlineText(token.tokens)
-            : token.text;
+            : plainText(token.text);
         break;
       case "strong":
       case "em":
@@ -176,7 +164,9 @@ function blockParts(token: Token): Part[] {
 // collapsed, blank lines at its outer edges removed. Leading spaces stay (they
 // are nested-list indentation).
 function normaliseText(value: string): string {
-  return decodeEntities(value)
+  // entities' strict decoder: only `;`-terminated references, and an
+  // out-of-range code point (`&#x110000;`) becomes U+FFFD instead of throwing.
+  return decodeHTMLStrict(value)
     .split("\n")
     .map((line) => line.replace(/\s+$/, ""))
     .join("\n")

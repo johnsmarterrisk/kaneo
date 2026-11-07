@@ -469,6 +469,9 @@ importers:
       dompurify:
         specifier: ^3.4.12
         version: 3.4.13
+      entities:
+        specifier: 8.0.0
+        version: 8.0.0
       file-saver:
         specifier: ^2.0.5
         version: 2.0.5

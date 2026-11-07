@@ -86,6 +86,18 @@ describe("markdownToPlainText", () => {
       'Hi <kaneo-mention id="u1" label="Ann"></kaneo-mention> there',
       "Hi @Ann there",
     ],
+    // Codex r1 #2: the exact form KaneoMention.renderMarkdown writes for a
+    // label holding quotes (unescaped), which marked lexes as text.
+    [
+      "mention with a quoted label",
+      'Ask <kaneo-mention id="u1" label="O\'Brien "Oz""></kaneo-mention> today.',
+      'Ask @O\'Brien "Oz" today.',
+    ],
+    [
+      "quoted-label mention opening a paragraph, beside a plain one",
+      '<kaneo-mention id="u1" label="O\'Brien "Oz""></kaneo-mention> and <kaneo-mention id="u2" label="Ann"></kaneo-mention> lead.',
+      '@O\'Brien "Oz" and @Ann lead.',
+    ],
     [
       "embed dropped",
       'before\n\n<kaneo-embed url="https://x" mode="embed" />\n\nafter',
@@ -111,6 +123,10 @@ describe("markdownToPlainText", () => {
       "Tom &amp; Jerry &lt;3 &quot;hi&quot; &#39;x&#39; &#65;&#x42;&nbsp;!",
       "Tom & Jerry <3 \"hi\" 'x' AB !",
     ],
+    // Codex r1 #1: entities' decoder, which never throws on a bad reference.
+    ["out-of-range numeric entity", "a &#x110000; b", "a \ufffd b"],
+    ["unknown named entity stays literal", "a &foo; b", "a &foo; b"],
+    ["unterminated entity stays literal", "AT&T &copy2026", "AT&T &copy2026"],
     ["footnote stays text (A5)", "a claim [^1]", "a claim [^1]"],
     ["empty input", "", ""],
     ["whitespace input", "  \n\n  ", ""],

@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { Extension } from "@tiptap/core";
+import { type Editor, Extension } from "@tiptap/core";
 import TaskItem from "@tiptap/extension-task-item";
 import { describe, expect, it, vi } from "vitest";
 import { readScriptSource } from "@/lib/script-source";
@@ -8,6 +8,7 @@ import TaskDescription from "./task-description";
 const mocks = vi.hoisted(() => ({
   t: (key: string) => key,
   tasks: new Map<string, { id: string; description: string }>(),
+  saveDescription: vi.fn(),
 }));
 
 // Only the extensions that pull in browser-only machinery are replaced, and
@@ -80,7 +81,7 @@ vi.mock("@/hooks/queries/task/use-get-task", () => ({
   default: (taskId: string) => ({ data: mocks.tasks.get(taskId) }),
 }));
 vi.mock("@/hooks/mutations/task/use-update-task-description", () => ({
-  useUpdateTaskDescription: () => ({ mutateAsync: vi.fn() }),
+  useUpdateTaskDescription: () => ({ mutateAsync: mocks.saveDescription }),
 }));
 vi.mock("@/hooks/use-workspace-permission", () => ({
   useWorkspacePermission: () => ({ canUpdateTasks: () => true }),
@@ -196,5 +197,28 @@ describe("TaskDescription", () => {
 
     unmount();
     expect(readScriptSource("parent-task")).toBeUndefined();
+  });
+
+  // Codex r1 #3: the source is the editor's current text, not the cached
+  // description, so an edit still inside the 700 ms save debounce is copied.
+  it("reads an unsaved edit from the live editor before the save debounce", async () => {
+    mocks.tasks.set("edit-task", { id: "edit-task", description: "first" });
+    mocks.saveDescription.mockClear();
+
+    const { container } = render(<TaskDescription taskId="edit-task" />);
+    await waitFor(() => {
+      expect(readScriptSource("edit-task")).toBe("first");
+    });
+
+    // Tiptap hangs the editor off its contenteditable root.
+    const editable = container.querySelector<HTMLElement & { editor?: Editor }>(
+      '[contenteditable="true"]',
+    );
+    expect(editable?.editor).toBeDefined();
+    editable?.editor?.chain().focus("end").insertContent(" edit").run();
+
+    expect(readScriptSource("edit-task")).toBe("first edit");
+    expect(mocks.tasks.get("edit-task")?.description).toBe("first");
+    expect(mocks.saveDescription).not.toHaveBeenCalled();
   });
 });
