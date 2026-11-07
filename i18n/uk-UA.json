@@ -2055,6 +2055,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Дії із завданням",
+			"copyScript": "Копіювати сценарій",
+			"copied": "Сценарій скопійовано",
+			"copyFailed": "Не вдалося скопіювати сценарій"
 		}
 	},
 	"invitations": {

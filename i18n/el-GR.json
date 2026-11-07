@@ -2043,6 +2043,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Ενέργειες εργασίας",
+			"copyScript": "Αντιγραφή σεναρίου",
+			"copied": "Το σενάριο αντιγράφηκε",
+			"copyFailed": "Δεν ήταν δυνατή η αντιγραφή του σεναρίου"
 		}
 	},
 	"invitations": {

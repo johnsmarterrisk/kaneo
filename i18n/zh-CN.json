@@ -2037,6 +2037,12 @@
 			"title": "Calendar",
 			"today": "Today",
 			"loadError": "Failed to load tasks."
+		},
+		"scriptExport": {
+			"menu": "任务操作",
+			"copyScript": "复制脚本",
+			"copied": "脚本已复制",
+			"copyFailed": "无法复制脚本"
 		}
 	},
 	"invitations": {

@@ -2037,6 +2037,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "タスクの操作",
+			"copyScript": "台本をコピー",
+			"copied": "台本をコピーしました",
+			"copyFailed": "台本をコピーできませんでした"
 		}
 	},
 	"invitations": {

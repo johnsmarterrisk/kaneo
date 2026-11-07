@@ -2111,6 +2111,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Действия с задачей",
+			"copyScript": "Копировать сценарий",
+			"copied": "Сценарий скопирован",
+			"copyFailed": "Не удалось скопировать сценарий"
 		}
 	},
 	"invitations": {

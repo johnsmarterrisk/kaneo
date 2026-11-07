@@ -2237,6 +2237,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Akcje zadania",
+			"copyScript": "Kopiuj scenariusz",
+			"copied": "Skopiowano scenariusz",
+			"copyFailed": "Nie udało się skopiować scenariusza"
 		}
 	}
 }

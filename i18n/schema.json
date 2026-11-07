@@ -8211,6 +8211,25 @@
 						}
 					},
 					"required": ["table"]
+				},
+				"scriptExport": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"menu": {
+							"type": "string"
+						},
+						"copyScript": {
+							"type": "string"
+						},
+						"copied": {
+							"type": "string"
+						},
+						"copyFailed": {
+							"type": "string"
+						}
+					},
+					"required": ["menu", "copyScript", "copied", "copyFailed"]
 				}
 			},
 			"required": [
@@ -8243,7 +8262,8 @@
 				"contextMenu",
 				"actions",
 				"bulk",
-				"editor"
+				"editor",
+				"scriptExport"
 			]
 		},
 		"invitations": {

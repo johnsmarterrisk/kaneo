@@ -2049,6 +2049,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Ações da tarefa",
+			"copyScript": "Copiar roteiro",
+			"copied": "Roteiro copiado",
+			"copyFailed": "Não foi possível copiar o roteiro"
 		}
 	},
 	"invitations": {

@@ -2037,6 +2037,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "작업 동작",
+			"copyScript": "대본 복사",
+			"copied": "대본을 복사했습니다",
+			"copyFailed": "대본을 복사하지 못했습니다"
 		}
 	},
 	"invitations": {

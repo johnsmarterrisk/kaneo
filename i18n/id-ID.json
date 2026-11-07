@@ -2037,6 +2037,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Tindakan tugas",
+			"copyScript": "Salin naskah",
+			"copied": "Naskah disalin",
+			"copyFailed": "Tidak dapat menyalin naskah"
 		}
 	},
 	"invitations": {

@@ -2037,6 +2037,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Thao tác tác vụ",
+			"copyScript": "Sao chép kịch bản",
+			"copied": "Đã sao chép kịch bản",
+			"copyFailed": "Không thể sao chép kịch bản"
 		}
 	},
 	"invitations": {

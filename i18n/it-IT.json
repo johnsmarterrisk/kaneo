@@ -2049,6 +2049,12 @@
 		},
 		"customFields": {
 			"ariaLabel": "Custom fields"
+		},
+		"scriptExport": {
+			"menu": "Azioni attività",
+			"copyScript": "Copia copione",
+			"copied": "Copione copiato",
+			"copyFailed": "Impossibile copiare il copione"
 		}
 	},
 	"invitations": {
