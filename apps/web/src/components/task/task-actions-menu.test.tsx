@@ -14,12 +14,18 @@ import TaskActionsMenu from "./task-actions-menu";
 
 const mocks = vi.hoisted(() => ({
   task: undefined as
-    | { id: string; title: string; description: string | null }
+    | {
+        id: string;
+        title: string;
+        number: number | null;
+        description: string | null;
+      }
     | undefined,
   canDeleteTasks: vi.fn(),
   isCheckingPermissions: false,
   deleteTask: vi.fn(),
   copyToClipboard: vi.fn(),
+  saveScriptFile: vi.fn(),
   error: vi.fn(),
   success: vi.fn(),
 }));
@@ -42,6 +48,9 @@ vi.mock("@/hooks/mutations/task/use-delete-task", () => ({
 vi.mock("@/lib/copy-to-clipboard", () => ({
   copyToClipboard: mocks.copyToClipboard,
 }));
+vi.mock("@/lib/save-script-file", () => ({
+  saveScriptFile: mocks.saveScriptFile,
+}));
 vi.mock("@/lib/toast", () => ({
   toast: { error: mocks.error, success: mocks.success },
 }));
@@ -49,16 +58,20 @@ vi.mock("@/lib/toast", () => ({
 const MENU = "tasks:scriptExport.menu";
 const COPY = "tasks:scriptExport.copyScript";
 const DELETE = "tasks:delete.action";
+const TEXT = "tasks:scriptExport.downloadText";
+const MARKDOWN = "tasks:scriptExport.downloadMarkdown";
 
 beforeEach(() => {
   mocks.task = {
     id: "task-1",
     title: "MV-10 Hearing",
+    number: 7,
     description: "**Wear** earplugs. [OSHA](https://x)",
   };
   mocks.canDeleteTasks.mockReturnValue(true);
   mocks.isCheckingPermissions = false;
   mocks.copyToClipboard.mockResolvedValue(true);
+  mocks.saveScriptFile.mockResolvedValue("saved");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -104,7 +117,12 @@ describe("TaskActionsMenu", () => {
   });
 
   it("copies the title alone for an empty description", async () => {
-    mocks.task = { id: "task-1", title: "Only title", description: null };
+    mocks.task = {
+      id: "task-1",
+      title: "Only title",
+      number: 7,
+      description: null,
+    };
     render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
     await clickItem(COPY);
     expect(mocks.copyToClipboard).toHaveBeenCalledWith("Only title");
@@ -213,5 +231,81 @@ describe("TaskActionsMenu", () => {
     );
     expect(mocks.deleteTask).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  // Leg B (T10): both download items, each against every save outcome.
+  const downloads = [
+    {
+      item: TEXT,
+      filename: "07 - MV-10 Hearing.txt",
+      type: "text/plain;charset=utf-8",
+      body: "MV-10 Hearing\n\nWear earplugs.",
+      liveBody: "MV-10 Hearing\n\nJust typed",
+    },
+    {
+      item: MARKDOWN,
+      filename: "07 - MV-10 Hearing.md",
+      type: "text/markdown;charset=utf-8",
+      body: "# MV-10 Hearing\n\n**Wear** earplugs. [OSHA](https://x)",
+      liveBody: "# MV-10 Hearing\n\nJust typed",
+    },
+  ];
+
+  describe.each(downloads)("$item", (d) => {
+    it("saves the named file synchronously within the click, no toast", async () => {
+      render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
+      await openMenu();
+      fireEvent.click(await screen.findByRole("menuitem", { name: d.item }));
+      expect(mocks.saveScriptFile).toHaveBeenCalledWith({
+        filename: d.filename,
+        body: d.body,
+        type: d.type,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mocks.error).not.toHaveBeenCalled();
+      expect(mocks.success).not.toHaveBeenCalled();
+    });
+
+    it("saves the live editor text over the cache", async () => {
+      registerScriptSource("task-1", () => "Just typed");
+      render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
+      await clickItem(d.item);
+      expect(mocks.saveScriptFile).toHaveBeenCalledWith(
+        expect.objectContaining({ body: d.liveBody }),
+      );
+    });
+
+    it("points at Copy script when saving is unavailable", async () => {
+      mocks.saveScriptFile.mockResolvedValue("unavailable");
+      render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
+      await clickItem(d.item);
+      await waitFor(() =>
+        expect(mocks.error).toHaveBeenCalledWith(
+          "tasks:scriptExport.saveUnavailable",
+        ),
+      );
+    });
+
+    it("reports a failed save", async () => {
+      mocks.saveScriptFile.mockRejectedValue(new Error("denied"));
+      render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
+      await clickItem(d.item);
+      await waitFor(() =>
+        expect(mocks.error).toHaveBeenCalledWith(
+          "tasks:scriptExport.saveFailed",
+        ),
+      );
+    });
+
+    it("reports a throwing live source without saving", async () => {
+      registerScriptSource("task-1", () => {
+        throw new Error("editor gone");
+      });
+      render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
+      await clickItem(d.item);
+      expect(mocks.saveScriptFile).not.toHaveBeenCalled();
+      expect(mocks.error).toHaveBeenCalledWith("tasks:scriptExport.saveFailed");
+    });
   });
 });

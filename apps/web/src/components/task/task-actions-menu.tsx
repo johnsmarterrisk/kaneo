@@ -12,8 +12,13 @@ import {
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { saveScriptFile } from "@/lib/save-script-file";
 import { readScriptSource } from "@/lib/script-source";
-import { buildScriptText } from "@/lib/task-script";
+import {
+  buildScriptMarkdown,
+  buildScriptText,
+  scriptFilename,
+} from "@/lib/task-script";
 import { toast } from "@/lib/toast";
 import TaskDeleteButton from "./task-delete-button";
 
@@ -72,6 +77,45 @@ export default function TaskActionsMenu({
       .catch(copyFailed);
   };
 
+  const saveFailed = (error?: unknown) => {
+    console.error("[script-export] save failed", {
+      taskId,
+      name: error instanceof Error ? error.name : undefined,
+    });
+    toast.error(t("tasks:scriptExport.saveFailed"));
+  };
+
+  // Called synchronously from the click, like copy: iOS only opens the share
+  // sheet inside the user's gesture. saved / shared / cancelled show no toast,
+  // the download bar or the share sheet is the feedback.
+  const handleDownload = (ext: "txt" | "md") => {
+    let body: string;
+    try {
+      const markdown = readScriptSource(task.id) ?? task.description;
+      body =
+        ext === "txt"
+          ? buildScriptText(task.title, markdown)
+          : buildScriptMarkdown(task.title, markdown);
+    } catch (error) {
+      saveFailed(error);
+      return;
+    }
+    saveScriptFile({
+      filename: scriptFilename(task.number, task.title, ext),
+      body,
+      type:
+        ext === "txt"
+          ? "text/plain;charset=utf-8"
+          : "text/markdown;charset=utf-8",
+    })
+      .then((result) => {
+        if (result === "unavailable") {
+          toast.error(t("tasks:scriptExport.saveUnavailable"));
+        }
+      })
+      .catch(saveFailed);
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -90,6 +134,12 @@ export default function TaskActionsMenu({
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem onClick={handleCopy}>
             {t("tasks:scriptExport.copyScript")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDownload("txt")}>
+            {t("tasks:scriptExport.downloadText")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDownload("md")}>
+            {t("tasks:scriptExport.downloadMarkdown")}
           </DropdownMenuItem>
           {showDelete && (
             <>
