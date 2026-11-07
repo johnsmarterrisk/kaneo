@@ -705,7 +705,7 @@ export default function CommentEditor({
             return true;
           }
 
-          if (pasteMarkdown(editor, event)) return true;
+          if (pasteMarkdown(view, event)) return true;
 
           const pastedText = plainText.trim();
           if (!pastedText || /\s/.test(pastedText)) return false;

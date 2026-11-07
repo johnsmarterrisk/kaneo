@@ -1,5 +1,6 @@
 import { Editor, type JSONContent } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
+import type { EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { looksLikeMarkdown, pasteMarkdown } from "./markdown-paste";
@@ -115,7 +116,7 @@ describe("pasteMarkdown", () => {
     const editor = editorUnderTest();
     const event = pasteEvent({ "text/plain": SCRIPT });
 
-    expect(pasteMarkdown(editor, event)).toBe(true);
+    expect(pasteMarkdown(editor.view, event)).toBe(true);
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
 
     const doc = editor.getJSON();
@@ -145,7 +146,7 @@ describe("pasteMarkdown", () => {
       "text/html": "<h1>Episode 12</h1>",
     });
 
-    expect(pasteMarkdown(editor, event)).toBe(false);
+    expect(pasteMarkdown(editor.view, event)).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(editor.getJSON()).toEqual(before);
   });
@@ -157,7 +158,7 @@ describe("pasteMarkdown", () => {
       const before = editor.getJSON();
       const event = pasteEvent({ "text/plain": token });
 
-      expect(pasteMarkdown(editor, event)).toBe(false);
+      expect(pasteMarkdown(editor.view, event)).toBe(false);
       expect(event.preventDefault).not.toHaveBeenCalled();
       expect(editor.getJSON()).toEqual(before);
     },
@@ -170,7 +171,7 @@ describe("pasteMarkdown", () => {
       "text/plain": "Call the client today. Then send the notes.",
     });
 
-    expect(pasteMarkdown(editor, event)).toBe(false);
+    expect(pasteMarkdown(editor.view, event)).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(editor.getJSON()).toEqual(before);
   });
@@ -183,7 +184,7 @@ describe("pasteMarkdown", () => {
     const before = editor.getJSON();
     const event = pasteEvent(flavours);
 
-    expect(pasteMarkdown(editor, event)).toBe(false);
+    expect(pasteMarkdown(editor.view, event)).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(editor.getJSON()).toEqual(before);
   });
@@ -197,7 +198,7 @@ describe("pasteMarkdown", () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const event = pasteEvent({ "text/plain": SCRIPT });
 
-    expect(pasteMarkdown(editor, event)).toBe(false);
+    expect(pasteMarkdown(editor.view, event)).toBe(false);
     expect(logged).toHaveBeenCalledWith("Markdown paste failed:", failure);
     expect(event.preventDefault).not.toHaveBeenCalled();
   });
@@ -208,15 +209,50 @@ describe("pasteMarkdown", () => {
     stubInsertContent(editor, () => false);
     const event = pasteEvent({ "text/plain": SCRIPT });
 
-    expect(pasteMarkdown(editor, event)).toBe(false);
+    expect(pasteMarkdown(editor.view, event)).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(editor.getJSON()).toEqual(before);
   });
 
-  it("returns false for a null editor", () => {
+  it("returns false for a view with no editor behind it", () => {
     const event = pasteEvent({ "text/plain": SCRIPT });
-    expect(pasteMarkdown(null, event)).toBe(false);
+    const view = {
+      dom: document.createElement("div"),
+    } as unknown as EditorView;
+    expect(pasteMarkdown(view, event)).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  // The way the editors run it: handlePaste is declared in the options of the
+  // render before the editor exists (immediatelyRender: false), so a closure
+  // over the component's `editor` is null at paste time — the T6 walk's root
+  // cause. The helper must work from the handler's own view alone.
+  it("inserts when called from an editorProps.handlePaste whose closure editor is null", () => {
+    const closureEditor: Editor | null = null;
+    const seen: Array<Editor | null> = [];
+    const editor = new Editor({
+      extensions: [
+        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+        Markdown.configure({ markedOptions: { breaks: true, gfm: true } }),
+      ],
+      editorProps: {
+        handlePaste: (view, event) => {
+          seen.push(closureEditor);
+          return pasteMarkdown(view, event);
+        },
+      },
+    });
+    editors.push(editor);
+    const event = pasteEvent({ "text/plain": SCRIPT });
+
+    const handled = editor.view.someProp("handlePaste", (handler) =>
+      handler(editor.view, event, editor.view.state.doc.slice(0, 0)),
+    );
+
+    expect(seen).toEqual([null]);
+    expect(handled).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(collect(editor.getJSON()).map((n) => n.type)).toContain("heading");
   });
 
   it("keeps a pasted h4 as a level-4 heading drawn as h1 and saved as ####", () => {
@@ -224,7 +260,7 @@ describe("pasteMarkdown", () => {
     const event = pasteEvent({ "text/plain": "#### x" });
 
     // "#### x" has whitespace and a heading line, so it takes the branch.
-    expect(pasteMarkdown(editor, event)).toBe(true);
+    expect(pasteMarkdown(editor.view, event)).toBe(true);
     const heading = collect(editor.getJSON()).find((n) => n.type === "heading");
     expect(heading?.attrs?.level).toBe(4);
     expect(editor.getHTML()).toContain("<h1>x</h1>");

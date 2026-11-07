@@ -1,4 +1,5 @@
-import type { Editor } from "@tiptap/core";
+import type { TiptapEditorHTMLElement } from "@tiptap/core";
+import type { EditorView } from "@tiptap/pm/view";
 
 // Operon fork (row 22, Markdown paste): pasted plain text that looks like
 // Markdown is parsed by @tiptap/markdown (already in both editors) instead of
@@ -30,12 +31,18 @@ export function looksLikeMarkdown(text: string): boolean {
  * The Markdown branch of the editors' handlePaste. Returns true only when it
  * inserted the paste; every other case returns false so the existing handler
  * paths (and ProseMirror's default paste) run exactly as before.
+ *
+ * It takes the handler's own `view` and resolves the Tiptap editor from it
+ * (Tiptap sets `view.dom.editor`), never the component's `editor` variable:
+ * with `immediatelyRender: false` the editorProps closure captures `editor`
+ * from the render before the instance existed, so it is null at paste time.
  */
 export function pasteMarkdown(
-  editor: Editor | null,
+  view: EditorView,
   event: ClipboardEvent,
 ): boolean {
-  if (!editor) return false;
+  const editor = (view.dom as TiptapEditorHTMLElement).editor;
+  if (!editor || editor.isDestroyed) return false;
   const clipboardData = event.clipboardData;
   if (!clipboardData) return false;
   // Rich pastes (browser, Docs, Word) are already formatted by the default
