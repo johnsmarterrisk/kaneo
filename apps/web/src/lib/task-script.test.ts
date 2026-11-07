@@ -43,6 +43,42 @@ describe("buildScriptMarkdown", () => {
   it("is the heading alone for an empty description", () => {
     expect(buildScriptMarkdown("MV-10", null)).toBe("# MV-10\n\n");
   });
+
+  it.each([
+    [
+      "a well-formed mention",
+      'Ask <kaneo-mention id="u1" label="Ann"></kaneo-mention> today.',
+      "Ask @Ann today.",
+    ],
+    [
+      "a mention whose label holds a quote",
+      'Ask <kaneo-mention id="u1" label="O\'Brien "Oz""></kaneo-mention> today.',
+      'Ask @O\'Brien "Oz" today.',
+    ],
+    [
+      "an id-less mention",
+      'Ask <kaneo-mention label="Ann"></kaneo-mention> today.',
+      "Ask @Ann today.",
+    ],
+    [
+      "a mention inside a fenced code block (Decision D)",
+      '```\n<kaneo-mention id="u1" label="Ann"></kaneo-mention>\n```',
+      "```\n@Ann\n```",
+    ],
+  ])("writes %s as @label", (_name, markdown, body) => {
+    const file = buildScriptMarkdown("MV-10", markdown);
+    expect(file).toBe(`# MV-10\n\n${body}`);
+    expect(file).not.toContain("<kaneo-mention");
+    expect(file).not.toContain("</kaneo-mention>");
+  });
+
+  it("keeps an embed tag verbatim beside a rewritten mention", () => {
+    const markdown =
+      'Hi <kaneo-mention id="u1" label="Ann"></kaneo-mention>\n\n<kaneo-embed url="https://x/v" mode="embed" />';
+    expect(buildScriptMarkdown("MV-10", markdown)).toBe(
+      '# MV-10\n\nHi @Ann\n\n<kaneo-embed url="https://x/v" mode="embed" />',
+    );
+  });
 });
 
 // AC5: the saved file's name.

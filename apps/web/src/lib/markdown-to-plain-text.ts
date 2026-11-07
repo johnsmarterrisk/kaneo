@@ -18,9 +18,7 @@ const SENTENCE_END = /[.!?]["'”’»)]* ?$/;
 // `@label`; every other tag is dropped, and text between tags stays (so the
 // invalid-embed span keeps its visible URL).
 function htmlToText(html: string): string {
-  return html
-    .replace(/<kaneo-mention\b[^>]*\blabel="([^"]*)"[^>]*>/g, "@$1")
-    .replace(/<\/?[A-Za-z][^>]*>/g, "");
+  return mentionsToText(html).replace(/<\/?[A-Za-z][^>]*>/g, "");
 }
 
 // The mention serializer (`KaneoMention.renderMarkdown`) writes the label
@@ -28,9 +26,25 @@ function htmlToText(html: string): string {
 // leaves inside a text token; the closing tag still lexes as html. Matched on
 // the serializer's exact shape, lazily up to the tag's own `">`.
 const MALFORMED_MENTION = /<kaneo-mention id="[^"]*" label="(.*?)">/g;
+const MENTION_OPEN = /<kaneo-mention\b[^>]*\blabel="([^"]*)"[^>]*>/g;
+const MENTION_CLOSE = /<\/kaneo-mention>/g;
+
+/**
+ * Every mention tag as its visible `@label`, nothing else touched: the
+ * serializer's exact (possibly malformed) shape first, then any other
+ * attribute order, then the closing tags. Shared by the spoken converter and
+ * the .md download. Text-wide by design (Decision D): a mention tag quoted
+ * inside a code span or fence is rewritten too.
+ */
+export function mentionsToText(text: string): string {
+  return text
+    .replace(MALFORMED_MENTION, "@$1")
+    .replace(MENTION_OPEN, "@$1")
+    .replace(MENTION_CLOSE, "");
+}
 
 function plainText(text: string): string {
-  return text.replace(MALFORMED_MENTION, "@$1");
+  return mentionsToText(text);
 }
 
 function inlineText(tokens: Token[] | undefined): string {

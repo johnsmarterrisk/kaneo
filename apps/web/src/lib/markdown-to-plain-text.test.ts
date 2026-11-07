@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markdownToPlainText } from "./markdown-to-plain-text";
+import { markdownToPlainText, mentionsToText } from "./markdown-to-plain-text";
 
 const spoken = (markdown: string) =>
   markdownToPlainText(markdown, { dropNotSpoken: true });
@@ -199,5 +199,38 @@ describe("markdownToPlainText", () => {
     expect(text).toBe(
       "Hearing protection\n\nNoise hurts. Really. See the policy.\n\n• Ask @Ann\nCheck fit",
     );
+  });
+});
+
+describe("mentionsToText", () => {
+  it.each([
+    [
+      "a well-formed mention",
+      'Hi <kaneo-mention id="u1" label="Ann"></kaneo-mention> there',
+      "Hi @Ann there",
+    ],
+    [
+      "a malformed mention with a quote in its label",
+      'Ask <kaneo-mention id="u1" label="O\'Brien "Oz""></kaneo-mention> today.',
+      'Ask @O\'Brien "Oz" today.',
+    ],
+    [
+      "another attribute order",
+      '<kaneo-mention label="Ann" id="u1"></kaneo-mention> leads',
+      "@Ann leads",
+    ],
+    [
+      "two mentions on one line",
+      '<kaneo-mention id="u1" label="Ann"></kaneo-mention> and <kaneo-mention id="u2" label="Bo"></kaneo-mention>',
+      "@Ann and @Bo",
+    ],
+  ])("rewrites %s", (_name, text, expected) => {
+    expect(mentionsToText(text)).toBe(expected);
+  });
+
+  it("leaves every other tag and Markdown untouched", () => {
+    const text =
+      '**Bold** <kaneo-embed url="https://x/v" mode="embed" /> <kaneo-issue-link href="https://x/t/1"></kaneo-issue-link>';
+    expect(mentionsToText(text)).toBe(text);
   });
 });

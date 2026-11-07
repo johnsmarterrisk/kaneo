@@ -1,4 +1,4 @@
-import { markdownToPlainText } from "./markdown-to-plain-text";
+import { markdownToPlainText, mentionsToText } from "./markdown-to-plain-text";
 
 /** Copy title and text / .txt body: the title, a blank line, the plain description. */
 export function buildScriptText(
@@ -9,12 +9,16 @@ export function buildScriptText(
   return body.trim() ? `${title}\n\n${body}` : title;
 }
 
-/** .md body: the title as a heading, then the description exactly as stored. */
+/**
+ * .md body: the title as a heading, then the description as stored except
+ * that each mention tag reads `@label` (Decision C); embeds, issue links and
+ * attachments stay verbatim.
+ */
 export function buildScriptMarkdown(
   title: string,
   markdown: string | null | undefined,
 ): string {
-  return `# ${title}\n\n${markdown ?? ""}`;
+  return `# ${title}\n\n${mentionsToText(markdown ?? "")}`;
 }
 
 // Characters no common filesystem accepts, plus control characters.
