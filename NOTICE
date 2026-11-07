@@ -24,7 +24,7 @@ Modifications
 Operon's fork discipline is that upstream is changed as little as possible: the
 whole point of building on Kaneo is to keep Kaneo's feature set — boards,
 backlog, labels, time tracking, webhooks, search and the MCP server — exactly as
-upstream built it. Only twenty-one kinds of change are permitted, and every file this
+upstream built it. Only twenty-two kinds of change are permitted, and every file this
 fork touches is declared in Operon's `docs/fork-discipline.md`:
 
   1. Auth wiring — Operon is the OpenID Connect provider; Kaneo's own local
@@ -136,10 +136,15 @@ fork touches is declared in Operon's `docs/fork-discipline.md`:
      `apps/web`), and on the phone carries the
      existing Delete Task action. Everything runs in the browser from data the
      page already holds; no API, server, MCP or ledger behaviour changes.
+ 22. Markdown paste — Markdown pasted as plain text into a task description or a
+     comment renders as formatted text, parsed by `@tiptap/markdown`, already in
+     the editors; prose, links, files, task-list lines and rich (HTML) pastes
+     paste exactly as before. A task's Markdown download writes a mention as
+     `@label`. No API, server, MCP or ledger behaviour changes.
 
 That count is RE-DERIVED from this branch's tree whenever it changes, never
 incremented from a previous reading: `docs/fork-discipline.md` §3 carries the
-touch list the twenty-one kinds map onto, path by path, and §7 records which task
+touch list the twenty-two kinds map onto, path by path, and §7 records which task
 landed each one. An inventory whose number nobody re-checked is what makes a
 fork's provenance untrustworthy.
 
