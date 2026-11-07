@@ -87,6 +87,7 @@ describe("looksLikeMarkdown", () => {
     ["two bullet lines", "- one\n- two"],
     ["two numbered lines", "1. one\n2. two"],
     ["two quote lines", "> one\n> two"],
+    ["two bullet lines in prose", "Notes for today\n- one thing\n- two things"],
     ["inline bold in prose", "Say **this** loud"],
     ["an inline link in prose", "see [the docs](https://x.test/a) now"],
     ["inline code in prose", "run `npm test` first"],
@@ -100,6 +101,10 @@ describe("looksLikeMarkdown", () => {
     ["two sentences of prose", "Call the client today. Then send the notes."],
     ["one numbered line and prose", "1. Call the client\nthen write it up"],
     ["one dash-led line and prose", "- remember the badge\nat the door"],
+    [
+      "the walk's prose: one numbered and one dash-led line (mixed kinds)",
+      "P prose one is plain talk. Second sentence ends here.\n1. P call the client first\n- P remember the badge\n#Ptag launch today and one * star",
+    ],
     ["a hashtag", "#hashtag launch today"],
     ["a sentence with one star", "the * is a footnote here"],
     ["a spaced dash", "a - b"],

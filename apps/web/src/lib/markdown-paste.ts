@@ -8,7 +8,13 @@ import type { EditorView } from "@tiptap/pm/view";
 
 const HEADING_LINE = /^ {0,3}#{1,6} \S/m;
 const FENCE_LINE = /^ {0,3}```/m;
-const LIST_OR_QUOTE_LINE = /^ {0,3}(?:[-*+] |\d{1,9}[.)] |> )\S/;
+// One regex per line kind: two lines of the SAME kind trigger, so prose with
+// one numbered line and one dash-led line stays literal (T6 walk ruling).
+const LIST_OR_QUOTE_LINES = [
+  /^ {0,3}[-*+] \S/, // bullet
+  /^ {0,3}\d{1,9}[.)] \S/, // numbered
+  /^ {0,3}> \S/, // quote
+];
 const INLINE_MARKERS = [
   /\*\*[^*\n]+\*\*/, // bold
   /\[[^\]\n]+\]\(\S+?\)/, // link
@@ -18,10 +24,9 @@ const INLINE_MARKERS = [
 export function looksLikeMarkdown(text: string): boolean {
   if (HEADING_LINE.test(text) || FENCE_LINE.test(text)) return true;
 
-  let listLines = 0;
-  for (const line of text.split("\n")) {
-    if (LIST_OR_QUOTE_LINE.test(line)) listLines += 1;
-    if (listLines >= 2) return true;
+  const lines = text.split("\n");
+  for (const kind of LIST_OR_QUOTE_LINES) {
+    if (lines.filter((line) => kind.test(line)).length >= 2) return true;
   }
 
   return INLINE_MARKERS.some((marker) => marker.test(text));
