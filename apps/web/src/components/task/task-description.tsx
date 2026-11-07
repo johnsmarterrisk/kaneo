@@ -76,6 +76,7 @@ import {
   normalizeUrl,
 } from "@/lib/editor-url-utils";
 import { isInCodeBlockLanguagePicker } from "@/lib/is-in-codeblock-language-picker";
+import { pasteMarkdown } from "@/lib/markdown-paste";
 import { registerScriptSource } from "@/lib/script-source";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
@@ -747,6 +748,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
             );
             return true;
           }
+
+          if (pasteMarkdown(editor, event)) return true;
 
           const pastedText = plainText.trim();
           if (!pastedText || /\s/.test(pastedText)) return false;

@@ -75,6 +75,7 @@ import {
   normalizeUrl,
 } from "@/lib/editor-url-utils";
 import { isInCodeBlockLanguagePicker } from "@/lib/is-in-codeblock-language-picker";
+import { pasteMarkdown } from "@/lib/markdown-paste";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
@@ -703,6 +704,8 @@ export default function CommentEditor({
             );
             return true;
           }
+
+          if (pasteMarkdown(editor, event)) return true;
 
           const pastedText = plainText.trim();
           if (!pastedText || /\s/.test(pastedText)) return false;
