@@ -76,6 +76,7 @@ import {
   normalizeUrl,
 } from "@/lib/editor-url-utils";
 import { isInCodeBlockLanguagePicker } from "@/lib/is-in-codeblock-language-picker";
+import { registerScriptSource } from "@/lib/script-source";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
@@ -1115,6 +1116,21 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
       isSyncingExternalContentRef.current = false;
     });
   }, [editor, taskId, task?.description]);
+
+  // Operon fork (script export, row 21): Copy script reads what this editor
+  // holds for its task, including text still inside the save debounce. Before
+  // hydration, or once the editor shows another task, it answers undefined so
+  // the caller falls back to the cached description.
+  useEffect(() => {
+    if (!editor) return;
+    return registerScriptSource(taskId, () =>
+      editor.isDestroyed ||
+      activeTaskIdRef.current !== taskId ||
+      !hasHydratedRef.current
+        ? undefined
+        : formatMarkdown(editor.getMarkdown()),
+    );
+  }, [editor, taskId]);
 
   useEffect(() => {
     if (!editor) return;

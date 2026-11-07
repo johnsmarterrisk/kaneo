@@ -2,6 +2,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { Extension } from "@tiptap/core";
 import TaskItem from "@tiptap/extension-task-item";
 import { describe, expect, it, vi } from "vitest";
+import { readScriptSource } from "@/lib/script-source";
 import TaskDescription from "./task-description";
 
 const mocks = vi.hoisted(() => ({
@@ -165,5 +166,35 @@ describe("TaskDescription", () => {
 
     expect(container.textContent).toContain("parent body");
     expect(container.textContent).not.toContain("child body");
+  });
+
+  // Operon fork (script export T5): the live source follows the task the
+  // mounted editor shows, so Copy script never reads the previous task's text.
+  it("registers the live script source for the task it now shows", async () => {
+    mocks.tasks.set("child-task", {
+      id: "child-task",
+      description: "child body",
+    });
+    mocks.tasks.set("parent-task", {
+      id: "parent-task",
+      description: "parent body",
+    });
+
+    const { container, rerender, unmount } = render(
+      <TaskDescription taskId="child-task" />,
+    );
+    await waitFor(() => {
+      expect(readScriptSource("child-task")).toBe("child body");
+    });
+
+    rerender(<TaskDescription taskId="parent-task" />);
+    await waitFor(() => {
+      expect(container.textContent).toContain("parent body");
+    });
+    expect(readScriptSource("parent-task")).toBe("parent body");
+    expect(readScriptSource("child-task")).toBeUndefined();
+
+    unmount();
+    expect(readScriptSource("parent-task")).toBeUndefined();
   });
 });
