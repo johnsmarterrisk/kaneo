@@ -2052,12 +2052,12 @@
 		},
 		"scriptExport": {
 			"menu": "Actions de la tâche",
-			"copyScript": "Copier le script",
-			"copied": "Script copié",
+			"copyScript": "Copier le titre et le texte",
+			"copied": "Titre et texte copiés",
 			"copyFailed": "Impossible de copier le script",
 			"downloadText": "Télécharger en texte",
 			"downloadMarkdown": "Télécharger en Markdown",
-			"saveUnavailable": "L'enregistrement de fichiers n'est pas disponible ici — utilisez Copier le script",
+			"saveUnavailable": "L'enregistrement de fichiers n'est pas disponible ici — utilisez Copier le titre et le texte",
 			"saveFailed": "Impossible d'enregistrer le script"
 		}
 	},

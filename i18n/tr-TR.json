@@ -2046,12 +2046,12 @@
 		},
 		"scriptExport": {
 			"menu": "Görev işlemleri",
-			"copyScript": "Senaryoyu kopyala",
-			"copied": "Senaryo kopyalandı",
+			"copyScript": "Başlığı ve metni kopyala",
+			"copied": "Başlık ve metin kopyalandı",
 			"copyFailed": "Senaryo kopyalanamadı",
 			"downloadText": "Metin olarak indir",
 			"downloadMarkdown": "Markdown olarak indir",
-			"saveUnavailable": "Burada dosya kaydetme kullanılamıyor — Senaryoyu kopyala'yı kullanın",
+			"saveUnavailable": "Burada dosya kaydetme kullanılamıyor — Başlığı ve metni kopyala'yı kullanın",
 			"saveFailed": "Senaryo kaydedilemedi"
 		}
 	},

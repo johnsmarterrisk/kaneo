@@ -2040,12 +2040,12 @@
 		},
 		"scriptExport": {
 			"menu": "任务操作",
-			"copyScript": "复制脚本",
-			"copied": "脚本已复制",
+			"copyScript": "复制标题和正文",
+			"copied": "已复制标题和正文",
 			"copyFailed": "无法复制脚本",
 			"downloadText": "下载为文本",
 			"downloadMarkdown": "下载为 Markdown",
-			"saveUnavailable": "此处无法保存文件 — 请使用“复制脚本”",
+			"saveUnavailable": "此处无法保存文件 — 请使用“复制标题和正文”",
 			"saveFailed": "无法保存脚本"
 		}
 	},

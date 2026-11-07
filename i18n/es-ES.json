@@ -2052,12 +2052,12 @@
 		},
 		"scriptExport": {
 			"menu": "Acciones de la tarea",
-			"copyScript": "Copiar guion",
-			"copied": "Guion copiado",
+			"copyScript": "Copiar título y texto",
+			"copied": "Título y texto copiados",
 			"copyFailed": "No se pudo copiar el guion",
 			"downloadText": "Descargar como texto",
 			"downloadMarkdown": "Descargar como Markdown",
-			"saveUnavailable": "Aquí no se pueden guardar archivos: usa Copiar guion",
+			"saveUnavailable": "Aquí no se pueden guardar archivos: usa Copiar título y texto",
 			"saveFailed": "No se pudo guardar el guion"
 		}
 	},

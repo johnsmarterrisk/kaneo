@@ -2086,12 +2086,12 @@
 		},
 		"scriptExport": {
 			"menu": "Task actions",
-			"copyScript": "Copy script",
-			"copied": "Script copied",
+			"copyScript": "Copy title and text",
+			"copied": "Title and text copied",
 			"copyFailed": "Couldn't copy the script",
 			"downloadText": "Download as text",
 			"downloadMarkdown": "Download as Markdown",
-			"saveUnavailable": "Saving files is not available here — use Copy script",
+			"saveUnavailable": "Saving files is not available here — use Copy title and text",
 			"saveFailed": "Couldn't save the script"
 		}
 	},

@@ -2240,12 +2240,12 @@
 		},
 		"scriptExport": {
 			"menu": "Akcje zadania",
-			"copyScript": "Kopiuj scenariusz",
-			"copied": "Skopiowano scenariusz",
+			"copyScript": "Kopiuj tytuł i tekst",
+			"copied": "Skopiowano tytuł i tekst",
 			"copyFailed": "Nie udało się skopiować scenariusza",
 			"downloadText": "Pobierz jako tekst",
 			"downloadMarkdown": "Pobierz jako Markdown",
-			"saveUnavailable": "Zapisywanie plików nie jest tu dostępne — użyj opcji Kopiuj scenariusz",
+			"saveUnavailable": "Zapisywanie plików nie jest tu dostępne — użyj opcji Kopiuj tytuł i tekst",
 			"saveFailed": "Nie udało się zapisać scenariusza"
 		}
 	}

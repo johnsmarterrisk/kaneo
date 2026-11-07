@@ -2040,12 +2040,12 @@
 		},
 		"scriptExport": {
 			"menu": "Tindakan tugas",
-			"copyScript": "Salin naskah",
-			"copied": "Naskah disalin",
+			"copyScript": "Salin judul dan teks",
+			"copied": "Judul dan teks disalin",
 			"copyFailed": "Tidak dapat menyalin naskah",
 			"downloadText": "Unduh sebagai teks",
 			"downloadMarkdown": "Unduh sebagai Markdown",
-			"saveUnavailable": "Menyimpan file tidak tersedia di sini — gunakan Salin naskah",
+			"saveUnavailable": "Menyimpan file tidak tersedia di sini — gunakan Salin judul dan teks",
 			"saveFailed": "Tidak dapat menyimpan naskah"
 		}
 	},

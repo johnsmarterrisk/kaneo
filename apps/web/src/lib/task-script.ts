@@ -1,6 +1,6 @@
 import { markdownToPlainText } from "./markdown-to-plain-text";
 
-/** Copy script / .txt body: the title, a blank line, the spoken description. */
+/** Copy title and text / .txt body: the title, a blank line, the plain description. */
 export function buildScriptText(
   title: string,
   markdown: string | null | undefined,

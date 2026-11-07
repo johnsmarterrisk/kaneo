@@ -276,7 +276,7 @@ describe("TaskActionsMenu", () => {
       );
     });
 
-    it("points at Copy script when saving is unavailable", async () => {
+    it("points at Copy title and text when saving is unavailable", async () => {
       mocks.saveScriptFile.mockResolvedValue("unavailable");
       render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
       await clickItem(d.item);

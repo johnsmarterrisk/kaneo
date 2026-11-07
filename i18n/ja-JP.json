@@ -2040,12 +2040,12 @@
 		},
 		"scriptExport": {
 			"menu": "タスクの操作",
-			"copyScript": "台本をコピー",
-			"copied": "台本をコピーしました",
+			"copyScript": "タイトルと本文をコピー",
+			"copied": "タイトルと本文をコピーしました",
 			"copyFailed": "台本をコピーできませんでした",
 			"downloadText": "テキストとしてダウンロード",
 			"downloadMarkdown": "Markdown としてダウンロード",
-			"saveUnavailable": "ここではファイルを保存できません — 「台本をコピー」を使ってください",
+			"saveUnavailable": "ここではファイルを保存できません — 「タイトルと本文をコピー」を使ってください",
 			"saveFailed": "台本を保存できませんでした"
 		}
 	},

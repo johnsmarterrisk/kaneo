@@ -2040,12 +2040,12 @@
 		},
 		"scriptExport": {
 			"menu": "Thao tác tác vụ",
-			"copyScript": "Sao chép kịch bản",
-			"copied": "Đã sao chép kịch bản",
+			"copyScript": "Sao chép tiêu đề và nội dung",
+			"copied": "Đã sao chép tiêu đề và nội dung",
 			"copyFailed": "Không thể sao chép kịch bản",
 			"downloadText": "Tải xuống dạng văn bản",
 			"downloadMarkdown": "Tải xuống dạng Markdown",
-			"saveUnavailable": "Không thể lưu tệp ở đây — hãy dùng Sao chép kịch bản",
+			"saveUnavailable": "Không thể lưu tệp ở đây — hãy dùng Sao chép tiêu đề và nội dung",
 			"saveFailed": "Không thể lưu kịch bản"
 		}
 	},

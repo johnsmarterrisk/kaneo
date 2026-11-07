@@ -2052,12 +2052,12 @@
 		},
 		"scriptExport": {
 			"menu": "Azioni attività",
-			"copyScript": "Copia copione",
-			"copied": "Copione copiato",
+			"copyScript": "Copia titolo e testo",
+			"copied": "Titolo e testo copiati",
 			"copyFailed": "Impossibile copiare il copione",
 			"downloadText": "Scarica come testo",
 			"downloadMarkdown": "Scarica come Markdown",
-			"saveUnavailable": "Il salvataggio dei file non è disponibile qui — usa Copia copione",
+			"saveUnavailable": "Il salvataggio dei file non è disponibile qui — usa Copia titolo e testo",
 			"saveFailed": "Impossibile salvare il copione"
 		}
 	},

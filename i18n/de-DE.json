@@ -2046,12 +2046,12 @@
 		},
 		"scriptExport": {
 			"menu": "Aufgabenaktionen",
-			"copyScript": "Skript kopieren",
-			"copied": "Skript kopiert",
+			"copyScript": "Titel und Text kopieren",
+			"copied": "Titel und Text kopiert",
 			"copyFailed": "Das Skript konnte nicht kopiert werden",
 			"downloadText": "Als Text herunterladen",
 			"downloadMarkdown": "Als Markdown herunterladen",
-			"saveUnavailable": "Dateien können hier nicht gespeichert werden – nutzen Sie „Skript kopieren“",
+			"saveUnavailable": "Dateien können hier nicht gespeichert werden – nutzen Sie „Titel und Text kopieren“",
 			"saveFailed": "Das Skript konnte nicht gespeichert werden"
 		}
 	},

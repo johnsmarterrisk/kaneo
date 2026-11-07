@@ -2046,12 +2046,12 @@
 		},
 		"scriptExport": {
 			"menu": "Taakacties",
-			"copyScript": "Script kopiëren",
-			"copied": "Script gekopieerd",
+			"copyScript": "Titel en tekst kopiëren",
+			"copied": "Titel en tekst gekopieerd",
 			"copyFailed": "Kan het script niet kopiëren",
 			"downloadText": "Downloaden als tekst",
 			"downloadMarkdown": "Downloaden als Markdown",
-			"saveUnavailable": "Bestanden opslaan is hier niet beschikbaar — gebruik Script kopiëren",
+			"saveUnavailable": "Bestanden opslaan is hier niet beschikbaar — gebruik Titel en tekst kopiëren",
 			"saveFailed": "Kan het script niet opslaan"
 		}
 	},
