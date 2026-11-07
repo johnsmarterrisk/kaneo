@@ -15,6 +15,7 @@ import useGetTable from "@/hooks/queries/operon-tables/use-get-table";
 import useGetProject from "@/hooks/queries/project/use-get-project";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
+import TaskActionsMenu from "./task-actions-menu";
 import TaskDeleteButton from "./task-delete-button";
 import TaskDetailsContent from "./task-details-content";
 import TaskPropertiesSidebar from "./task-properties-sidebar";
@@ -115,6 +116,10 @@ function BoardTaskDetailsSheet({
             </span>
           </div>
           <div className="flex items-center gap-1">
+            {/* Operon fork (script export, row 21): gated on the task, which the sheet does not wait for. */}
+            {currentTaskId && task && (
+              <TaskActionsMenu taskId={currentTaskId} withDelete={false} />
+            )}
             {currentTaskId && (
               <TaskDeleteButton taskId={currentTaskId} onDeleted={onClose} />
             )}

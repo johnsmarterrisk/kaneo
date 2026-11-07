@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TaskLayout from "@/components/common/task-layout";
 import PageTitle from "@/components/page-title";
+import TaskActionsMenu from "@/components/task/task-actions-menu";
 import TaskDeleteButton from "@/components/task/task-delete-button";
 import TaskDetailsContent from "@/components/task/task-details-content";
 import {
@@ -76,7 +77,27 @@ function RouteComponent() {
       workspaceId={workspaceId}
       headerActions={
         !isLoading && task ? (
-          <TaskDeleteButton taskId={taskId} onDeleted={handleDeleted} />
+          // Operon fork (script export, row 21): TaskLayout renders these in
+          // both breakpoint-hidden headers, so each viewport shows one menu;
+          // the phone menu carries Delete Task and only desktop shows the trash.
+          <>
+            <TaskActionsMenu
+              taskId={taskId}
+              withDelete={false}
+              className="hidden md:inline-flex"
+            />
+            <TaskActionsMenu
+              taskId={taskId}
+              withDelete
+              className="md:hidden"
+              onDeleted={handleDeleted}
+            />
+            <TaskDeleteButton
+              taskId={taskId}
+              onDeleted={handleDeleted}
+              className="hidden md:inline-flex"
+            />
+          </>
         ) : null
       }
       rightSidebar={

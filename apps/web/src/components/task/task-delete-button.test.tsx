@@ -93,4 +93,86 @@ describe("TaskDeleteButton", () => {
     expect(mocks.success).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
   });
+
+  // Operon fork (script export T6): the phone Task actions menu controls the dialog.
+  it("renders no trigger with hideTrigger", () => {
+    render(
+      <TaskDeleteButton
+        taskId="task-1"
+        onDeleted={vi.fn()}
+        hideTrigger
+        open={false}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "tasks:delete.action" }),
+    ).toBeNull();
+  });
+
+  it("closes a controlled dialog through onOpenChange after a confirmed delete", async () => {
+    const onOpenChange = vi.fn();
+    const onDeleted = vi.fn();
+    mocks.deleteTask.mockResolvedValue({ id: "task-1" });
+    const { rerender } = render(
+      <TaskDeleteButton
+        taskId="task-1"
+        onDeleted={onDeleted}
+        hideTrigger
+        open
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "tasks:delete.action" }),
+    );
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TaskDeleteButton
+        taskId="task-1"
+        onDeleted={onDeleted}
+        hideTrigger
+        open={false}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("tasks:delete.title")).toBeNull(),
+    );
+  });
+
+  it("closes a controlled dialog through onOpenChange on Cancel", async () => {
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <TaskDeleteButton
+        taskId="task-1"
+        onDeleted={vi.fn()}
+        hideTrigger
+        open
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "common:actions.cancel" }),
+    );
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(mocks.deleteTask).not.toHaveBeenCalled();
+
+    rerender(
+      <TaskDeleteButton
+        taskId="task-1"
+        onDeleted={vi.fn()}
+        hideTrigger
+        open={false}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("tasks:delete.title")).toBeNull(),
+    );
+  });
 });
