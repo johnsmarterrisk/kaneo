@@ -288,13 +288,23 @@ describe("TaskActionsMenu", () => {
     });
 
     it("reports a failed save", async () => {
-      mocks.saveScriptFile.mockRejectedValue(new Error("denied"));
+      mocks.saveScriptFile.mockRejectedValue({
+        name: "NotAllowedError",
+        message: "private script text",
+      });
       render(<TaskActionsMenu taskId="task-1" withDelete={false} />);
       await clickItem(d.item);
       await waitFor(() =>
         expect(mocks.error).toHaveBeenCalledWith(
           "tasks:scriptExport.saveFailed",
         ),
+      );
+      expect(console.error).toHaveBeenCalledWith(
+        "[script-export] save failed",
+        {
+          taskId: "task-1",
+          name: "NotAllowedError",
+        },
       );
     });
 

@@ -78,9 +78,10 @@ export default function TaskActionsMenu({
   };
 
   const saveFailed = (error?: unknown) => {
+    const name = (error as { name?: unknown } | null)?.name;
     console.error("[script-export] save failed", {
       taskId,
-      name: error instanceof Error ? error.name : undefined,
+      name: typeof name === "string" ? name : undefined,
     });
     toast.error(t("tasks:scriptExport.saveFailed"));
   };
