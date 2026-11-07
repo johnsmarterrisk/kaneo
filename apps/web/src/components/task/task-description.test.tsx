@@ -215,7 +215,13 @@ describe("TaskDescription", () => {
       '[contenteditable="true"]',
     );
     expect(editable?.editor).toBeDefined();
-    editable?.editor?.chain().focus("end").insertContent(" edit").run();
+    const editor = editable?.editor;
+    if (editor) {
+      editor.commands.insertContentAt(
+        editor.state.doc.content.size - 1,
+        " edit",
+      );
+    }
 
     expect(readScriptSource("edit-task")).toBe("first edit");
     expect(mocks.tasks.get("edit-task")?.description).toBe("first");
