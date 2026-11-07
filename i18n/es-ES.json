@@ -2054,7 +2054,11 @@
 			"menu": "Acciones de la tarea",
 			"copyScript": "Copiar guion",
 			"copied": "Guion copiado",
-			"copyFailed": "No se pudo copiar el guion"
+			"copyFailed": "No se pudo copiar el guion",
+			"downloadText": "Descargar como texto",
+			"downloadMarkdown": "Descargar como Markdown",
+			"saveUnavailable": "Aquí no se pueden guardar archivos: usa Copiar guion",
+			"saveFailed": "No se pudo guardar el guion"
 		}
 	},
 	"invitations": {

@@ -2054,7 +2054,11 @@
 			"menu": "Ações da tarefa",
 			"copyScript": "Copiar roteiro",
 			"copied": "Roteiro copiado",
-			"copyFailed": "Não foi possível copiar o roteiro"
+			"copyFailed": "Não foi possível copiar o roteiro",
+			"downloadText": "Baixar como texto",
+			"downloadMarkdown": "Baixar como Markdown",
+			"saveUnavailable": "Não é possível salvar arquivos aqui — use Copiar roteiro",
+			"saveFailed": "Não foi possível salvar o roteiro"
 		}
 	},
 	"invitations": {

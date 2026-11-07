@@ -2054,7 +2054,11 @@
 			"menu": "Azioni attività",
 			"copyScript": "Copia copione",
 			"copied": "Copione copiato",
-			"copyFailed": "Impossibile copiare il copione"
+			"copyFailed": "Impossibile copiare il copione",
+			"downloadText": "Scarica come testo",
+			"downloadMarkdown": "Scarica come Markdown",
+			"saveUnavailable": "Il salvataggio dei file non è disponibile qui — usa Copia copione",
+			"saveFailed": "Impossibile salvare il copione"
 		}
 	},
 	"invitations": {

@@ -2054,7 +2054,11 @@
 			"menu": "Actions de la tâche",
 			"copyScript": "Copier le script",
 			"copied": "Script copié",
-			"copyFailed": "Impossible de copier le script"
+			"copyFailed": "Impossible de copier le script",
+			"downloadText": "Télécharger en texte",
+			"downloadMarkdown": "Télécharger en Markdown",
+			"saveUnavailable": "L'enregistrement de fichiers n'est pas disponible ici — utilisez Copier le script",
+			"saveFailed": "Impossible d'enregistrer le script"
 		}
 	},
 	"invitations": {

@@ -2042,7 +2042,11 @@
 			"menu": "Tindakan tugas",
 			"copyScript": "Salin naskah",
 			"copied": "Naskah disalin",
-			"copyFailed": "Tidak dapat menyalin naskah"
+			"copyFailed": "Tidak dapat menyalin naskah",
+			"downloadText": "Unduh sebagai teks",
+			"downloadMarkdown": "Unduh sebagai Markdown",
+			"saveUnavailable": "Menyimpan file tidak tersedia di sini — gunakan Salin naskah",
+			"saveFailed": "Tidak dapat menyimpan naskah"
 		}
 	},
 	"invitations": {

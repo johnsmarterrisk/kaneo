@@ -2088,7 +2088,11 @@
 			"menu": "Task actions",
 			"copyScript": "Copy script",
 			"copied": "Script copied",
-			"copyFailed": "Couldn't copy the script"
+			"copyFailed": "Couldn't copy the script",
+			"downloadText": "Download as text",
+			"downloadMarkdown": "Download as Markdown",
+			"saveUnavailable": "Saving files is not available here — use Copy script",
+			"saveFailed": "Couldn't save the script"
 		}
 	},
 	"invitations": {

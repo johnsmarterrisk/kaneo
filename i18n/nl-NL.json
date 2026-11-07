@@ -2048,7 +2048,11 @@
 			"menu": "Taakacties",
 			"copyScript": "Script kopiëren",
 			"copied": "Script gekopieerd",
-			"copyFailed": "Kan het script niet kopiëren"
+			"copyFailed": "Kan het script niet kopiëren",
+			"downloadText": "Downloaden als tekst",
+			"downloadMarkdown": "Downloaden als Markdown",
+			"saveUnavailable": "Bestanden opslaan is hier niet beschikbaar — gebruik Script kopiëren",
+			"saveFailed": "Kan het script niet opslaan"
 		}
 	},
 	"invitations": {

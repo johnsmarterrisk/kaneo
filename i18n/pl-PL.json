@@ -2242,7 +2242,11 @@
 			"menu": "Akcje zadania",
 			"copyScript": "Kopiuj scenariusz",
 			"copied": "Skopiowano scenariusz",
-			"copyFailed": "Nie udało się skopiować scenariusza"
+			"copyFailed": "Nie udało się skopiować scenariusza",
+			"downloadText": "Pobierz jako tekst",
+			"downloadMarkdown": "Pobierz jako Markdown",
+			"saveUnavailable": "Zapisywanie plików nie jest tu dostępne — użyj opcji Kopiuj scenariusz",
+			"saveFailed": "Nie udało się zapisać scenariusza"
 		}
 	}
 }

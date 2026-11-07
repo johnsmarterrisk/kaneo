@@ -2048,7 +2048,11 @@
 			"menu": "Görev işlemleri",
 			"copyScript": "Senaryoyu kopyala",
 			"copied": "Senaryo kopyalandı",
-			"copyFailed": "Senaryo kopyalanamadı"
+			"copyFailed": "Senaryo kopyalanamadı",
+			"downloadText": "Metin olarak indir",
+			"downloadMarkdown": "Markdown olarak indir",
+			"saveUnavailable": "Burada dosya kaydetme kullanılamıyor — Senaryoyu kopyala'yı kullanın",
+			"saveFailed": "Senaryo kaydedilemedi"
 		}
 	},
 	"invitations": {

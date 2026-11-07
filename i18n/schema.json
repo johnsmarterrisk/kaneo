@@ -8227,9 +8227,30 @@
 						},
 						"copyFailed": {
 							"type": "string"
+						},
+						"downloadText": {
+							"type": "string"
+						},
+						"downloadMarkdown": {
+							"type": "string"
+						},
+						"saveUnavailable": {
+							"type": "string"
+						},
+						"saveFailed": {
+							"type": "string"
 						}
 					},
-					"required": ["menu", "copyScript", "copied", "copyFailed"]
+					"required": [
+						"menu",
+						"copyScript",
+						"copied",
+						"copyFailed",
+						"downloadText",
+						"downloadMarkdown",
+						"saveUnavailable",
+						"saveFailed"
+					]
 				}
 			},
 			"required": [

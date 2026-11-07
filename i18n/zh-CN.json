@@ -2042,7 +2042,11 @@
 			"menu": "任务操作",
 			"copyScript": "复制脚本",
 			"copied": "脚本已复制",
-			"copyFailed": "无法复制脚本"
+			"copyFailed": "无法复制脚本",
+			"downloadText": "下载为文本",
+			"downloadMarkdown": "下载为 Markdown",
+			"saveUnavailable": "此处无法保存文件 — 请使用“复制脚本”",
+			"saveFailed": "无法保存脚本"
 		}
 	},
 	"invitations": {
